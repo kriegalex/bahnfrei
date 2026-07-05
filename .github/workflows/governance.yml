@@ -17,7 +17,7 @@ jobs:
   license-headers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check SPDX headers
         run: ./scripts/check-license-headers.sh
 
@@ -25,7 +25,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Check Signed-off-by on every commit
