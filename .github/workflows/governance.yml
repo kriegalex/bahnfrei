@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Bahnfrei contributors
+#
+# TASK-001 governance gates: SPDX headers (ADR-001 §3) and DCO sign-off
+# (ADR-001 §2). The full build/lint/test/coverage/scan pipeline is TASK-002.
+name: governance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  license-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SPDX headers
+        run: ./scripts/check-license-headers.sh
+
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Signed-off-by on every commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          fail=0
+          for c in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if ! git show -s --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+@.+>'; then
+              echo "commit $c lacks a Signed-off-by trailer (DCO, ADR-001 §2)" >&2
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo 'Add sign-offs with: git rebase --signoff (or commit with -s). See CONTRIBUTING.md.' >&2
+            exit 1
+          fi
+          echo "DCO check OK"

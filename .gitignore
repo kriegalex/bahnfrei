@@ -1,0 +1,22 @@
+# build artifacts
+/bahnfrei
+/bahnfrei.exe
+/dist/
+
+# local runtime data (SQLite lives beside the binary in venue mode)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# test & coverage output
+coverage.out
+coverage.html
+
+# TS islands toolchain (added in TASK-005)
+node_modules/
+
+# editors / OS noise
+.DS_Store
+.idea/
+.vscode/

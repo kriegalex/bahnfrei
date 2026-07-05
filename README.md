@@ -1,0 +1,83 @@
+# Bahnfrei — Open-Source Athletics Tournament Management System
+
+**Status: Phase B — both human gates passed 2026-07-05** (requirements baseline + all six
+architecture ADRs ratified, DEC-014). Implementation follows the backlog in
+`docs/delivery/work-breakdown.md`.
+
+**Bahnfrei** (from the starter's call *"Bahn frei!"* — "track clear!") is an open-source,
+**AGPL-3.0-only** system to manage athletics (track & field) tournaments end-to-end: meet
+setup, entries, eligibility, seeding, competition-day capture, timing-system exchange, live
+results, records, and federation reporting. Swiss/EU context: nFADP+GDPR, DE/FR first,
+**hub-first and self-hosted** (clubs run their own instance; no subscription SaaS), tolerant
+to venue connectivity loss by design. Parallel systems studied: **Seltec** (TAF3/LA.portal)
+and the **Swiss Athletics** ecosystem (Alabus, federation portals).
+
+Architecture in one line: a single self-contained **Go + SQLite** binary serving
+server-rendered HTML (HTMX/SSE) with small TypeScript islands — see `docs/architecture/adr/`.
+
+This engagement is spec-driven and ran in two phases with hard human gates between them
+(see `CLAUDE.md` / `plan.md`).
+
+## How to read this package
+
+Read in this order:
+
+1. **`docs/research/domain-athletics.md`** — how athletics competitions actually work
+   (rules, categories, timing, records, officiating), verified against World Athletics and
+   Swiss Athletics primary sources. Sections `D1…D11`.
+2. **`docs/research/competitive-analysis.md`** — the incumbent landscape (Seltec, Swiss
+   Athletics' stack, timing ecosystem, data standards), gaps, and the OSS opportunity.
+   Sections `C1…C6`.
+3. **`docs/requirements/stakeholder-requirements.md`** (StRS) — 14 stakeholder classes and
+   41 implementation-free stakeholder requirements `STR-###`, with MVP/Later priorities and
+   scope boundaries (§4).
+4. **`docs/requirements/system-requirements.md`** (SyRS) — testable system requirements
+   `SYS-###`: functional, quantified non-functional (performance, offline, privacy,
+   accessibility, i18n, quality gates), conceptual data model, interfaces, constraints.
+5. **`docs/requirements/use-cases.md`** — 32 vertical slices `UC-###` with executable
+   Given/When/Then acceptance criteria: the agent-facing units of work for Phase B.
+6. **`docs/requirements/traceability-matrix.md`** — the zero-orphan proof:
+   `STR → SYS → UC → test → verification method`, plus the Phase A QA self-check.
+7. **`docs/requirements/open-questions-and-assumptions.md`** — **founder attention needed**:
+   open questions `OQ-###`, working assumptions `A-###`, TBD register.
+8. **`docs/requirements/glossary.md`** — domain and project terms (DE/FR equivalents).
+
+## ID scheme (stable, never renumbered)
+
+| Prefix | Layer |
+|--------|-------|
+| `STR-###` | Stakeholder requirement (implementation-free) |
+| `SYS-###` | System requirement (testable, traced to STR) |
+| `UC-###` | Use-case / vertical slice (executable acceptance criteria) |
+| `ADR-###` | Architecture decision record (Phase B) |
+| `TASK-###` | Work item (Phase B) |
+
+## Phase gate (current state)
+
+Both human gates are **passed** (2026-07-05, DEC-014): the requirements baseline is
+approved and ADR-001…006 are ratified. Implementation follows the milestone plan in
+`docs/delivery/work-breakdown.md` (M0 foundation → M1 UBS Kids Cup PoC → M2 full club
+meet → M3 release 0.1). Remaining founder inputs are tracked in
+`docs/requirements/open-questions-and-assumptions.md`.
+
+## Building
+
+Requires Go ≥ 1.26 — nothing else:
+
+```
+go build ./...
+go test ./...
+```
+
+The application is not yet operational; the first runnable milestone is M1
+(`docs/delivery/work-breakdown.md`).
+
+## Licence & contributing
+
+- Code: **AGPL-3.0-only** (`LICENSE`) — see
+  [ADR-001](docs/architecture/adr/ADR-001-license-agpl-3.0.md) for the rationale.
+- Documentation (`docs/`): **CC-BY-SA-4.0** (`docs/LICENSE`).
+- Contributions are welcome under the **DCO** (no CLA): see
+  [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and
+  [`GOVERNANCE.md`](GOVERNANCE.md). The project name and logo are held by the founder and
+  are not covered by the code licence.
