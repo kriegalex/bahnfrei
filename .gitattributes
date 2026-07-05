@@ -1,0 +1,3 @@
+# Keep LF everywhere — the Windows CI leg and sh scripts break on CRLF.
+* text=auto eol=lf
+*.png binary

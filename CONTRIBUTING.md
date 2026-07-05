@@ -53,6 +53,16 @@ go test ./...
 ./scripts/check-license-headers.sh
 ```
 
+CI additionally gates on `golangci-lint` (v2, config in `.golangci.yml` — including the
+architecture dependency rules), the SYS-140 coverage thresholds
+(`scripts/check-coverage.sh`: ≥90% domain, ≥80% overall), a dependency licence allowlist,
+and `govulncheck`. To reproduce the coverage gate locally:
+
+```
+go test -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
+./scripts/check-coverage.sh coverage.out
+```
+
 ## How changes land
 
 1. **No code without a traced spec.** Every PR references the work item and requirement IDs

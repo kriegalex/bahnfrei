@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -15,9 +16,13 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Printf("bahnfrei %s\n", version)
+	run(os.Args[1:], os.Stdout)
+}
+
+func run(args []string, out io.Writer) {
+	if len(args) > 0 && args[0] == "--version" {
+		fmt.Fprintf(out, "bahnfrei %s\n", version)
 		return
 	}
-	fmt.Println("bahnfrei: not yet operational — see docs/delivery/work-breakdown.md")
+	fmt.Fprintln(out, "bahnfrei: not yet operational — see docs/delivery/work-breakdown.md")
 }

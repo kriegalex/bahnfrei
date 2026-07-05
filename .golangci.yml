@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Bahnfrei contributors
+#
+# Lint gate (SYS-141). depguard enforces the architecture.md §3 dependency
+# rules: domain imports nothing above it; web goes through app, never store.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - misspell
+  settings:
+    errcheck:
+      # CLI/stream output; a failed write to stdout has no useful recovery.
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
+    depguard:
+      rules:
+        domain-is-pure:
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: github.com/kriegalex/bahnfrei/internal/app
+              desc: domain imports nothing above it (architecture.md §3)
+            - pkg: github.com/kriegalex/bahnfrei/internal/store
+              desc: domain imports nothing above it (architecture.md §3)
+            - pkg: github.com/kriegalex/bahnfrei/internal/sync
+              desc: domain imports nothing above it (architecture.md §3)
+            - pkg: github.com/kriegalex/bahnfrei/internal/exchange
+              desc: domain imports nothing above it (architecture.md §3)
+            - pkg: github.com/kriegalex/bahnfrei/internal/web
+              desc: domain imports nothing above it (architecture.md §3)
+            - pkg: github.com/kriegalex/bahnfrei/internal/pdf
+              desc: domain imports nothing above it (architecture.md §3)
+        web-goes-through-app:
+          files:
+            - "**/internal/web/**"
+          deny:
+            - pkg: github.com/kriegalex/bahnfrei/internal/store
+              desc: web never touches store directly - use app (architecture.md §3)
+
+formatters:
+  enable:
+    - gofmt

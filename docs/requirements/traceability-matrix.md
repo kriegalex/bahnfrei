@@ -145,8 +145,8 @@ inspection/analysis procedure.
 | SYS-131 | UC-001 #1 (timed quickstart run) | D | Phase B |
 | SYS-132 | Support-matrix CI (build/run on documented platforms & browsers) | T/I | Phase B |
 | SYS-133 | Dependency inventory inspection (no paid service required) | I | Phase B |
-| SYS-140 | Coverage gates in CI (≥90% branch domain logic; ≥80% line overall) | A | Phase B |
-| SYS-141 | CI pipeline configuration inspection + gate behaviour test | I/T | Phase B |
+| SYS-140 | Coverage gates in CI (≥90% branch domain logic; ≥80% line overall) | A | TASK-002: `scripts/check-coverage.sh` in `ci.yml` coverage job. *Method note:* Go's cover tooling measures **statement** coverage; the ≥90%/≥80% gates are enforced on statement coverage as the agreed proxy for branch coverage |
+| SYS-141 | CI pipeline configuration inspection + gate behaviour test | I/T | TASK-002: `.github/workflows/ci.yml` — 3-OS build+test matrix, golangci-lint v2 (incl. depguard architecture rules), guarded `tsc` job, coverage gates, `go-licenses` allowlist (ADR-001 §4), `govulncheck`; SPDX+DCO in `governance.yml` (TASK-001) |
 | SYS-142 | Reference fixture suites for every rule engine (UC-005 #5, UC-010 #5, UC-012 #4, UC-013 #1) | T | Phase B |
 | SYS-143 | Release checklist + defect-tracker inspection per release | I | Phase B |
 | SYS-144 | Schema/API docs versioned in repo; CI schema-diff check | I/T | Phase B |
