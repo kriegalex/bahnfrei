@@ -20,3 +20,6 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# claude code session artifacts
+.claude/scheduled_tasks.lock
