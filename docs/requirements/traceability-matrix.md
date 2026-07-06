@@ -67,9 +67,9 @@ inspection/analysis procedure.
 |-----|------------------------------|--------|----------------|
 | SYS-001 | UC-001 #2 | T | Phase B |
 | SYS-002 | UC-001 #3 | T | Phase B |
-| SYS-003 | UC-002 #5 | T | Phase B |
+| SYS-003 | UC-002 #5 | T | TASK-004 (domain core): `internal/domain` `TestDisciplineCatalog_SYS003Coverage` (all 5 SyRS §2 families + core WA codes present), `TestDiscipline_CategoryCorrectTechnicalVariant`, `TestDiscipline_HurdleVariants` (per-category technical variants), `TestDisciplineCatalog_UBSKidsCupDisciplines`; organizer-defined custom disciplines proven generic by `TestParseDisciplineCatalog_CustomCatalogNoCodeChange` |
 | SYS-004 | UC-001 #4 | T | Phase B |
-| SYS-005 | UC-002 #1–#4 | T | Phase B |
+| SYS-005 | UC-002 #1–#4 | T | TASK-004 (domain core): `internal/domain` `TestResolveDefaultCategory_SwissAthletics_UC002_1`, `TestResolveDefaultCategory_CalendarYearTransition`, `TestEvaluateEntry_StartUpAndDisciplineBar`, `TestParseCategoryScheme_CustomSchemeNoCodeChange` (built-in Swiss Athletics + UBS Kids Cup schemes, data-interpreter resolver, custom-scheme load) |
 | SYS-006 | UC-001 #5 | T | Phase B |
 | SYS-010 | UC-004 #1, UC-028 #1 | T | Phase B |
 | SYS-011 | UC-003 #1–#3 | T | Phase B |

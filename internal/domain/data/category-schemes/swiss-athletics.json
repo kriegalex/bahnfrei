@@ -1,0 +1,66 @@
+{
+  "id": "swiss-athletics",
+  "version": "wo2026.1",
+  "name": "Swiss Athletics",
+  "source": "Swiss Athletics WO 2026 §1.1-1.2 (D4.2); WO §1.5 (D4.3), docs/research/domain-athletics.md",
+  "transition": "calendar-year",
+  "notes": "Category transition happens at the start of the calendar year the athlete reaches the category's lower age bound (D4.2). Default age = competition year minus birth year. Masters bands and the open Men/Women category are elective for adults 23+: the unbounded Men/Women row resolves first by rank, so an adult's DEFAULT category is always Men/Women; a Masters band is only reached by explicit selection (modelled as start-down, permitted per WO §1.2 note 'anyone may start in the open Men/Women category'). Start-up permission for youth bands and start-down permission for Masters/open-category are per WO §1.2 general note; exact per-category start-up/down ceilings ('eligible to start up to' column, D4.2) are not fully disambiguated by the source text (self-flagged nuance in D4.2) and are approximated here by boolean flags, not age ceilings — open item for the tech lead, see TASK-004 delivery report. Masters start-up (e.g. a 33-year-old entering M35 early) is not evidenced in the source and defaults to false.",
+  "categories": [
+    {"code": "U10 M", "sex": "M", "minAge": 0, "maxAge": 9, "rank": 1, "label": "Under 10 Men", "startUpAllowed": true},
+    {"code": "U10 W", "sex": "W", "minAge": 0, "maxAge": 9, "rank": 1, "label": "Under 10 Women", "startUpAllowed": true},
+    {"code": "U12 M", "sex": "M", "minAge": 10, "maxAge": 11, "rank": 2, "label": "Under 12 Men", "startUpAllowed": true},
+    {"code": "U12 W", "sex": "W", "minAge": 10, "maxAge": 11, "rank": 2, "label": "Under 12 Women", "startUpAllowed": true},
+    {"code": "U14 M", "sex": "M", "minAge": 12, "maxAge": 13, "rank": 3, "label": "Under 14 Men", "startUpAllowed": true},
+    {"code": "U14 W", "sex": "W", "minAge": 12, "maxAge": 13, "rank": 3, "label": "Under 14 Women", "startUpAllowed": true},
+    {"code": "U16 M", "sex": "M", "minAge": 14, "maxAge": 15, "rank": 4, "label": "Under 16 Men", "startUpAllowed": true},
+    {"code": "U16 W", "sex": "W", "minAge": 14, "maxAge": 15, "rank": 4, "label": "Under 16 Women", "startUpAllowed": true},
+    {"code": "U18 M", "sex": "M", "minAge": 16, "maxAge": 17, "rank": 5, "label": "Under 18 Men", "startUpAllowed": true},
+    {"code": "U18 W", "sex": "W", "minAge": 16, "maxAge": 17, "rank": 5, "label": "Under 18 Women", "startUpAllowed": true},
+    {"code": "U20 M", "sex": "M", "minAge": 18, "maxAge": 19, "rank": 6, "label": "Under 20 Men", "startUpAllowed": true},
+    {"code": "U20 W", "sex": "W", "minAge": 18, "maxAge": 19, "rank": 6, "label": "Under 20 Women", "startUpAllowed": true},
+    {"code": "U23 M", "sex": "M", "minAge": 20, "maxAge": 22, "rank": 7, "label": "Under 23 Men", "startUpAllowed": true},
+    {"code": "U23 W", "sex": "W", "minAge": 20, "maxAge": 22, "rank": 7, "label": "Under 23 Women", "startUpAllowed": true},
+    {"code": "Men", "sex": "M", "minAge": 23, "maxAge": null, "rank": 8, "label": "Men (Aktive)", "startUpAllowed": true, "startDownAllowed": true},
+    {"code": "Women", "sex": "W", "minAge": 23, "maxAge": null, "rank": 8, "label": "Women (Aktive)", "startUpAllowed": true, "startDownAllowed": true},
+    {"code": "M30", "sex": "M", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters M30", "elective": true},
+    {"code": "W30", "sex": "W", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters W30", "elective": true},
+    {"code": "M35", "sex": "M", "minAge": 35, "maxAge": 39, "rank": 10, "label": "Masters M35", "elective": true, "startDownAllowed": true},
+    {"code": "W35", "sex": "W", "minAge": 35, "maxAge": 39, "rank": 10, "label": "Masters W35", "elective": true, "startDownAllowed": true},
+    {"code": "M40", "sex": "M", "minAge": 40, "maxAge": 44, "rank": 11, "label": "Masters M40", "elective": true, "startDownAllowed": true},
+    {"code": "W40", "sex": "W", "minAge": 40, "maxAge": 44, "rank": 11, "label": "Masters W40", "elective": true, "startDownAllowed": true},
+    {"code": "M45", "sex": "M", "minAge": 45, "maxAge": 49, "rank": 12, "label": "Masters M45", "elective": true, "startDownAllowed": true},
+    {"code": "W45", "sex": "W", "minAge": 45, "maxAge": 49, "rank": 12, "label": "Masters W45", "elective": true, "startDownAllowed": true},
+    {"code": "M50", "sex": "M", "minAge": 50, "maxAge": 54, "rank": 13, "label": "Masters M50", "elective": true, "startDownAllowed": true},
+    {"code": "W50", "sex": "W", "minAge": 50, "maxAge": 54, "rank": 13, "label": "Masters W50", "elective": true, "startDownAllowed": true},
+    {"code": "M55", "sex": "M", "minAge": 55, "maxAge": 59, "rank": 14, "label": "Masters M55", "elective": true, "startDownAllowed": true},
+    {"code": "W55", "sex": "W", "minAge": 55, "maxAge": 59, "rank": 14, "label": "Masters W55", "elective": true, "startDownAllowed": true},
+    {"code": "M60", "sex": "M", "minAge": 60, "maxAge": 64, "rank": 15, "label": "Masters M60", "elective": true, "startDownAllowed": true},
+    {"code": "W60", "sex": "W", "minAge": 60, "maxAge": 64, "rank": 15, "label": "Masters W60", "elective": true, "startDownAllowed": true},
+    {"code": "M65", "sex": "M", "minAge": 65, "maxAge": 69, "rank": 16, "label": "Masters M65", "elective": true, "startDownAllowed": true},
+    {"code": "W65", "sex": "W", "minAge": 65, "maxAge": 69, "rank": 16, "label": "Masters W65", "elective": true, "startDownAllowed": true},
+    {"code": "M70", "sex": "M", "minAge": 70, "maxAge": 74, "rank": 17, "label": "Masters M70", "elective": true, "startDownAllowed": true},
+    {"code": "W70", "sex": "W", "minAge": 70, "maxAge": 74, "rank": 17, "label": "Masters W70", "elective": true, "startDownAllowed": true},
+    {"code": "M75", "sex": "M", "minAge": 75, "maxAge": 79, "rank": 18, "label": "Masters M75", "elective": true, "startDownAllowed": true},
+    {"code": "W75", "sex": "W", "minAge": 75, "maxAge": 79, "rank": 18, "label": "Masters W75", "elective": true, "startDownAllowed": true},
+    {"code": "M80", "sex": "M", "minAge": 80, "maxAge": null, "rank": 19, "label": "Masters M80", "elective": true, "startDownAllowed": true},
+    {"code": "W80", "sex": "W", "minAge": 80, "maxAge": null, "rank": 19, "label": "Masters W80", "elective": true, "startDownAllowed": true}
+  ],
+  "disciplineRestrictionsNote": "D4.3's parenthetical example text ('150/200/300/400m/300mH/400mH events are barred for U16-and-younger') is internally inconsistent with observed practice (U16 100m/200m/400m sprints are standard youth events, and are used as illustrative event examples elsewhere in this repo's docs) and is treated as a likely research-note transcription artifact rather than encoded as a rule. Only the unambiguous long-hurdles and steeplechase bars below are encoded; flat-sprint distance restrictions for youth are deferred pending direct WO §1.5 verification (tech-lead follow-up).",
+  "disciplineRestrictions": [
+    {
+      "disciplineCode": "300mH",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): youth-protection rules bar U16-and-younger from long hurdles events."
+    },
+    {
+      "disciplineCode": "400mH",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): youth-protection rules bar U16-and-younger from long hurdles events."
+    },
+    {
+      "disciplineCode": "3000mSC",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U10/U12/U14 athletes may not enter steeplechase."
+    }
+  ]
+}

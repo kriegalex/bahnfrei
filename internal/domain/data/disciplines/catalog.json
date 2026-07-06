@@ -1,0 +1,111 @@
+{
+  "id": "wa-stadium",
+  "version": "2026.1",
+  "name": "World Athletics stadium disciplines (built-in)",
+  "source": "docs/research/domain-athletics.md D1.1, D3.5, D4.3, D5.4; docs/research/competitive-analysis.md §C7.2 (UBS Kids Cup); category-variant figures per notes below",
+  "notes": "Category codes used in variants ('U18 M', 'U18 W', 'U20 M', 'U20 W', 'Men', 'Women') match the built-in swiss-athletics category scheme 1:1 for these tiers (Swiss Athletics adopts the WA Rule 3 U18/U20/Senior boundaries verbatim, D4.1/D4.2). Implement-mass variants (shot/discus/hammer/javelin) are sourced from a secondary compilation of World Athletics/area-federation technical specifications (see per-variant citation) pending direct verification against the primary CR&TR Part III text, which could not be extracted cleanly in this pass (binary/OCR-less PDF). Senior hurdle height/spacing figures are sourced from a secondary compilation explicitly citing 'World Athletics Rule 22.1 (2026)'. U16/U18/U20/Masters hurdle-height variants are NOT populated (the only clean secondary source available used UK Athletics age-group conventions — U13/U15/U17/U20 — that do not map 1:1 onto the WA/Swiss U16/U18/U20 categories used by this project, so no variant is recorded rather than guessing); this is an explicit open item for the tech lead / a follow-up data task, not a silent gap — see docs/requirements/open-questions-and-assumptions.md.",
+  "disciplines": [
+    {"code": "60m", "name": "60 metres", "family": "track", "unit": "time", "windRelevant": true, "source": "D1.1; UKC sprint discipline, competitive-analysis.md C7.2"},
+    {"code": "100m", "name": "100 metres", "family": "track", "unit": "time", "windRelevant": true, "source": "D1.1"},
+    {"code": "200m", "name": "200 metres", "family": "track", "unit": "time", "windRelevant": true, "source": "D1.1"},
+    {"code": "300m", "name": "300 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "400m", "name": "400 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "800m", "name": "800 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1; D2.3 (lane draw)"},
+    {"code": "1500m", "name": "1500 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "3000m", "name": "3000 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "5000m", "name": "5000 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "10000m", "name": "10000 metres", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1"},
+    {"code": "3000mSC", "name": "3000 metres Steeplechase", "family": "track", "unit": "time", "windRelevant": false, "source": "D1.1; D4.3 (barred for U10/U12/U14)"},
+    {
+      "code": "100mH", "name": "100 metres Hurdles", "family": "track", "unit": "time", "windRelevant": true,
+      "source": "D1.1, D4.3",
+      "variants": [
+        {"categoryCode": "Women", "hurdleHeightM": 0.838, "hurdleSpacingM": 8.50, "distanceToFirstM": 13.00, "citation": "World Athletics Rule 22.1 (2026), via secondary compilation trackandfieldapp.com/hurdle-height-by-event-and-age (fetched 2026-07-06)"}
+      ]
+    },
+    {
+      "code": "110mH", "name": "110 metres Hurdles", "family": "track", "unit": "time", "windRelevant": true,
+      "source": "D1.1, D4.3",
+      "variants": [
+        {"categoryCode": "Men", "hurdleHeightM": 1.067, "hurdleSpacingM": 9.14, "distanceToFirstM": 13.72, "citation": "World Athletics Rule 22.1 (2026), via secondary compilation trackandfieldapp.com/hurdle-height-by-event-and-age (fetched 2026-07-06)"}
+      ]
+    },
+    {"code": "300mH", "name": "300 metres Hurdles", "family": "track", "unit": "time", "windRelevant": false, "source": "D4.3 (barred for U16-and-younger)"},
+    {
+      "code": "400mH", "name": "400 metres Hurdles", "family": "track", "unit": "time", "windRelevant": false,
+      "source": "D1.1, D4.3 (barred for U16-and-younger)",
+      "variants": [
+        {"categoryCode": "Men", "hurdleHeightM": 0.914, "hurdleSpacingM": 35, "distanceToFirstM": 45, "citation": "World Athletics Rule 22.1 (2026), via secondary compilation trackandfieldapp.com/hurdle-height-by-event-and-age (fetched 2026-07-06)"},
+        {"categoryCode": "Women", "hurdleHeightM": 0.762, "hurdleSpacingM": 35, "distanceToFirstM": 45, "citation": "World Athletics Rule 22.1 (2026), via secondary compilation trackandfieldapp.com/hurdle-height-by-event-and-age (fetched 2026-07-06)"}
+      ]
+    },
+    {"code": "HJ", "name": "High Jump", "family": "field-vertical", "unit": "height", "windRelevant": false, "source": "D1.1"},
+    {"code": "PV", "name": "Pole Vault", "family": "field-vertical", "unit": "height", "windRelevant": false, "source": "D1.1"},
+    {
+      "code": "LJ", "name": "Long Jump", "family": "field-horizontal", "unit": "distance", "windRelevant": true,
+      "source": "D1.1, D5.3"
+    },
+    {
+      "code": "TJ", "name": "Triple Jump", "family": "field-horizontal", "unit": "distance", "windRelevant": true,
+      "source": "D1.1, D5.3"
+    },
+    {
+      "code": "SP", "name": "Shot Put", "family": "field-horizontal", "unit": "distance", "windRelevant": false,
+      "source": "D1.1",
+      "variants": [
+        {"categoryCode": "Men", "implementMassKg": 7.26, "citation": "athleticsdirect.co.uk/throwing-weight-rules, secondary compilation of WA/UKA implement specs (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 M", "implementMassKg": 6.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 M", "implementMassKg": 5.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "Women", "implementMassKg": 4.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 W", "implementMassKg": 4.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 W", "implementMassKg": 3.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"}
+      ]
+    },
+    {
+      "code": "DT", "name": "Discus Throw", "family": "field-horizontal", "unit": "distance", "windRelevant": false,
+      "source": "D1.1",
+      "variants": [
+        {"categoryCode": "Men", "implementMassKg": 2.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 M", "implementMassKg": 1.75, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 M", "implementMassKg": 1.50, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "Women", "implementMassKg": 1.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 W", "implementMassKg": 1.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 W", "implementMassKg": 1.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"}
+      ]
+    },
+    {
+      "code": "HT", "name": "Hammer Throw", "family": "field-horizontal", "unit": "distance", "windRelevant": false,
+      "source": "D1.1",
+      "variants": [
+        {"categoryCode": "Men", "implementMassKg": 7.26, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 M", "implementMassKg": 6.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 M", "implementMassKg": 5.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "Women", "implementMassKg": 4.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 W", "implementMassKg": 4.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 W", "implementMassKg": 3.00, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"}
+      ]
+    },
+    {
+      "code": "JT", "name": "Javelin Throw", "family": "field-horizontal", "unit": "distance", "windRelevant": true,
+      "source": "D1.1",
+      "variants": [
+        {"categoryCode": "Men", "implementMassKg": 0.800, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 M", "implementMassKg": 0.800, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 M", "implementMassKg": 0.700, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "Women", "implementMassKg": 0.600, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U20 W", "implementMassKg": 0.600, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"},
+        {"categoryCode": "U18 W", "implementMassKg": 0.500, "citation": "athleticsdirect.co.uk/throwing-weight-rules (fetched 2026-07-06); pending primary CR&TR Part III verification"}
+      ]
+    },
+    {"code": "4x100m", "name": "4x100 metres Relay", "family": "relay", "unit": "time", "windRelevant": false, "source": "D3.5"},
+    {"code": "4x200m", "name": "4x200 metres Relay", "family": "relay", "unit": "time", "windRelevant": false, "source": "D3.5"},
+    {"code": "4x400m", "name": "4x400 metres Relay", "family": "relay", "unit": "time", "windRelevant": false, "source": "D3.5"},
+    {"code": "MedleyRelay", "name": "Medley Relay", "family": "relay", "unit": "time", "windRelevant": false, "source": "D3.5"},
+    {"code": "SwedishRelay", "name": "Swedish Relay", "family": "relay", "unit": "time", "windRelevant": false, "source": "D3.5"},
+    {"code": "Decathlon", "name": "Decathlon", "family": "combined", "unit": "points", "windRelevant": false, "source": "D5.4"},
+    {"code": "Heptathlon", "name": "Heptathlon", "family": "combined", "unit": "points", "windRelevant": false, "source": "D5.4"},
+    {"code": "Pentathlon", "name": "Pentathlon", "family": "combined", "unit": "points", "windRelevant": false, "source": "D5.4"},
+    {"code": "ZoneLJ", "name": "Zone Long Jump (UKC)", "family": "field-horizontal", "unit": "distance", "windRelevant": false, "source": "competitive-analysis.md C7.2 (UBS Kids Cup 3-discipline format, ubs-kidscup.ch)"},
+    {"code": "BallThrow200g", "name": "200 g Ball Throw (UKC)", "family": "field-horizontal", "unit": "distance", "windRelevant": false, "source": "competitive-analysis.md C7.2 (UBS Kids Cup 3-discipline format, ubs-kidscup.ch)"}
+  ]
+}

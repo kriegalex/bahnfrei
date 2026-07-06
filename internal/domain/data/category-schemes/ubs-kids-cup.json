@@ -1,0 +1,30 @@
+{
+  "id": "ubs-kids-cup",
+  "version": "2026.1",
+  "name": "UBS Kids Cup (UKC)",
+  "source": "docs/research/competitive-analysis.md §C7.2-C7.3 (ubs-kidscup.ch, verified field observation, UBS Kids Cup Le Mouret 2026-07-04); docs/requirements/system-requirements.md SYS-053",
+  "transition": "calendar-year",
+  "notes": "Per-birth-year youth series divisions M7...M15 / W7...W15 (age = competition year minus birth year, same calendar-year convention as the Swiss Athletics scheme). 'UKC for all' is an additional open/mixed division observed on federation result lists (C7.3); modelled here as an elective, sex-agnostic category not returned by default resolution. No start-up/start-down permission is documented for this series in the sourced research, so both flags default to false (open question for the tech lead if a club requests start-up for younger siblings).",
+  "categories": [
+    {"code": "M7", "sex": "M", "minAge": 7, "maxAge": 7, "rank": 1, "label": "Boys born to be 7"},
+    {"code": "W7", "sex": "W", "minAge": 7, "maxAge": 7, "rank": 1, "label": "Girls born to be 7"},
+    {"code": "M8", "sex": "M", "minAge": 8, "maxAge": 8, "rank": 2, "label": "Boys born to be 8"},
+    {"code": "W8", "sex": "W", "minAge": 8, "maxAge": 8, "rank": 2, "label": "Girls born to be 8"},
+    {"code": "M9", "sex": "M", "minAge": 9, "maxAge": 9, "rank": 3, "label": "Boys born to be 9"},
+    {"code": "W9", "sex": "W", "minAge": 9, "maxAge": 9, "rank": 3, "label": "Girls born to be 9"},
+    {"code": "M10", "sex": "M", "minAge": 10, "maxAge": 10, "rank": 4, "label": "Boys born to be 10"},
+    {"code": "W10", "sex": "W", "minAge": 10, "maxAge": 10, "rank": 4, "label": "Girls born to be 10"},
+    {"code": "M11", "sex": "M", "minAge": 11, "maxAge": 11, "rank": 5, "label": "Boys born to be 11"},
+    {"code": "W11", "sex": "W", "minAge": 11, "maxAge": 11, "rank": 5, "label": "Girls born to be 11"},
+    {"code": "M12", "sex": "M", "minAge": 12, "maxAge": 12, "rank": 6, "label": "Boys born to be 12"},
+    {"code": "W12", "sex": "W", "minAge": 12, "maxAge": 12, "rank": 6, "label": "Girls born to be 12"},
+    {"code": "M13", "sex": "M", "minAge": 13, "maxAge": 13, "rank": 7, "label": "Boys born to be 13"},
+    {"code": "W13", "sex": "W", "minAge": 13, "maxAge": 13, "rank": 7, "label": "Girls born to be 13"},
+    {"code": "M14", "sex": "M", "minAge": 14, "maxAge": 14, "rank": 8, "label": "Boys born to be 14"},
+    {"code": "W14", "sex": "W", "minAge": 14, "maxAge": 14, "rank": 8, "label": "Girls born to be 14"},
+    {"code": "M15", "sex": "M", "minAge": 15, "maxAge": 15, "rank": 9, "label": "Boys born to be 15"},
+    {"code": "W15", "sex": "W", "minAge": 15, "maxAge": 15, "rank": 9, "label": "Girls born to be 15"},
+    {"code": "UKC for all", "sex": "", "minAge": 7, "maxAge": 15, "rank": 10, "label": "UKC for all (open/mixed division)", "elective": true}
+  ],
+  "disciplineRestrictions": []
+}
