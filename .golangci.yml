@@ -17,6 +17,9 @@ linters:
         - fmt.Fprintf
         - fmt.Fprintln
         - fmt.Fprint
+        # Close on read-only result sets has no failure mode we could act on;
+        # rows.Err() is checked instead.
+        - (*database/sql.Rows).Close
     depguard:
       rules:
         domain-is-pure:

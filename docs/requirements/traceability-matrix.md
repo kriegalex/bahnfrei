@@ -93,7 +93,7 @@ inspection/analysis procedure.
 | SYS-043 | UC-012 #1–#4 | T | Phase B |
 | SYS-044 | UC-013 #1–#3 | T | Phase B |
 | SYS-045 | UC-010 #3 | T | Phase B |
-| SYS-046 | UC-015 #2–#3 | T | Phase B |
+| SYS-046 | UC-015 #2–#3 | T | TASK-003 (storage layer): `internal/store` `TestAuditImmutableByTrigger`, `TestAuditAppendAndTrail`; correction-propagation flow lands with TASK-019 |
 | SYS-047 | UC-015 #1, #4 | T | Phase B |
 | SYS-048 *(L)* | UC-029 | T | Phase B (Later) |
 | SYS-049 | UC-016 #1, #5 | T | Phase B |
@@ -116,9 +116,9 @@ inspection/analysis procedure.
 | SYS-077 | UC-035 #1–#3 | T | Phase B |
 | SYS-078 *(Later)* | UC-036 #1–#2 | T/D | Phase B |
 | SYS-080 *(Later — DEC-013)* | UC-019 #1, #3 | T | Phase B (venue-node gate) |
-| SYS-081 | UC-020 #1–#2 | T | Phase B |
+| SYS-081 | UC-020 #1–#2 | T | TASK-003 (storage layer): `internal/store` `TestKill9Durability` (kill-9 mid-burst, confirmed-write survival, consistency-gated reopen), `TestOpenDurabilityPragmas` (WAL + synchronous=FULL); app-level drill in TASK-014 |
 | SYS-082 *(Later — DEC-013)* | UC-019 #2 | T | Phase B (venue-node gate) |
-| SYS-083 | UC-021 #1–#3 | T | Phase B |
+| SYS-083 | UC-021 #1–#3 | T | TASK-003 (primitive): `internal/store` `TestOptimisticUpdateConflictSurfaced` (conflict surfaced, stale write rejected); full 10-operator suite in TASK-025 |
 | SYS-084 | UC-020 #3 | T | Phase B |
 | SYS-085 | UC-034 #1–#3, #6 | T | Phase B |
 | SYS-086 | UC-034 #4–#5 | T | Phase B |

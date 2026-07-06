@@ -83,8 +83,11 @@ jobs:
       - name: Dependency licence allowlist (ADR-001 §4)
         run: |
           go install github.com/google/go-licenses@latest
+          # modernc.org/mathutil is BSD-3-Clause (LICENSE in module root,
+          # verified manually 2026-07-06) — the classifier fails to detect it.
           go-licenses check ./... \
             --ignore github.com/kriegalex/bahnfrei \
+            --ignore modernc.org/mathutil \
             --allowed_licenses=Apache-2.0,BSD-2-Clause,BSD-3-Clause,MIT,ISC,MPL-2.0,Unlicense,CC0-1.0
 
   vuln-scan:
