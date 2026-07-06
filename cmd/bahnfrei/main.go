@@ -2,11 +2,13 @@
 // Copyright (c) 2026 Bahnfrei contributors
 
 // Command bahnfrei is the single self-contained executable (ADR-002/ADR-003).
-// Role selection (venue|hub), the quickstart bootstrap, and backup/restore
-// commands are added by TASK-005/TASK-006/TASK-014.
+// Role selection (venue|hub) and the "serve" subcommand are added by
+// TASK-005; the ≤30-minute quickstart wizard and backup/restore commands
+// are added by TASK-006/TASK-014.
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -16,13 +18,21 @@ import (
 var version = "dev"
 
 func main() {
-	run(os.Args[1:], os.Stdout)
+	run(context.Background(), os.Args[1:], os.Stdout)
 }
 
-func run(args []string, out io.Writer) {
-	if len(args) > 0 && args[0] == "--version" {
-		fmt.Fprintf(out, "bahnfrei %s\n", version)
-		return
+func run(ctx context.Context, args []string, out io.Writer) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "--version":
+			fmt.Fprintf(out, "bahnfrei %s\n", version)
+			return
+		case "serve":
+			if err := runServe(ctx, args[1:], out); err != nil {
+				fmt.Fprintf(out, "bahnfrei: %v\n", err)
+			}
+			return
+		}
 	}
 	fmt.Fprintln(out, "bahnfrei: not yet operational — see docs/delivery/work-breakdown.md")
 }

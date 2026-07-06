@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// homePage is the placeholder landing page for the server shell (TASK-005);
+// meet/domain content replaces its body in later tasks.
+templ homePage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("home.welcome") }</h1>
+		<p>{ p.T("home.placeholder") }</p>
+	}
+}
+
+// loginPage renders the credential form (SYS-091). The username/password
+// fields are plain (no client-side islands here — that escape hatch is for
+// per-widget interactivity, ADR-003, not this shell).
+templ loginPage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("auth.login.title") }</h1>
+		<form action="/login" method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>
+				{ p.T("auth.login.username") }
+				<input type="text" name="username" autocomplete="username" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("auth.login.password") }
+				<input type="password" name="password" autocomplete="current-password" required?={ true }/>
+			</label>
+			<button type="submit">{ p.T("auth.login.submit") }</button>
+		</form>
+	}
+}
+
+// forbiddenPage renders a localized 403 (SYS-090 authorization failures).
+templ forbiddenPage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("error.forbidden") }</h1>
+	}
+}
+
+// notFoundPage renders a localized 404.
+templ notFoundPage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("error.not_found") }</h1>
+	}
+}

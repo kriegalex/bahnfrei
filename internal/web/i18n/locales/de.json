@@ -1,0 +1,19 @@
+{
+  "app.title": "Bahnfrei",
+  "nav.home": "Start",
+  "nav.login": "Anmelden",
+  "nav.logout": "Abmelden",
+  "auth.login.title": "Anmelden",
+  "auth.login.username": "Benutzername",
+  "auth.login.password": "Passwort",
+  "auth.login.submit": "Anmelden",
+  "auth.login.error": "Benutzername oder Passwort ungültig.",
+  "auth.logged_in_as": "Angemeldet als {name}",
+  "home.welcome": "Willkommen bei Bahnfrei",
+  "home.placeholder": "Das System ist noch nicht einsatzbereit — siehe docs/delivery/work-breakdown.md",
+  "footer.locale_switch": "Sprache",
+  "locale.de": "Deutsch",
+  "locale.fr": "Französisch",
+  "error.forbidden": "Zugriff verweigert.",
+  "error.not_found": "Seite nicht gefunden."
+}

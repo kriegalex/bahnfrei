@@ -123,17 +123,17 @@ inspection/analysis procedure.
 | SYS-085 | UC-034 #1–#3, #6 | T | Phase B |
 | SYS-086 | UC-034 #4–#5 | T | Phase B |
 | SYS-087 | UC-034 #7 | T | Phase B |
-| SYS-090 | UC-022 #1, #3 | T | Phase B |
-| SYS-091 | UC-022 #2, #4 | T/I | Phase B |
+| SYS-090 | UC-022 #1, #3 | T | TASK-005 (RBAC primitive): `internal/app` `TestRoleAtLeast`, `TestAuthorize` (least-privilege capability checks), `TestParseRole`/`TestParseRoleInvalid`; `internal/web` `TestAdminRouteRequiresInstanceAdminRole` (anonymous 403, instance-admin 200 end to end). Per-meet grant assignment/scoping is TASK-013 |
+| SYS-091 | UC-022 #2, #4 | T/I | TASK-005: `internal/app` `TestHashAndVerifyPassword`, `TestNeedsRehash`, `TestLoginUpgradesWeakHash` (adaptive argon2id hash + upgrade-on-verify), `TestSessionExpiry`, `TestSessionSweep` (configurable session TTL), `TestCreateAccountRequiresCapability` (privileged action recorded to audit trail, SYS-046); `internal/web` `TestLoginFlowSuccessAndFailure`, `TestLoginRejectsWithoutCSRFToken`, `TestAdminRouteRequiresInstanceAdminRole` (authN required for non-public capability) |
 | SYS-092 | CI dependency/static scans + ASVS L2 audit checklist per release | A/I | Phase B |
-| SYS-093 | UC-019 #4 + TLS config inspection | T/I | Phase B |
+| SYS-093 | UC-019 #4 + TLS config inspection | T/I | TASK-005: `internal/web` `TestGenerateSelfSignedCovers`, `TestLoadOrGenerateSelfSignedPersistsAndReuses`, `TestLoadOrGenerateSelfSignedRegeneratesWhenNearExpiry`, `TestLocalTLSConfigDefaultsToLocalhost` (venue-local self-signed cert, no internet-dependent CA), `TestBuildACMEConfigWiresIssuer`, `TestAcmeTLSConfigRequiresDomain` (hub/ACME config wiring; real ACME issuance via `ManageSync` is a deliberate offline-suite seam, not unit-tested), `TestServerServeAndShutdown` (TLS listener lifecycle end to end) |
 | SYS-100 | UC-023 #1 | T | Phase B |
 | SYS-101 | UC-024 #1–#2 | T | Phase B |
 | SYS-102 | UC-024 #3 | T | Phase B |
 | SYS-103 | UC-023 #2–#3 | T | Phase B |
 | SYS-104 | Document inspection per release | I | Phase B |
 | SYS-105 | Egress-blocked suite (UC-019 #3) + code/config inspection | T/I | Phase B |
-| SYS-110 | UC-025 #1–#3 | T | Phase B |
+| SYS-110 | UC-025 #1–#3 | T | TASK-005 (i18n mechanism): `internal/web/i18n` `TestLoadShipsCompleteDEAndFR` (DE/FR ship complete, zero missing-key fallback), `TestLoadDiscoversPseudoLocaleWithNoCodeChange` + `TestPseudoLocaleInSyncWithReference` (pseudo-locale build, translation-file-only extensibility, gated by plain `go test ./...` already in CI), `TestMissingKeyFallsBackThenBrackets`; `internal/web` `TestLocaleSwitchPersistsAcrossRequests`, `TestLocaleSwitchIgnoresUnknownLocale` (per-session switch). Locale-correct date/number/mark-notation rendering ships with the content that needs it (later tasks) |
 | SYS-111 | UC-025 #1 + UC-018 #3 | T | Phase B |
 | SYS-112 | UC-026 #1–#2 | T/I | Phase B |
 | SYS-113 | UC-017 #2, UC-026 #1 | T | Phase B |

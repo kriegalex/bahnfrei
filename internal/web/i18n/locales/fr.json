@@ -1,0 +1,19 @@
+{
+  "app.title": "Bahnfrei",
+  "nav.home": "Accueil",
+  "nav.login": "Connexion",
+  "nav.logout": "Déconnexion",
+  "auth.login.title": "Connexion",
+  "auth.login.username": "Nom d'utilisateur",
+  "auth.login.password": "Mot de passe",
+  "auth.login.submit": "Se connecter",
+  "auth.login.error": "Nom d'utilisateur ou mot de passe invalide.",
+  "auth.logged_in_as": "Connecté en tant que {name}",
+  "home.welcome": "Bienvenue sur Bahnfrei",
+  "home.placeholder": "Le système n'est pas encore opérationnel — voir docs/delivery/work-breakdown.md",
+  "footer.locale_switch": "Langue",
+  "locale.de": "Allemand",
+  "locale.fr": "Français",
+  "error.forbidden": "Accès refusé.",
+  "error.not_found": "Page introuvable."
+}

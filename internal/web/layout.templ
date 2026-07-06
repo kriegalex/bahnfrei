@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// layout is the base HTML shell every page renders inside: HTMX is loaded
+// once (ADR-003: "server-rendered HTML, progressively enhanced with
+// HTMX"), navigation carries the login/logout state and the DE/FR locale
+// switcher (SYS-110), and #main is a polite ARIA live region so future
+// HTMX-swapped live updates (SSE-driven, SYS-071) announce accessibly
+// without stealing focus (SYS-112/UC-026 #3 — the shell wires the
+// landmark; content that streams into it arrives with later tasks).
+templ layout(p PageData) {
+	<!DOCTYPE html>
+	<html lang={ string(p.Locale) }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ p.Title } · { p.T("app.title") }</title>
+			<script src="/static/htmx.min.js"></script>
+			<link rel="stylesheet" href="/static/base.css"/>
+		</head>
+		<body>
+			<a class="skip-link" href="#main">{ p.T("nav.home") }</a>
+			<header>
+				<nav aria-label="primary">
+					<a href="/">{ p.T("app.title") }</a>
+					if p.LoggedIn {
+						<span class="who">{ p.T("auth.logged_in_as", "name", p.Username) }</span>
+						<form action="/logout" method="post" class="inline-form">
+							<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+							<button type="submit">{ p.T("nav.logout") }</button>
+						</form>
+					} else {
+						<a href="/login">{ p.T("nav.login") }</a>
+					}
+					<form action="/locale" method="get" class="inline-form locale-switch">
+						<label>
+							{ p.T("footer.locale_switch") }
+							<select name="lang" onchange="this.form.submit()">
+								for _, loc := range p.Locales {
+									<option value={ string(loc) } selected?={ loc == p.Locale }>
+										{ localeLabel(p, loc) }
+									</option>
+								}
+							</select>
+						</label>
+					</form>
+				</nav>
+			</header>
+			<main id="main" aria-live="polite">
+				if p.FlashError != "" {
+					<p class="error" role="alert">{ p.FlashError }</p>
+				}
+				{ children... }
+			</main>
+		</body>
+	</html>
+}

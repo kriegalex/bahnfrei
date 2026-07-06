@@ -1,0 +1,19 @@
+{
+  "app.title": "[Báhnfréí ~~~]",
+  "auth.logged_in_as": "[Ángéméldét áls {name} ~~~]",
+  "auth.login.error": "[Bénútzérnámé ódér Pásswórt úngültíg. ~~~]",
+  "auth.login.password": "[Pásswórt ~~~]",
+  "auth.login.submit": "[Ánméldén ~~~]",
+  "auth.login.title": "[Ánméldén ~~~]",
+  "auth.login.username": "[Bénútzérnámé ~~~]",
+  "error.forbidden": "[Zúgríff vérwéígért. ~~~]",
+  "error.not_found": "[Séíté nícht géfúndén. ~~~]",
+  "footer.locale_switch": "[Spráché ~~~]",
+  "home.placeholder": "[Dás Systém íst nóch nícht éínsátzbéréít — síéhé dócs/délívéry/wórk-bréákdówn.md ~~~]",
+  "home.welcome": "[Wíllkómmén béí Báhnfréí ~~~]",
+  "locale.de": "[Déútsch ~~~]",
+  "locale.fr": "[Fránzösísch ~~~]",
+  "nav.home": "[Stárt ~~~]",
+  "nav.login": "[Ánméldén ~~~]",
+  "nav.logout": "[Ábméldén ~~~]"
+}
