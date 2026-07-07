@@ -9,6 +9,13 @@
 # A package group with zero statements is skipped (pre-implementation
 # bootstrap) — the gate arms itself as code lands.
 #
+# Generated code (templ output, *_templ.go) is excluded from both gates:
+# its source of truth is the corresponding .templ file, whose display
+# logic IS exercised through rendering tests — the excluded statements are
+# machine-emitted per-write io-error plumbing that cannot fail without a
+# failing writer. SYS-140 measures authored project code (method note in
+# traceability-matrix.md).
+#
 # Usage: check-coverage.sh [coverprofile]   (default: coverage.out)
 set -eu
 
@@ -16,7 +23,8 @@ profile=${1:-coverage.out}
 [ -f "$profile" ] || { echo "no cover profile at $profile" >&2; exit 1; }
 
 awk '
-NR == 1 { next }  # "mode:" header
+NR == 1 { next }         # "mode:" header
+$1 ~ /_templ\.go:/ { next }  # generated templ output (see header comment)
 {
     # line format: <file>:<start>,<end> <numstmts> <hitcount>
     # -coverpkg can repeat a block across test binaries: merge by block key.

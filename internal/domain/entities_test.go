@@ -115,3 +115,29 @@ func TestExternalIDs_MeetAndClub(t *testing.T) {
 		t.Fatalf("club external id round-trip failed: got %q", v)
 	}
 }
+
+// TestSession_Validate covers the SYS-001 session invariants (competition
+// days with sessions per day, UC-001 #2).
+func TestSession_Validate(t *testing.T) {
+	day := time.Date(2027, 6, 12, 0, 0, 0, 0, time.UTC)
+
+	ok := Session{ID: "01SESS", MeetID: "01MEET", Day: day, Label: "Vormittag"}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid session rejected: %v", err)
+	}
+
+	noID := Session{MeetID: "01MEET", Day: day}
+	if err := noID.Validate(); err == nil {
+		t.Fatal("expected error for session without an id")
+	}
+
+	noMeet := Session{ID: "01SESS", Day: day}
+	if err := noMeet.Validate(); err == nil {
+		t.Fatal("expected error for session without a meet id")
+	}
+
+	noDay := Session{ID: "01SESS", MeetID: "01MEET"}
+	if err := noDay.Validate(); err == nil {
+		t.Fatal("expected error for session without a day")
+	}
+}

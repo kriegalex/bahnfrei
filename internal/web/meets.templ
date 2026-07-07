@@ -1,0 +1,356 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// setupPage is the first-run admin bootstrap form (UC-001 #1): it exists
+// so a fresh install reaches a working admin account entirely through the
+// browser — no configuration file, no CLI wizard (SYS-131).
+templ setupPage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("setup.title") }</h1>
+		<p>{ p.T("setup.intro") }</p>
+		<form action="/setup" method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>
+				{ p.T("setup.username") }
+				<input type="text" name="username" autocomplete="username" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("setup.display_name") }
+				<input type="text" name="display_name" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("setup.password") }
+				<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8"/>
+			</label>
+			<button type="submit">{ p.T("setup.submit") }</button>
+		</form>
+	}
+}
+
+// meetsListPage is the operator's meet overview (SYS-001).
+templ meetsListPage(p PageData, rows []meetRowView) {
+	@layout(p) {
+		<h1>{ p.T("meets.title") }</h1>
+		<p><a href="/meets/new">{ p.T("meets.new_link") }</a></p>
+		if len(rows) == 0 {
+			<p>{ p.T("meets.empty") }</p>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>{ p.T("meet.field.name") }</th>
+						<th>{ p.T("meet.field.venue") }</th>
+						<th>{ p.T("meet.field.dates") }</th>
+						<th>{ p.T("meet.field.tier") }</th>
+						<th>{ p.T("meet.field.status") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, m := range rows {
+						<tr>
+							<td><a href={ templ.URL("/meets/" + m.ID) }>{ m.Name }</a></td>
+							<td>{ m.Venue }</td>
+							<td>{ m.Dates }</td>
+							<td>{ m.Tier }</td>
+							<td>{ m.Status }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	}
+}
+
+// meetFormPage is the shared create/edit meet form (SYS-001): meet
+// attributes plus up to maxSessionRows session lines (day + label).
+templ meetFormPage(p PageData, f meetFormView, action string) {
+	@layout(p) {
+		<h1>{ p.T("meet.new.title") }</h1>
+		<form action={ templ.URL(action) } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<input type="hidden" name="version" value={ intToStr(f.Version) }/>
+			<label>
+				{ p.T("meet.field.name") }
+				<input type="text" name="name" value={ f.Name } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.field.venue") }
+				<input type="text" name="venue" value={ f.Venue } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.field.homologation") }
+				<input type="text" name="homologation_ref" value={ f.HomologationRef }/>
+			</label>
+			<label>
+				{ p.T("meet.field.start_date") }
+				<input type="date" name="start_date" value={ f.StartDate } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.field.end_date") }
+				<input type="date" name="end_date" value={ f.EndDate } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.field.tier") }
+				<select name="tier">
+					for _, tier := range f.Tiers {
+						<option value={ tier } selected?={ tier == f.Tier }>{ tier }</option>
+					}
+				</select>
+			</label>
+			if f.SchemeFixed {
+				<input type="hidden" name="scheme" value={ f.SchemeID }/>
+			} else {
+				<label>
+					{ p.T("meet.field.scheme") }
+					<select name="scheme">
+						for _, scheme := range f.Schemes {
+							<option value={ scheme } selected?={ scheme == f.SchemeID }>{ scheme }</option>
+						}
+					</select>
+				</label>
+			}
+			<fieldset>
+				<legend>{ p.T("meet.field.sessions") }</legend>
+				<p>{ p.T("meet.sessions.hint") }</p>
+				for i, row := range f.Sessions {
+					<div class="session-row">
+						<label>
+							{ p.T("meet.field.session_day") }
+							<input type="date" name={ "session_day_" + intToStr(int64(i)) } value={ row.Day }/>
+						</label>
+						<label>
+							{ p.T("meet.field.session_label") }
+							<input type="text" name={ "session_label_" + intToStr(int64(i)) } value={ row.Label }/>
+						</label>
+					</div>
+				}
+			</fieldset>
+			<button type="submit">{ p.T("meet.form.save") }</button>
+		</form>
+	}
+}
+
+// meetDetailPage is the meet workspace: attributes, sessions (SYS-001),
+// programme with capture types (SYS-002, UC-001 #3), unit scheduling and
+// timetable publication with retained versions (SYS-004, UC-001 #4).
+templ meetDetailPage(p PageData, d meetDetailView) {
+	@layout(p) {
+		<h1>{ d.Name }</h1>
+		<p>
+			{ d.Venue } · { d.Dates } · { d.Tier } ·
+			<strong>{ d.Status }</strong>
+		</p>
+		<p>
+			<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
+			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a>
+		</p>
+		if !d.Archived {
+			<form action={ templ.URL("/meets/" + d.ID + "/archive") } method="post" class="inline-form">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<input type="hidden" name="version" value={ intToStr(d.Version) }/>
+				<button type="submit">{ p.T("meet.archive") }</button>
+			</form>
+		}
+		<h2>{ p.T("meet.field.sessions") }</h2>
+		if len(d.Sessions) == 0 {
+			<p>{ p.T("meet.sessions.none") }</p>
+		} else {
+			<ul>
+				for _, sess := range d.Sessions {
+					<li>{ sess.Day } — { sess.Label }</li>
+				}
+			</ul>
+		}
+		<h2>{ p.T("programme.title") }</h2>
+		if len(d.Programme) == 0 {
+			<p>{ p.T("programme.empty") }</p>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>{ p.T("programme.discipline") }</th>
+						<th>{ p.T("programme.categories") }</th>
+						<th>{ p.T("programme.capture_type") }</th>
+						<th>{ p.T("programme.rounds") }</th>
+						<th>{ p.T("programme.deadline") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range d.Programme {
+						<tr>
+							<td>{ row.Discipline }</td>
+							<td>{ row.Categories }</td>
+							<td>{ row.CaptureType }</td>
+							<td>{ row.Rounds }</td>
+							<td>{ row.Deadline }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		if !d.Archived {
+			<h3>{ p.T("programme.add.title") }</h3>
+			<form action={ templ.URL("/meets/" + d.ID + "/events") } method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>
+					{ p.T("programme.discipline") }
+					<select name="discipline">
+						for _, disc := range d.Disciplines {
+							<option value={ disc.Code }>{ disc.Name }</option>
+						}
+					</select>
+				</label>
+				<label>
+					{ p.T("programme.categories") }
+					<select name="categories" multiple size="6">
+						for _, cat := range d.Categories {
+							<option value={ cat }>{ cat }</option>
+						}
+					</select>
+				</label>
+				<fieldset>
+					<legend>{ p.T("programme.rounds") }</legend>
+					<label><input type="checkbox" name="round_qualification" value="1"/> { p.T("round.qualification") }</label>
+					<label><input type="checkbox" name="round_semifinal" value="1"/> { p.T("round.semifinal") }</label>
+					<label><input type="checkbox" name="round_final" value="1" checked?={ true }/> { p.T("round.final") }</label>
+				</fieldset>
+				<label>
+					{ p.T("programme.deadline") }
+					<input type="datetime-local" name="entry_deadline"/>
+				</label>
+				<label>
+					{ p.T("programme.entry_standard") }
+					<input type="text" name="entry_standard"/>
+				</label>
+				<button type="submit">{ p.T("programme.add.submit") }</button>
+			</form>
+		}
+		<h2>{ p.T("timetable.title") }</h2>
+		if len(d.Units) == 0 {
+			<p>{ p.T("timetable.empty") }</p>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>{ p.T("programme.discipline") }</th>
+						<th>{ p.T("programme.categories") }</th>
+						<th>{ p.T("timetable.round") }</th>
+						<th>{ p.T("timetable.scheduled_at") }</th>
+						<th>{ p.T("timetable.location") }</th>
+						if !d.Archived {
+							<th>{ p.T("timetable.schedule") }</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					for _, u := range d.Units {
+						<tr>
+							<td>{ u.Discipline }</td>
+							<td>{ u.Categories }</td>
+							<td>{ u.Round }</td>
+							<td>{ u.When }</td>
+							<td>{ u.Location }</td>
+							if !d.Archived {
+								<td>
+									<form action={ templ.URL("/meets/" + d.ID + "/units/" + u.UnitID + "/schedule") } method="post" class="inline-form">
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<input type="hidden" name="version" value={ intToStr(u.Version) }/>
+										<input type="datetime-local" name="scheduled_at" value={ u.When } required?={ true }/>
+										<input type="text" name="location" value={ u.Location } placeholder={ p.T("timetable.location") }/>
+										<button type="submit">{ p.T("timetable.schedule") }</button>
+									</form>
+								</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+			if !d.Archived {
+				<form action={ templ.URL("/meets/" + d.ID + "/timetable/publish") } method="post">
+					<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+					<button type="submit">{ p.T("timetable.publish") }</button>
+				</form>
+			}
+		}
+		if len(d.Versions) > 0 {
+			<h3>{ p.T("timetable.versions.title") }</h3>
+			<ul>
+				for _, v := range d.Versions {
+					<li>{ p.T("timetable.versions.row", "version", intToStr(int64(v.Version)), "at", v.PublishedAt) }</li>
+				}
+			</ul>
+		}
+	}
+}
+
+// sanctioningPage is the human-readable sanctioning summary (SYS-006,
+// UC-001 #5): tier, venue with homologation reference, dates, organizer,
+// categories and disciplines — printable as-is for federation registration.
+templ sanctioningPage(p PageData, v sanctioningView) {
+	@layout(p) {
+		<h1>{ p.T("sanctioning.title") }</h1>
+		if !v.Complete {
+			<p class="error" role="alert">{ p.T("sanctioning.incomplete") }</p>
+		}
+		<dl>
+			<dt>{ p.T("meet.field.name") }</dt>
+			<dd>{ v.MeetName }</dd>
+			<dt>{ p.T("meet.field.venue") }</dt>
+			<dd>{ v.Venue }</dd>
+			<dt>{ p.T("meet.field.homologation") }</dt>
+			<dd>{ v.HomologationRef }</dd>
+			<dt>{ p.T("meet.field.dates") }</dt>
+			<dd>{ v.Dates }</dd>
+			<dt>{ p.T("sanctioning.organizer") }</dt>
+			<dd>{ v.Organizer }</dd>
+			<dt>{ p.T("meet.field.tier") }</dt>
+			<dd>{ v.Tier }</dd>
+			<dt>{ p.T("sanctioning.categories") }</dt>
+			<dd>{ v.Categories }</dd>
+			<dt>{ p.T("sanctioning.disciplines") }</dt>
+			<dd>{ v.Disciplines }</dd>
+		</dl>
+		<h2>{ p.T("meet.field.sessions") }</h2>
+		<ul>
+			for _, sess := range v.Sessions {
+				<li>{ sess.Day } — { sess.Label }</li>
+			}
+		</ul>
+		<p><small>{ p.T("sanctioning.generated_at", "at", v.GeneratedAt) }</small></p>
+	}
+}
+
+// publicTimetablePage is the unauthenticated current published timetable
+// (SYS-004/UC-001 #4; SYS-090 public read) at a stable URL.
+templ publicTimetablePage(p PageData, v publicTimetableView) {
+	@layout(p) {
+		<h1>{ v.MeetName }</h1>
+		<p>{ v.Venue } · { v.Dates }</p>
+		<p><small>{ p.T("timetable.versions.row", "version", intToStr(int64(v.Version)), "at", v.PublishedAt) }</small></p>
+		<table>
+			<thead>
+				<tr>
+					<th>{ p.T("timetable.scheduled_at") }</th>
+					<th>{ p.T("programme.discipline") }</th>
+					<th>{ p.T("programme.categories") }</th>
+					<th>{ p.T("timetable.round") }</th>
+					<th>{ p.T("timetable.location") }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, u := range v.Rows {
+					<tr>
+						<td>{ u.When }</td>
+						<td>{ u.Discipline }</td>
+						<td>{ u.Categories }</td>
+						<td>{ u.Round }</td>
+						<td>{ u.Location }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}

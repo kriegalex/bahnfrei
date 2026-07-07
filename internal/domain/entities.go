@@ -128,17 +128,23 @@ const (
 type MeetTier string
 
 // Meet is the SyRS §2 Meet entity: name, venue, date range, sessions,
-// organizer, tier, status (SYS-001/004/006).
+// organizer, tier, status (SYS-001/004/006). HomologationRef is the venue's
+// homologation reference recorded for the sanctioning summary (SYS-006).
+// CategorySchemeID names the category scheme this meet resolves categories
+// against (SYS-005, UC-002 #1: "the organizer selects the built-in Swiss
+// Athletics scheme").
 type Meet struct {
-	ID          string
-	Name        string
-	Venue       string
-	StartDate   time.Time
-	EndDate     time.Time
-	Organizer   string
-	Tier        MeetTier
-	Status      MeetStatus
-	ExternalIDs ExternalIDs
+	ID               string
+	Name             string
+	Venue            string
+	HomologationRef  string
+	StartDate        time.Time
+	EndDate          time.Time
+	Organizer        string
+	Tier             MeetTier
+	Status           MeetStatus
+	CategorySchemeID string
+	ExternalIDs      ExternalIDs
 }
 
 // Validate checks the minimal Meet invariants (SYS-001).
@@ -151,6 +157,30 @@ func (m *Meet) Validate() error {
 	}
 	if m.EndDate.Before(m.StartDate) {
 		return errors.New("meet: end date before start date")
+	}
+	return nil
+}
+
+// Session is one competition session within a Meet's timetable: a labeled
+// block on one competition day (SYS-001: "one or more competition days,
+// sessions per day").
+type Session struct {
+	ID     string
+	MeetID string
+	Day    time.Time // the competition day this session belongs to (date only)
+	Label  string    // e.g. "Vormittag", "Session 1"
+}
+
+// Validate checks the minimal Session invariants (SYS-001).
+func (s *Session) Validate() error {
+	if s.ID == "" {
+		return errors.New("session: id is required")
+	}
+	if s.MeetID == "" {
+		return errors.New("session: meet id is required")
+	}
+	if s.Day.IsZero() {
+		return errors.New("session: day is required")
 	}
 	return nil
 }
@@ -170,8 +200,9 @@ type Event struct {
 	ID             string
 	MeetID         string
 	DisciplineCode string
-	CategoryCodes  []string // >1 for combined-category events (SYS-002)
-	EntryStandard  string   // seed-performance threshold, if configured (SYS-015)
+	CategoryCodes  []string   // >1 for combined-category events (SYS-002)
+	EntryStandard  string     // seed-performance threshold, if configured (SYS-015)
+	EntryDeadline  *time.Time // entry condition per event (SYS-002, UC-001 #3)
 	Status         EventStatus
 }
 

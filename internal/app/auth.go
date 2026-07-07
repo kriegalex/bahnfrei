@@ -153,6 +153,18 @@ func (a *AuthService) CreateAccount(ctx context.Context, actor Session, req Crea
 	return acct, nil
 }
 
+// NeedsBootstrap reports whether no account exists yet, i.e. the instance
+// is on its first run and must offer the setup flow (UC-001 #1: the
+// quickstart ends with "a running system with an admin account" and no
+// hand-edited configuration file).
+func (a *AuthService) NeedsBootstrap(ctx context.Context) (bool, error) {
+	n, err := store.CountAccounts(ctx, a.db)
+	if err != nil {
+		return false, fmt.Errorf("needs bootstrap: %w", err)
+	}
+	return n == 0, nil
+}
+
 // Bootstrap provisions the very first account (an instance admin) when no
 // accounts exist yet. It is the only way to obtain the first
 // RoleInstanceAdmin account: every later CreateAccount call requires an

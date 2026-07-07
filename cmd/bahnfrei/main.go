@@ -3,8 +3,9 @@
 
 // Command bahnfrei is the single self-contained executable (ADR-002/ADR-003).
 // Role selection (venue|hub) and the "serve" subcommand are added by
-// TASK-005; the ≤30-minute quickstart wizard and backup/restore commands
-// are added by TASK-006/TASK-014.
+// TASK-005; first-run setup is the browser /setup flow (TASK-006, SYS-131 —
+// no config file, no CLI wizard); backup/restore commands arrive with
+// TASK-014.
 package main
 
 import (

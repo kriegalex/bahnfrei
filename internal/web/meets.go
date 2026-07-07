@@ -1,0 +1,639 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/kriegalex/bahnfrei/internal/app"
+	"github.com/kriegalex/bahnfrei/internal/domain"
+)
+
+// Form wire formats for <input type="date"> and <input type="datetime-local">.
+const (
+	formDateLayout     = "2006-01-02"
+	formDateTimeLayout = "2006-01-02T15:04"
+)
+
+// maxSessionRows is how many blank session lines the meet form offers;
+// empty rows are ignored on submit.
+const maxSessionRows = 8
+
+// --- first-run setup (UC-001 #1, SYS-131) ---
+
+// handleSetupForm offers the first-run admin-account creation when no
+// account exists yet; afterwards the route disappears behind a redirect,
+// so the quickstart needs no configuration file and no CLI wizardry.
+func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
+	needs, err := s.auth.NeedsBootstrap(r.Context())
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !needs {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("setup.title")
+	_ = setupPage(p).Render(r.Context(), w)
+}
+
+func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
+	needs, err := s.auth.NeedsBootstrap(r.Context())
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !needs {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	username := strings.TrimSpace(r.FormValue("username"))
+	displayName := strings.TrimSpace(r.FormValue("display_name"))
+	password := r.FormValue("password")
+
+	renderErr := func(key string) {
+		p := basePageData(r, s.cats)
+		p.Title = p.T("setup.title")
+		p.FlashError = p.T(key)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = setupPage(p).Render(r.Context(), w)
+	}
+	if username == "" || displayName == "" {
+		renderErr("setup.error.missing_fields")
+		return
+	}
+	if len(password) < 8 {
+		renderErr("setup.error.password_short")
+		return
+	}
+	if _, err := s.auth.Bootstrap(r.Context(), username, displayName, password); err != nil {
+		renderErr("setup.error.failed")
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// --- operator meet workspace (SYS-001/002/004/006) ---
+
+func (s *Server) handleMeetsList(w http.ResponseWriter, r *http.Request) {
+	meets, err := s.meets.ListMeets(r.Context())
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("meets.title")
+	rows := make([]meetRowView, 0, len(meets))
+	for _, m := range meets {
+		rows = append(rows, meetRowView{
+			ID:     m.ID,
+			Name:   m.Name,
+			Venue:  m.Venue,
+			Dates:  formatDateRange(m.StartDate, m.EndDate),
+			Tier:   string(m.Tier),
+			Status: p.T("meet.status." + string(m.Status)),
+		})
+	}
+	_ = meetsListPage(p, rows).Render(r.Context(), w)
+}
+
+func (s *Server) handleMeetNewForm(w http.ResponseWriter, r *http.Request) {
+	p := basePageData(r, s.cats)
+	p.Title = p.T("meet.new.title")
+	_ = meetFormPage(p, s.emptyMeetForm(), "/meets").Render(r.Context(), w)
+}
+
+func (s *Server) handleMeetCreate(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	form, req, err := s.parseMeetForm(r)
+	if err != nil {
+		s.renderMeetForm(w, r, form, "/meets", err)
+		return
+	}
+	rec, err := s.meets.CreateMeet(r.Context(), actor, req)
+	if err != nil {
+		s.renderMeetForm(w, r, form, "/meets", err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+rec.ID, http.StatusSeeOther)
+}
+
+func (s *Server) handleMeetDetail(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	d, err := s.meets.Meet(r.Context(), meetID)
+	if errors.Is(err, app.ErrMeetNotFound) {
+		s.handleNotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	versions, err := s.meets.TimetableVersions(r.Context(), meetID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = d.Name
+	if msg := r.URL.Query().Get("err"); msg != "" {
+		p.FlashError = p.T("meet.flash." + msg)
+	}
+	_ = meetDetailPage(p, s.meetDetailView(p, d, versions)).Render(r.Context(), w)
+}
+
+func (s *Server) handleMeetEditForm(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	d, err := s.meets.Meet(r.Context(), meetID)
+	if errors.Is(err, app.ErrMeetNotFound) {
+		s.handleNotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	form := s.emptyMeetForm()
+	form.Version = d.Version
+	form.Name = d.Name
+	form.Venue = d.Venue
+	form.HomologationRef = d.HomologationRef
+	form.StartDate = d.StartDate.Format(formDateLayout)
+	form.EndDate = d.EndDate.Format(formDateLayout)
+	form.Tier = string(d.Tier)
+	form.SchemeID = d.CategorySchemeID
+	form.SchemeFixed = true // the scheme is chosen at creation; events already depend on it
+	for i, sess := range d.Sessions {
+		if i >= maxSessionRows {
+			break
+		}
+		form.Sessions[i] = sessionRowView{Day: sess.Day.Format(formDateLayout), Label: sess.Label}
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("meet.edit.title")
+	_ = meetFormPage(p, form, "/meets/"+meetID+"/edit").Render(r.Context(), w)
+}
+
+func (s *Server) handleMeetEditSubmit(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	actor, _ := sessionFromContext(r.Context())
+	form, req, err := s.parseMeetForm(r)
+	action := "/meets/" + meetID + "/edit"
+	if err != nil {
+		s.renderMeetForm(w, r, form, action, err)
+		return
+	}
+	if err := s.meets.UpdateMeet(r.Context(), actor, meetID, form.Version, req); err != nil {
+		s.renderMeetForm(w, r, form, action, err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
+func (s *Server) handleMeetArchive(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	actor, _ := sessionFromContext(r.Context())
+	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
+	if err := s.meets.ArchiveMeet(r.Context(), actor, meetID, version); err != nil {
+		s.redirectMeetError(w, r, meetID, err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
+func (s *Server) handleEventCreate(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	actor, _ := sessionFromContext(r.Context())
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	req := app.AddEventRequest{
+		DisciplineCode: r.FormValue("discipline"),
+		CategoryCodes:  r.Form["categories"],
+		EntryStandard:  strings.TrimSpace(r.FormValue("entry_standard")),
+	}
+	for _, kind := range []domain.RoundKind{domain.RoundQualification, domain.RoundSemifinal, domain.RoundFinal} {
+		if r.FormValue("round_"+string(kind)) != "" {
+			req.Rounds = append(req.Rounds, kind)
+		}
+	}
+	if v := r.FormValue("entry_deadline"); v != "" {
+		t, err := time.Parse(formDateTimeLayout, v)
+		if err != nil {
+			s.redirectMeetError(w, r, meetID, errBadInput)
+			return
+		}
+		req.EntryDeadline = &t
+	}
+	if _, err := s.meets.AddEvent(r.Context(), actor, meetID, req); err != nil {
+		s.redirectMeetError(w, r, meetID, err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
+func (s *Server) handleUnitSchedule(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	unitID := r.PathValue("unit")
+	actor, _ := sessionFromContext(r.Context())
+	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
+	at, err := time.Parse(formDateTimeLayout, r.FormValue("scheduled_at"))
+	if err != nil {
+		s.redirectMeetError(w, r, meetID, errBadInput)
+		return
+	}
+	location := strings.TrimSpace(r.FormValue("location"))
+	if err := s.meets.ScheduleUnit(r.Context(), actor, unitID, version, at, location); err != nil {
+		s.redirectMeetError(w, r, meetID, err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
+func (s *Server) handleTimetablePublish(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	actor, _ := sessionFromContext(r.Context())
+	v, err := s.meets.PublishTimetable(r.Context(), actor, meetID)
+	if err != nil {
+		s.redirectMeetError(w, r, meetID, err)
+		return
+	}
+	// Live update for public timetable viewers (SYS-071 transport; the
+	// public page subscribes with later tasks' live-results work).
+	s.bus.Publish("meet-"+meetID, Event{
+		Name: "timetable",
+		Data: fmt.Sprintf(`{"version":%d}`, v.Version),
+	})
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
+func (s *Server) handleSanctioning(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	sum, err := s.meets.SanctioningSummary(r.Context(), meetID)
+	if errors.Is(err, app.ErrMeetNotFound) {
+		s.handleNotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("sanctioning.title")
+	_ = sanctioningPage(p, s.sanctioningView(p, sum)).Render(r.Context(), w)
+}
+
+// --- public surface (SYS-090 unauthenticated read) ---
+
+// handlePublicTimetable serves the meet's current published timetable at a
+// stable URL (UC-001 #4: "the current public timetable shows the amended
+// time").
+func (s *Server) handlePublicTimetable(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	rec, v, err := s.meets.PublicTimetable(r.Context(), meetID)
+	if errors.Is(err, app.ErrMeetNotFound) {
+		s.handleNotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = rec.Name
+	view := publicTimetableView{
+		MeetName:    rec.Name,
+		Venue:       rec.Venue,
+		Dates:       formatDateRange(rec.StartDate, rec.EndDate),
+		Version:     v.Version,
+		PublishedAt: v.PublishedAt.UTC().Format("2006-01-02 15:04 MST"),
+		Rows:        s.unitRows(p, v.Entries),
+	}
+	_ = publicTimetablePage(p, view).Render(r.Context(), w)
+}
+
+// --- form parsing and view mapping ---
+
+// errBadInput marks unparseable form input (dates, numbers).
+var errBadInput = errors.New("bad form input")
+
+func (s *Server) emptyMeetForm() meetFormView {
+	return meetFormView{
+		Tiers:    []string{"A-Meeting", "B-Meeting", "C-Meeting"},
+		Schemes:  s.meets.CategorySchemes(),
+		SchemeID: domain.SchemeSwissAthletics,
+		Sessions: make([]sessionRowView, maxSessionRows),
+	}
+}
+
+// parseMeetForm maps the meet form to an app.MeetRequest, returning the
+// re-renderable form state alongside so validation errors keep the
+// operator's input.
+func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, error) {
+	form := s.emptyMeetForm()
+	if err := r.ParseForm(); err != nil {
+		return form, app.MeetRequest{}, errBadInput
+	}
+	form.Version, _ = strconv.ParseInt(r.FormValue("version"), 10, 64)
+	form.Name = strings.TrimSpace(r.FormValue("name"))
+	form.Venue = strings.TrimSpace(r.FormValue("venue"))
+	form.HomologationRef = strings.TrimSpace(r.FormValue("homologation_ref"))
+	form.StartDate = r.FormValue("start_date")
+	form.EndDate = r.FormValue("end_date")
+	form.Tier = r.FormValue("tier")
+	if v := r.FormValue("scheme"); v != "" {
+		form.SchemeID = v
+	}
+	for i := 0; i < maxSessionRows; i++ {
+		form.Sessions[i] = sessionRowView{
+			Day:   r.FormValue(fmt.Sprintf("session_day_%d", i)),
+			Label: strings.TrimSpace(r.FormValue(fmt.Sprintf("session_label_%d", i))),
+		}
+	}
+
+	req := app.MeetRequest{
+		Name:             form.Name,
+		Venue:            form.Venue,
+		HomologationRef:  form.HomologationRef,
+		Tier:             form.Tier,
+		CategorySchemeID: form.SchemeID,
+	}
+	if req.Name == "" || form.StartDate == "" || form.EndDate == "" {
+		return form, req, errBadInput
+	}
+	var err error
+	if req.StartDate, err = time.Parse(formDateLayout, form.StartDate); err != nil {
+		return form, req, errBadInput
+	}
+	if req.EndDate, err = time.Parse(formDateLayout, form.EndDate); err != nil {
+		return form, req, errBadInput
+	}
+	for _, row := range form.Sessions {
+		if row.Day == "" && row.Label == "" {
+			continue
+		}
+		day, err := time.Parse(formDateLayout, row.Day)
+		if err != nil {
+			return form, req, errBadInput
+		}
+		req.Sessions = append(req.Sessions, app.SessionPlan{Day: day, Label: row.Label})
+	}
+	return form, req, nil
+}
+
+func (s *Server) renderMeetForm(w http.ResponseWriter, r *http.Request, form meetFormView, action string, err error) {
+	p := basePageData(r, s.cats)
+	p.Title = p.T("meet.new.title")
+	p.FlashError = flashFor(p, err)
+	w.WriteHeader(statusFor(err))
+	_ = meetFormPage(p, form, action).Render(r.Context(), w)
+}
+
+// redirectMeetError sends the operator back to the meet page with a
+// one-shot localized error key in the query string (POST-redirect-GET, so
+// a refresh never re-submits).
+func (s *Server) redirectMeetError(w http.ResponseWriter, r *http.Request, meetID string, err error) {
+	http.Redirect(w, r, "/meets/"+meetID+"?err="+flashKeyFor(err), http.StatusSeeOther)
+}
+
+func flashKeyFor(err error) string {
+	switch {
+	case errors.Is(err, app.ErrConflict):
+		return "conflict"
+	case errors.Is(err, app.ErrMeetNotFound):
+		return "not_found"
+	case errors.Is(err, errBadInput):
+		return "bad_input"
+	default:
+		return "invalid"
+	}
+}
+
+func flashFor(p PageData, err error) string {
+	return p.T("meet.flash." + flashKeyFor(err))
+}
+
+func statusFor(err error) int {
+	if errors.Is(err, app.ErrConflict) {
+		return http.StatusConflict
+	}
+	return http.StatusUnprocessableEntity
+}
+
+// View models: templates see only strings and flags, never app/store
+// types (the PageData boundary rule, view.go).
+
+type meetRowView struct {
+	ID, Name, Venue, Dates, Tier, Status string
+}
+
+type sessionRowView struct {
+	Day, Label string
+}
+
+type meetFormView struct {
+	Version         int64
+	Name            string
+	Venue           string
+	HomologationRef string
+	StartDate       string
+	EndDate         string
+	Tier            string
+	Tiers           []string
+	SchemeID        string
+	Schemes         []string
+	SchemeFixed     bool
+	Sessions        []sessionRowView
+}
+
+type programmeRowView struct {
+	Discipline  string
+	Categories  string
+	CaptureType string
+	Rounds      string
+	Deadline    string
+}
+
+type unitRowView struct {
+	UnitID     string
+	Version    int64
+	Discipline string
+	Categories string
+	Round      string
+	When       string
+	Location   string
+	Scheduled  bool
+}
+
+type disciplineOptionView struct {
+	Code, Name string
+}
+
+type timetableVersionRowView struct {
+	Version     int
+	PublishedAt string
+}
+
+type meetDetailView struct {
+	ID              string
+	Version         int64
+	Name            string
+	Venue           string
+	HomologationRef string
+	Dates           string
+	Tier            string
+	Status          string
+	Archived        bool
+	SchemeID        string
+	Sessions        []sessionRowView
+	Programme       []programmeRowView
+	Units           []unitRowView
+	Versions        []timetableVersionRowView
+	Disciplines     []disciplineOptionView
+	Categories      []string
+}
+
+type sanctioningView struct {
+	MeetName        string
+	Venue           string
+	HomologationRef string
+	Dates           string
+	Organizer       string
+	Tier            string
+	Sessions        []sessionRowView
+	Categories      string
+	Disciplines     string
+	GeneratedAt     string
+	Complete        bool
+	Missing         []string
+}
+
+type publicTimetableView struct {
+	MeetName    string
+	Venue       string
+	Dates       string
+	Version     int
+	PublishedAt string
+	Rows        []unitRowView
+}
+
+func formatDateRange(start, end time.Time) string {
+	if start.Equal(end) {
+		return start.Format(formDateLayout)
+	}
+	return start.Format(formDateLayout) + " – " + end.Format(formDateLayout)
+}
+
+func (s *Server) unitRows(p PageData, entries []app.TimetableEntry) []unitRowView {
+	rows := make([]unitRowView, 0, len(entries))
+	for _, e := range entries {
+		row := unitRowView{
+			UnitID:     e.UnitID,
+			Version:    e.UnitVersion,
+			Discipline: e.DisciplineCode,
+			Categories: strings.Join(e.CategoryCodes, ", "),
+			Round:      p.T("round." + e.RoundKind),
+			Location:   e.Location,
+		}
+		if disc, ok := s.meets.Catalog().ByCode(e.DisciplineCode); ok {
+			row.Discipline = disc.Name
+		}
+		if e.ScheduledAt != nil {
+			row.Scheduled = true
+			row.When = e.ScheduledAt.UTC().Format(formDateTimeLayout)
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.TimetableVersion) meetDetailView {
+	view := meetDetailView{
+		ID:              d.ID,
+		Version:         d.Version,
+		Name:            d.Name,
+		Venue:           d.Venue,
+		HomologationRef: d.HomologationRef,
+		Dates:           formatDateRange(d.StartDate, d.EndDate),
+		Tier:            string(d.Tier),
+		Status:          p.T("meet.status." + string(d.Status)),
+		Archived:        d.Status == domain.MeetArchived,
+		SchemeID:        d.CategorySchemeID,
+		Units:           s.unitRows(p, d.Units),
+	}
+	for _, sess := range d.Sessions {
+		view.Sessions = append(view.Sessions, sessionRowView{
+			Day: sess.Day.Format(formDateLayout), Label: sess.Label,
+		})
+	}
+	for _, pe := range d.Programme {
+		row := programmeRowView{
+			Discipline:  pe.DisciplineName,
+			Categories:  strings.Join(pe.CategoryCodes, ", "),
+			CaptureType: p.T("family." + string(pe.Family)),
+		}
+		if row.Discipline == "" {
+			row.Discipline = pe.DisciplineCode
+		}
+		kinds := make([]string, 0, len(pe.Rounds))
+		for _, round := range pe.Rounds {
+			kinds = append(kinds, p.T("round."+string(round.Kind)))
+		}
+		row.Rounds = strings.Join(kinds, " → ")
+		if pe.EntryDeadline != nil {
+			row.Deadline = pe.EntryDeadline.UTC().Format(formDateTimeLayout)
+		}
+		view.Programme = append(view.Programme, row)
+	}
+	for _, v := range versions {
+		view.Versions = append(view.Versions, timetableVersionRowView{
+			Version:     v.Version,
+			PublishedAt: v.PublishedAt.UTC().Format("2006-01-02 15:04:05 MST"),
+		})
+	}
+	for _, disc := range s.meets.Catalog().Disciplines {
+		view.Disciplines = append(view.Disciplines, disciplineOptionView{Code: disc.Code, Name: disc.Name})
+	}
+	if scheme, ok := s.meets.Scheme(d.CategorySchemeID); ok {
+		for _, cat := range scheme.Categories {
+			view.Categories = append(view.Categories, cat.Code)
+		}
+	}
+	return view
+}
+
+func (s *Server) sanctioningView(p PageData, sum app.SanctioningSummary) sanctioningView {
+	view := sanctioningView{
+		MeetName:        sum.Meet.Name,
+		Venue:           sum.Meet.Venue,
+		HomologationRef: sum.Meet.HomologationRef,
+		Dates:           formatDateRange(sum.Meet.StartDate, sum.Meet.EndDate),
+		Organizer:       sum.Meet.Organizer,
+		Tier:            string(sum.Meet.Tier),
+		Categories:      strings.Join(sum.Categories, ", "),
+		Disciplines:     strings.Join(sum.Disciplines, ", "),
+		GeneratedAt:     sum.GeneratedAt.Format("2006-01-02 15:04 MST"),
+	}
+	for _, sess := range sum.Sessions {
+		view.Sessions = append(view.Sessions, sessionRowView{
+			Day: sess.Day.Format(formDateLayout), Label: sess.Label,
+		})
+	}
+	complete, missing := sum.Complete()
+	view.Complete = complete
+	view.Missing = missing
+	return view
+}

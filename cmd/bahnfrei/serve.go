@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
+	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/store"
 	"github.com/kriegalex/bahnfrei/internal/web"
 	"github.com/kriegalex/bahnfrei/internal/web/i18n"
@@ -110,6 +111,18 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 	sessions := app.NewSessionManager(cfg.sessionTTL)
 	auth := app.NewAuthService(st.DB(), sessions, app.DefaultPasswordParams)
 
+	catalog, err := domain.BuiltinDisciplineCatalog()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load discipline catalog: %w", err)
+	}
+	schemes, err := domain.BuiltinCategorySchemes()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load category schemes: %w", err)
+	}
+	meets := app.NewMeetService(st.DB(), catalog, schemes)
+
 	cats, err := i18n.Load()
 	if err != nil {
 		_ = st.Close()
@@ -132,7 +145,7 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		},
 	}
 
-	srv := web.New(webCfg, auth, sessions, cats, bus)
+	srv := web.New(webCfg, auth, sessions, meets, cats, bus)
 	return serveDeps{server: srv, dbase: st}, nil
 }
 

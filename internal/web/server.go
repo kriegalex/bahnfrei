@@ -32,16 +32,17 @@ type Server struct {
 	cfg     Config
 	auth    *app.AuthService
 	sess    *app.SessionManager
+	meets   *app.MeetService
 	cats    i18n.Catalogs
 	bus     *Bus
 	httpSrv *http.Server
 }
 
-// New builds a Server. cats is normally the result of i18n.Load(); bus may
-// be shared with other packages that need to publish live updates in
-// later tasks (TASK-006+) — the shell only wires the transport.
-func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, cats i18n.Catalogs, bus *Bus) *Server {
-	s := &Server{cfg: cfg, auth: auth, sess: sess, cats: cats, bus: bus}
+// New builds a Server. cats is normally the result of i18n.Load(); bus is
+// shared with whoever publishes live updates (the meet handlers publish
+// timetable events on it, UC-001 #4/SYS-071).
+func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, cats i18n.Catalogs, bus *Bus) *Server {
+	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, cats: cats, bus: bus}
 	s.httpSrv = &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           s.routes(),

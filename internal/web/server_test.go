@@ -20,6 +20,7 @@ type testServerDeps struct {
 	server   *Server
 	auth     *app.AuthService
 	sessions *app.SessionManager
+	meets    *app.MeetService
 	cats     i18n.Catalogs
 	bus      *Bus
 }
@@ -30,7 +31,7 @@ type testServerDeps struct {
 // files).
 func newTestServer(t *testing.T, tlsCfg TLSConfig) *testServerDeps {
 	t.Helper()
-	auth, sessions := apptest.AuthService(t, time.Hour)
+	fix := apptest.New(t, time.Hour)
 	cats, err := i18n.Load()
 	if err != nil {
 		t.Fatalf("i18n.Load: %v", err)
@@ -38,8 +39,8 @@ func newTestServer(t *testing.T, tlsCfg TLSConfig) *testServerDeps {
 	bus := NewBus()
 
 	cfg := Config{Addr: "127.0.0.1:0", TLS: tlsCfg}
-	deps := &testServerDeps{auth: auth, sessions: sessions, cats: cats, bus: bus}
-	deps.server = New(cfg, auth, sessions, cats, bus)
+	deps := &testServerDeps{auth: fix.Auth, sessions: fix.Sessions, meets: fix.Meets, cats: cats, bus: bus}
+	deps.server = New(cfg, fix.Auth, fix.Sessions, fix.Meets, cats, bus)
 	return deps
 }
 
@@ -47,5 +48,5 @@ func newTestServer(t *testing.T, tlsCfg TLSConfig) *testServerDeps {
 // (store, sessions, catalogs, bus) but a different Config — used to test
 // listener-address handling without standing up a whole new store.
 func (d *testServerDeps) withConfig(cfg Config) *Server {
-	return New(cfg, d.auth, d.sessions, d.cats, d.bus)
+	return New(cfg, d.auth, d.sessions, d.meets, d.cats, d.bus)
 }

@@ -218,3 +218,29 @@ func TestLogoutIsIdempotent(t *testing.T) {
 func storeAuditTrail(ctx context.Context, auth *AuthService, accountID string) ([]store.AuditEntry, error) {
 	return store.AuditTrail(ctx, auth.db, "account", accountID)
 }
+
+// TestNeedsBootstrap covers the first-run detection behind the /setup flow
+// (UC-001 #1): true on an empty instance, false once any account exists.
+func TestNeedsBootstrap(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+
+	needs, err := auth.NeedsBootstrap(ctx)
+	if err != nil {
+		t.Fatalf("NeedsBootstrap: %v", err)
+	}
+	if !needs {
+		t.Error("fresh instance should need bootstrap")
+	}
+
+	if _, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	needs, err = auth.NeedsBootstrap(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if needs {
+		t.Error("bootstrapped instance must not offer setup again")
+	}
+}

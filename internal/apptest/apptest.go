@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
+	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/store"
 )
 
@@ -31,6 +32,21 @@ var FastPasswordParams = app.PasswordParams{MemoryKiB: 8 * 1024, Iterations: 1, 
 // t.Cleanup, and returns a ready-to-use *app.AuthService and its
 // *app.SessionManager.
 func AuthService(tb testing.TB, sessionTTL time.Duration) (*app.AuthService, *app.SessionManager) {
+	f := New(tb, sessionTTL)
+	return f.Auth, f.Sessions
+}
+
+// Fixture bundles every wired app service backed by one temporary store.
+type Fixture struct {
+	Auth     *app.AuthService
+	Sessions *app.SessionManager
+	Meets    *app.MeetService
+}
+
+// New opens a fresh SQLite store in a t.TempDir(), closing it via
+// t.Cleanup, and wires the full app service set against it (with the
+// built-in discipline catalog and category schemes).
+func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 	tb.Helper()
 	st, err := store.Open(context.Background(), filepath.Join(tb.TempDir(), "test.db"))
 	if err != nil {
@@ -38,7 +54,19 @@ func AuthService(tb testing.TB, sessionTTL time.Duration) (*app.AuthService, *ap
 	}
 	tb.Cleanup(func() { _ = st.Close() })
 
+	catalog, err := domain.BuiltinDisciplineCatalog()
+	if err != nil {
+		tb.Fatalf("apptest: load discipline catalog: %v", err)
+	}
+	schemes, err := domain.BuiltinCategorySchemes()
+	if err != nil {
+		tb.Fatalf("apptest: load category schemes: %v", err)
+	}
+
 	sessions := app.NewSessionManager(sessionTTL)
-	auth := app.NewAuthService(st.DB(), sessions, FastPasswordParams)
-	return auth, sessions
+	return Fixture{
+		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
+		Sessions: sessions,
+		Meets:    app.NewMeetService(st.DB(), catalog, schemes),
+	}
 }

@@ -3,7 +3,11 @@
 
 package web
 
-import "github.com/kriegalex/bahnfrei/internal/web/i18n"
+import (
+	"strconv"
+
+	"github.com/kriegalex/bahnfrei/internal/web/i18n"
+)
 
 // PageData is the view model every page template renders from: locale
 // state (SYS-110), the authenticated user (if any, SYS-090/091), and CSRF
@@ -11,13 +15,16 @@ import "github.com/kriegalex/bahnfrei/internal/web/i18n"
 // the template boundary means templates never see *app.Session, *sql.DB,
 // or any store type directly — only what rendering needs.
 type PageData struct {
-	Locale    i18n.Locale
-	Locales   []i18n.Locale
-	Cats      i18n.Catalogs
-	Title     string
-	Username  string // "" when anonymous
-	LoggedIn  bool
-	CSRFToken string
+	Locale   i18n.Locale
+	Locales  []i18n.Locale
+	Cats     i18n.Catalogs
+	Title    string
+	Username string // "" when anonymous
+	LoggedIn bool
+	// CanOrganize gates the operator navigation (SYS-090: the meets
+	// workspace is for meet-organizer roles and above).
+	CanOrganize bool
+	CSRFToken   string
 	// FlashError, when non-empty, renders as a one-shot alert (e.g. a
 	// failed login attempt); it is never persisted.
 	FlashError string
@@ -34,3 +41,6 @@ func (p PageData) T(key string, args ...string) string {
 func localeLabel(p PageData, loc i18n.Locale) string {
 	return p.Cats.Text(p.Locale, "locale."+string(loc))
 }
+
+// intToStr renders an integer for a template attribute/value position.
+func intToStr(v int64) string { return strconv.FormatInt(v, 10) }

@@ -60,17 +60,50 @@ approved and ADR-001…006 are ratified. Implementation follows the milestone pl
 meet → M3 release 0.1). Remaining founder inputs are tracked in
 `docs/requirements/open-questions-and-assumptions.md`.
 
-## Building
+## Quickstart (≤30 minutes from nothing to a working system)
 
-Requires Go ≥ 1.26 — nothing else:
+No configuration file is ever edited: the first browser visit walks you through creating
+the admin account, and everything else happens in the operator UI (SYS-131, UC-001).
+
+**Option A — binary.** Requires Go ≥ 1.26 (release downloads arrive with release 0.1):
+
+```
+go build -o bahnfrei ./cmd/bahnfrei
+./bahnfrei serve --data-dir ./data
+```
+
+**Option B — container.** Requires Docker (or Podman):
+
+```
+docker build -t bahnfrei .
+docker run -d --name bahnfrei -p 8443:8443 -v bahnfrei-data:/data bahnfrei
+```
+
+Then, either way:
+
+1. Open **https://localhost:8443**. In the default venue mode the TLS certificate is
+   locally generated and self-signed (works fully offline, SYS-093) — your browser will
+   warn once; accept it. Internet-facing hub installs use `--role hub
+   --acme-domain your.domain --acme-email you@example.org` for a publicly trusted
+   certificate instead.
+2. You land on the **setup page**: create the admin account (username, display name,
+   password ≥ 8 characters).
+3. Log in and create your first meet under **Wettkämpfe / Compétitions** — venue, days,
+   sessions, tier, then the event programme and timetable.
+
+All state lives in the data directory (`bahnfrei.db` plus the TLS cache); back it up and
+you have the whole meet (UC-020, TASK-014).
+
+## Building & testing
 
 ```
 go build ./...
 go test ./...
 ```
 
-The application is not yet operational; the first runnable milestone is M1
-(`docs/delivery/work-breakdown.md`).
+Templates (`*.templ`) are pre-generated and checked in; after editing them run
+`go run github.com/a-h/templ/cmd/templ@latest generate` (or the pinned version from
+`go.mod`).
 
 ## Licence & contributing
 

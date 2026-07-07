@@ -69,7 +69,18 @@ func TestHandleHome(t *testing.T) {
 	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
 	client, base := newTestClient(t, deps)
 
+	// A fresh instance sends visitors to the first-run setup (UC-001 #1).
 	resp := mustGet(t, client, base+"/")
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/setup" {
+		t.Fatalf("GET / on fresh instance = %d -> %q, want 303 -> /setup", resp.StatusCode, resp.Header.Get("Location"))
+	}
+
+	// Once an account exists, the home page renders normally.
+	if _, err := deps.auth.Bootstrap(context.Background(), "admin", "Admin", "s3cret-passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	resp = mustGet(t, client, base+"/")
 	body := bodyString(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET / = %d, want 200; body=%s", resp.StatusCode, body)

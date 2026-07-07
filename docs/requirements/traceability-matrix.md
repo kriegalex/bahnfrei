@@ -65,12 +65,12 @@ inspection/analysis procedure.
 
 | SYS | Verified by (UC / procedure) | Method | Test (Phase B) |
 |-----|------------------------------|--------|----------------|
-| SYS-001 | UC-001 #2 | T | Phase B |
-| SYS-002 | UC-001 #3 | T | Phase B |
+| SYS-001 | UC-001 #2 | T | TASK-006 (meet setup): `internal/app` `TestCreateMeetUC001_2`, `TestUpdateAndArchiveMeet`, `TestCreateMeetAuthorization`; `internal/web` `TestMeetCreationUC001_2`, `TestMeetEditConflictAndArchive`; `internal/store` `TestMeetCreateAndGet`, `TestSessionsPerDay`; `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` |
+| SYS-002 | UC-001 #3 | T | TASK-006 (meet setup): `internal/app` `TestAddEventsUC001_3`, `TestAddEventValidation`; `internal/web` `TestEventProgrammeUC001_3`; `internal/store` `TestEventProgramme`; `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` |
 | SYS-003 | UC-002 #5 | T | TASK-004 (domain core): `internal/domain` `TestDisciplineCatalog_SYS003Coverage` (all 5 SyRS §2 families + core WA codes present), `TestDiscipline_CategoryCorrectTechnicalVariant`, `TestDiscipline_HurdleVariants` (per-category technical variants), `TestDisciplineCatalog_UBSKidsCupDisciplines`; organizer-defined custom disciplines proven generic by `TestParseDisciplineCatalog_CustomCatalogNoCodeChange` |
-| SYS-004 | UC-001 #4 | T | Phase B |
+| SYS-004 | UC-001 #4 | T | TASK-006 (meet setup): `internal/app` `TestTimetablePublishAndAmendUC001_4`; `internal/web` `TestTimetablePublishAmendPublicUC001_4`; `internal/store` `TestTimetablePublishRetainsVersions`; `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` |
 | SYS-005 | UC-002 #1–#4 | T | TASK-004 (domain core): `internal/domain` `TestResolveDefaultCategory_SwissAthletics_UC002_1`, `TestResolveDefaultCategory_CalendarYearTransition`, `TestEvaluateEntry_StartUpAndDisciplineBar`, `TestParseCategoryScheme_CustomSchemeNoCodeChange` (built-in Swiss Athletics + UBS Kids Cup schemes, data-interpreter resolver, custom-scheme load) |
-| SYS-006 | UC-001 #5 | T | Phase B |
+| SYS-006 | UC-001 #5 | T | TASK-006 (meet setup): `internal/app` `TestSanctioningSummaryUC001_5`; `internal/web` `TestSanctioningSummaryUC001_5Web`; `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` |
 | SYS-010 | UC-004 #1, UC-028 #1 | T | Phase B |
 | SYS-011 | UC-003 #1–#3 | T | Phase B |
 | SYS-012 | UC-003 #4 | T | Phase B |
@@ -142,10 +142,10 @@ inspection/analysis procedure.
 | SYS-121 | Benchmark (seeding 200 entries ≤10 s; recompute ≤5 s) | A | Phase B |
 | SYS-122 | Load test (UC-017 #4) | A | Phase B |
 | SYS-130 | UC-020 #1 (restart ≤2 min) | T | Phase B |
-| SYS-131 | UC-001 #1 (timed quickstart run) | D | Phase B |
+| SYS-131 | UC-001 #1 (timed quickstart run) | D | TASK-006: `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` (automated fresh-install flow: empty data dir → setup → admin account → meet, no config file; README quickstart + Dockerfile). The human-paced ≤30-min demonstration remains for the M1 club demo (DEC-011) |
 | SYS-132 | Support-matrix CI (build/run on documented platforms & browsers) | T/I | Phase B |
 | SYS-133 | Dependency inventory inspection (no paid service required) | I | Phase B |
-| SYS-140 | Coverage gates in CI (≥90% branch domain logic; ≥80% line overall) | A | TASK-002: `scripts/check-coverage.sh` in `ci.yml` coverage job. *Method note:* Go's cover tooling measures **statement** coverage; the ≥90%/≥80% gates are enforced on statement coverage as the agreed proxy for branch coverage |
+| SYS-140 | Coverage gates in CI (≥90% branch domain logic; ≥80% line overall) | A | TASK-002: `scripts/check-coverage.sh` in `ci.yml` coverage job. *Method note:* Go's cover tooling measures **statement** coverage; the ≥90%/≥80% gates are enforced on statement coverage as the agreed proxy for branch coverage. Generated code (`*_templ.go`, checked-in templ output) is excluded from the measurement (TASK-006): its authored source is the `.templ` file, whose display logic is exercised by `internal/web` rendering tests; the excluded statements are machine-emitted per-write io-error plumbing |
 | SYS-141 | CI pipeline configuration inspection + gate behaviour test | I/T | TASK-002: `.github/workflows/ci.yml` — 3-OS build+test matrix, golangci-lint v2 (incl. depguard architecture rules), guarded `tsc` job, coverage gates, `go-licenses` allowlist (ADR-001 §4), `govulncheck`; SPDX+DCO in `governance.yml` (TASK-001) |
 | SYS-142 | Reference fixture suites for every rule engine (UC-005 #5, UC-010 #5, UC-012 #4, UC-013 #1) | T | Phase B |
 | SYS-143 | Release checklist + defect-tracker inspection per release | I | Phase B |

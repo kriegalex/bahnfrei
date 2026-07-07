@@ -25,6 +25,9 @@ templ layout(p PageData) {
 			<header>
 				<nav aria-label="primary">
 					<a href="/">{ p.T("app.title") }</a>
+					if p.CanOrganize {
+						<a href="/meets">{ p.T("nav.meets") }</a>
+					}
 					if p.LoggedIn {
 						<span class="who">{ p.T("auth.logged_in_as", "name", p.Username) }</span>
 						<form action="/logout" method="post" class="inline-form">

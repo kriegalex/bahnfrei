@@ -30,6 +30,29 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /static/", staticHandler())
 	mux.HandleFunc("/", s.handleNotFound)
 
+	// First-run setup (UC-001 #1): available only while no account exists.
+	mux.HandleFunc("GET /setup", s.handleSetupForm)
+	mux.HandleFunc("POST /setup", s.handleSetupSubmit)
+
+	// Meet setup workspace (UC-001 #2–#5), organizer-gated (SYS-090).
+	organize := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleMeetOrganizer, s.cats, h)
+	}
+	mux.HandleFunc("GET /meets", organize(s.handleMeetsList))
+	mux.HandleFunc("GET /meets/new", organize(s.handleMeetNewForm))
+	mux.HandleFunc("POST /meets", organize(s.handleMeetCreate))
+	mux.HandleFunc("GET /meets/{id}", organize(s.handleMeetDetail))
+	mux.HandleFunc("GET /meets/{id}/edit", organize(s.handleMeetEditForm))
+	mux.HandleFunc("POST /meets/{id}/edit", organize(s.handleMeetEditSubmit))
+	mux.HandleFunc("POST /meets/{id}/archive", organize(s.handleMeetArchive))
+	mux.HandleFunc("POST /meets/{id}/events", organize(s.handleEventCreate))
+	mux.HandleFunc("POST /meets/{id}/units/{unit}/schedule", organize(s.handleUnitSchedule))
+	mux.HandleFunc("POST /meets/{id}/timetable/publish", organize(s.handleTimetablePublish))
+	mux.HandleFunc("GET /meets/{id}/sanctioning", organize(s.handleSanctioning))
+
+	// Public read (SYS-090): the current published timetable, stable URL.
+	mux.HandleFunc("GET /m/{id}/timetable", s.handlePublicTimetable)
+
 	var h http.Handler = mux
 	h = csrfMiddleware()(h)
 	h = sessionMiddleware(s.sess)(h)
@@ -39,6 +62,12 @@ func (s *Server) routes() http.Handler {
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
+	// A fresh install lands on the setup flow until the first admin
+	// account exists (UC-001 #1) — the operator never edits a file.
+	if needs, err := s.auth.NeedsBootstrap(r.Context()); err == nil && needs {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return
+	}
 	p := basePageData(r, s.cats)
 	p.Title = p.T("home.welcome")
 	_ = homePage(p).Render(r.Context(), w)

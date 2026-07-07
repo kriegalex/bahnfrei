@@ -220,6 +220,7 @@ func basePageData(r *http.Request, cats i18n.Catalogs) PageData {
 	if s, ok := sessionFromContext(r.Context()); ok {
 		p.LoggedIn = true
 		p.Username = s.Username
+		p.CanOrganize = s.Role.AtLeast(app.RoleMeetOrganizer)
 	}
 	return p
 }
