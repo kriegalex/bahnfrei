@@ -133,6 +133,9 @@ type MeetTier string
 // CategorySchemeID names the category scheme this meet resolves categories
 // against (SYS-005, UC-002 #1: "the organizer selects the built-in Swiss
 // Athletics scheme").
+// TemplateID/ScoringTableID record which competition template created the
+// meet and which points table scores it (SYS-053) — empty for meets
+// composed by hand.
 type Meet struct {
 	ID               string
 	Name             string
@@ -144,6 +147,8 @@ type Meet struct {
 	Tier             MeetTier
 	Status           MeetStatus
 	CategorySchemeID string
+	TemplateID       string
+	ScoringTableID   string
 	ExternalIDs      ExternalIDs
 }
 

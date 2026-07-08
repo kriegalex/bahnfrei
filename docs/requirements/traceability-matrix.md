@@ -99,8 +99,8 @@ inspection/analysis procedure.
 | SYS-049 | UC-016 #1, #5 | T | Phase B |
 | SYS-050 | UC-010 #4, UC-016 #2–#3, UC-013 #4 | T | Phase B |
 | SYS-051 | UC-016 #4 | T | Phase B |
-| SYS-052 | UC-028 #1–#2 (para: UC-028 #3, Later) | T | Phase B |
-| SYS-053 | UC-033 #1–#5 | T | Phase B |
+| SYS-052 | UC-028 #1–#2 (para: UC-028 #3, Later) | T | Phase B *(partial: TASK-007 proves the per-division split of a mixed-division field for UKC standings — `internal/app` `TestUC033_2_ScoringAndStandings`; combined-race presentation and re-ranked per-category extraction land with UC-028/TASK-022)* |
+| SYS-053 | UC-033 #1–#5 | T | TASK-007 (UKC template & scoring): `internal/domain` `TestUKCScoringOfficialFixtures` (fixtures from the published Wertungstabelle incl. next-lower-points rounding), `TestScoringTableIsData` + `TestUC033_5_ScoringTableSwapAtServiceLevel` (UC-033 #5 data swap), `TestBuiltinUKCTemplate`, `TestRankCombinedReglementRules`/`TestRankCombinedHighestSingleTieBreak`/`TestRankCombinedTrueTie`/`TestRankCombinedMissingDiscipline` (Reglement Rangierung; UC-033 #3 per OQ-020); `internal/app` `TestUC033_1_CreateUKCMeetFromTemplate`, `TestUC033_2_ScoringAndStandings`, `TestUC033_3_MissingDiscipline`, `TestResultsAuthorizationAndValidation`; `internal/store` `TestSaveResultUpsertAndListing`, `TestParticipantsAndBibUniqueness`; `internal/web` `TestUKCTemplateRosterStandingsFlow` |
 | SYS-060 | UC-014 #1–#2 | T | Phase B |
 | SYS-061 | UC-014 #3–#5 | T | Phase B |
 | SYS-062 | UC-014 #6 | T | Phase B |

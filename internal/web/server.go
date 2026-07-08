@@ -33,6 +33,7 @@ type Server struct {
 	auth    *app.AuthService
 	sess    *app.SessionManager
 	meets   *app.MeetService
+	results *app.ResultsService
 	cats    i18n.Catalogs
 	bus     *Bus
 	httpSrv *http.Server
@@ -41,8 +42,8 @@ type Server struct {
 // New builds a Server. cats is normally the result of i18n.Load(); bus is
 // shared with whoever publishes live updates (the meet handlers publish
 // timetable events on it, UC-001 #4/SYS-071).
-func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, cats i18n.Catalogs, bus *Bus) *Server {
-	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, cats: cats, bus: bus}
+func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, results *app.ResultsService, cats i18n.Catalogs, bus *Bus) *Server {
+	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, results: results, cats: cats, bus: bus}
 	s.httpSrv = &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           s.routes(),

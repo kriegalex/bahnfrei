@@ -1,0 +1,15 @@
+{
+  "id": "ubs-kids-cup",
+  "version": "2026.1",
+  "name": "UBS Kids Cup",
+  "source": "UBS Kids Cup Reglement (Stand Dezember 2025), §3 Wettkampfbestimmungen: Dreikampf aus Sprint 60 m (1 Versuch), Weitsprung mit Zonenabsprung (3 Versuche), Ballwurf 200 g (3 Versuche); Kategorien M/W 7-15 nach Jahrgang. https://www.ubs-kidscup.ch/fileadmin/ubskidscup/downloads/UBS_Kids_Cup_Reglement_DE.pdf (fetched 2026-07-08). SYS-053; UC-033.",
+  "categorySchemeID": "ubs-kids-cup",
+  "scoringTableID": "ubs-kids-cup",
+  "tier": "youth-series",
+  "notes": "One combined-scored three-discipline meet ('Dreikampf'). Each discipline is a single event whose field spans every division (SYS-052 mixed-category unit); standings are computed and published per division. The 60 m may be hand-timed at local eliminations (Reglement §3 Sprint) — the scoring table carries separate manual/electronic columns.",
+  "events": [
+    {"disciplineCode": "60m", "attempts": 1},
+    {"disciplineCode": "ZoneLJ", "attempts": 3},
+    {"disciplineCode": "BallThrow200g", "attempts": 3}
+  ]
+}

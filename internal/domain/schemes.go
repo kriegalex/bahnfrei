@@ -15,7 +15,7 @@ import (
 // (UC-002 #4) — embedding is purely a distribution mechanism, not a special
 // code path.
 //
-//go:embed data/category-schemes/*.json data/disciplines/*.json
+//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json
 var builtinData embed.FS
 
 // Built-in category-scheme identifiers (SYS-005).
@@ -54,6 +54,74 @@ func BuiltinCategorySchemes() (map[string]*CategoryScheme, error) {
 var builtinSchemeFiles = map[string]string{
 	SchemeSwissAthletics: "data/category-schemes/swiss-athletics.json",
 	SchemeUBSKidsCup:     "data/category-schemes/ubs-kids-cup.json",
+}
+
+// Built-in scoring-table and meet-template identifiers (SYS-053).
+const (
+	ScoringTableUBSKidsCup = "ubs-kids-cup"
+	TemplateUBSKidsCup     = "ubs-kids-cup"
+)
+
+var builtinScoringTableFiles = map[string]string{
+	ScoringTableUBSKidsCup: "data/scoring/ubs-kids-cup.json",
+}
+
+var builtinTemplateFiles = map[string]string{
+	TemplateUBSKidsCup: "data/templates/ubs-kids-cup.json",
+}
+
+// BuiltinScoringTable loads and parses one of the shipped scoring tables by
+// ID (SYS-053 / CON-01: series scoring tables ship as data).
+func BuiltinScoringTable(id string) (*ScoringTable, error) {
+	path, ok := builtinScoringTableFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in scoring table %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in scoring table %q: %w", id, err)
+	}
+	return ParseScoringTable(data)
+}
+
+// BuiltinScoringTables loads every shipped scoring table, keyed by ID.
+func BuiltinScoringTables() (map[string]*ScoringTable, error) {
+	out := make(map[string]*ScoringTable, len(builtinScoringTableFiles))
+	for id := range builtinScoringTableFiles {
+		t, err := BuiltinScoringTable(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, nil
+}
+
+// BuiltinMeetTemplate loads and parses one of the shipped competition
+// templates by ID (SYS-053, UC-033 #1).
+func BuiltinMeetTemplate(id string) (*MeetTemplate, error) {
+	path, ok := builtinTemplateFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in meet template %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in meet template %q: %w", id, err)
+	}
+	return ParseMeetTemplate(data)
+}
+
+// BuiltinMeetTemplates loads every shipped meet template, keyed by ID.
+func BuiltinMeetTemplates() (map[string]*MeetTemplate, error) {
+	out := make(map[string]*MeetTemplate, len(builtinTemplateFiles))
+	for id := range builtinTemplateFiles {
+		t, err := BuiltinMeetTemplate(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, nil
 }
 
 // builtinDisciplineCatalogFile is the shipped discipline catalog (SYS-003).

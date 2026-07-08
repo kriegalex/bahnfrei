@@ -33,7 +33,10 @@ templ setupPage(p PageData) {
 templ meetsListPage(p PageData, rows []meetRowView) {
 	@layout(p) {
 		<h1>{ p.T("meets.title") }</h1>
-		<p><a href="/meets/new">{ p.T("meets.new_link") }</a></p>
+		<p>
+			<a href="/meets/new">{ p.T("meets.new_link") }</a> ·
+			<a href="/meets/from-template">{ p.T("meet.template.title") }</a>
+		</p>
 		if len(rows) == 0 {
 			<p>{ p.T("meets.empty") }</p>
 		} else {
@@ -144,6 +147,8 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 		</p>
 		<p>
 			<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a>
 		</p>

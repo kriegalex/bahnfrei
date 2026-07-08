@@ -41,6 +41,7 @@ type Fixture struct {
 	Auth     *app.AuthService
 	Sessions *app.SessionManager
 	Meets    *app.MeetService
+	Results  *app.ResultsService
 }
 
 // New opens a fresh SQLite store in a t.TempDir(), closing it via
@@ -62,11 +63,20 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 	if err != nil {
 		tb.Fatalf("apptest: load category schemes: %v", err)
 	}
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		tb.Fatalf("apptest: load scoring tables: %v", err)
+	}
+	templates, err := domain.BuiltinMeetTemplates()
+	if err != nil {
+		tb.Fatalf("apptest: load meet templates: %v", err)
+	}
 
 	sessions := app.NewSessionManager(sessionTTL)
 	return Fixture{
 		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
 		Sessions: sessions,
-		Meets:    app.NewMeetService(st.DB(), catalog, schemes),
+		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
+		Results:  app.NewResultsService(st.DB(), schemes, tables),
 	}
 }

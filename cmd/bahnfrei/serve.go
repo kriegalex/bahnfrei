@@ -121,7 +121,18 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		_ = st.Close()
 		return serveDeps{}, fmt.Errorf("load category schemes: %w", err)
 	}
-	meets := app.NewMeetService(st.DB(), catalog, schemes)
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load scoring tables: %w", err)
+	}
+	templates, err := domain.BuiltinMeetTemplates()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load meet templates: %w", err)
+	}
+	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
+	results := app.NewResultsService(st.DB(), schemes, tables)
 
 	cats, err := i18n.Load()
 	if err != nil {
@@ -145,7 +156,7 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		},
 	}
 
-	srv := web.New(webCfg, auth, sessions, meets, cats, bus)
+	srv := web.New(webCfg, auth, sessions, meets, results, cats, bus)
 	return serveDeps{server: srv, dbase: st}, nil
 }
 

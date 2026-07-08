@@ -39,15 +39,20 @@ var ErrConflict = store.ErrVersionConflict
 // summary (SYS-006). Every mutation is authorized (CapOrganizeMeet) and
 // audited.
 type MeetService struct {
-	db      *sql.DB
-	catalog *domain.DisciplineCatalog
-	schemes map[string]*domain.CategoryScheme
+	db        *sql.DB
+	catalog   *domain.DisciplineCatalog
+	schemes   map[string]*domain.CategoryScheme
+	tables    map[string]*domain.ScoringTable
+	templates map[string]*domain.MeetTemplate
 }
 
-// NewMeetService wires a MeetService. catalog and schemes are normally the
-// built-in data (domain.BuiltinDisciplineCatalog / BuiltinCategorySchemes).
-func NewMeetService(db *sql.DB, catalog *domain.DisciplineCatalog, schemes map[string]*domain.CategoryScheme) *MeetService {
-	return &MeetService{db: db, catalog: catalog, schemes: schemes}
+// NewMeetService wires a MeetService. catalog, schemes, tables and
+// templates are normally the built-in data
+// (domain.BuiltinDisciplineCatalog / BuiltinCategorySchemes /
+// BuiltinScoringTables / BuiltinMeetTemplates).
+func NewMeetService(db *sql.DB, catalog *domain.DisciplineCatalog, schemes map[string]*domain.CategoryScheme,
+	tables map[string]*domain.ScoringTable, templates map[string]*domain.MeetTemplate) *MeetService {
+	return &MeetService{db: db, catalog: catalog, schemes: schemes, tables: tables, templates: templates}
 }
 
 // CategorySchemes lists the selectable scheme IDs, sorted (for the meet

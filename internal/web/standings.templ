@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// templateMeetPage is the SYS-053 quick-create flow: a template, a date
+// and a venue produce a complete meet with no further configuration
+// (UC-033 #1).
+templ templateMeetPage(p PageData, f templateFormView) {
+	@layout(p) {
+		<h1>{ p.T("meet.template.title") }</h1>
+		<form action="/meets/from-template" method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>
+				{ p.T("meet.template.template") }
+				<select name="template">
+					for _, t := range f.Templates {
+						<option value={ t.ID } selected?={ t.ID == f.TemplateID }>{ t.Name }</option>
+					}
+				</select>
+			</label>
+			<label>
+				{ p.T("meet.template.date") }
+				<input type="date" name="date" value={ f.Date } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.field.venue") }
+				<input type="text" name="venue" value={ f.Venue } required?={ true }/>
+			</label>
+			<label>
+				{ p.T("meet.template.optional_name") }
+				<input type="text" name="name" value={ f.Name }/>
+			</label>
+			<button type="submit">{ p.T("meet.template.submit") }</button>
+		</form>
+	}
+}
+
+// rosterPage lists a meet's participants (bib, name, birth year, club —
+// the printed-participant-list shape, C7.3) with a registration form.
+templ rosterPage(p PageData, v rosterView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("roster.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("roster.empty") }</p>
+		} else {
+			<table>
+				<thead>
+					<tr>
+						<th>{ p.T("roster.bib") }</th>
+						<th>{ p.T("roster.name") }</th>
+						<th>{ p.T("roster.birth_year") }</th>
+						<th>{ p.T("roster.club") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range v.Rows {
+						<tr>
+							<td>{ row.Bib }</td>
+							<td>{ row.Name }</td>
+							<td>{ row.BirthYear }</td>
+							<td>{ row.Club }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		<h2>{ p.T("roster.add") }</h2>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/roster") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>
+				{ p.T("roster.first_name") }
+				<input type="text" name="first_name" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("roster.last_name") }
+				<input type="text" name="last_name" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("roster.birth_year") }
+				<input type="number" name="birth_year" min="1900" max="2100" required?={ true }/>
+			</label>
+			<label>
+				{ p.T("roster.sex") }
+				<select name="sex">
+					<option value="W">{ p.T("sex.female") }</option>
+					<option value="M">{ p.T("sex.male") }</option>
+				</select>
+			</label>
+			<label>
+				{ p.T("roster.club") }
+				<input type="text" name="club"/>
+			</label>
+			<label>
+				{ p.T("roster.bib") }
+				<input type="text" name="bib"/>
+			</label>
+			<button type="submit">{ p.T("roster.submit") }</button>
+		</form>
+	}
+}
+
+// standingsPage renders the per-division combined ranking lists in the
+// observed federation presentation structure (UC-033 #4, C7.3): rank,
+// bib, name, club, birth year, per-discipline mark and points, total.
+// A missing discipline renders an explicit gap (UC-033 #3).
+templ standingsPage(p PageData, v standingsView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("standings.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Divisions) == 0 {
+			<p>{ p.T("standings.empty") }</p>
+		} else {
+			<p>{ p.T("standings.gap_legend") }</p>
+			for _, div := range v.Divisions {
+				<h2>{ div.Code }</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("standings.rank") }</th>
+							<th>{ p.T("roster.bib") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("roster.club") }</th>
+							<th>{ p.T("roster.birth_year") }</th>
+							for _, d := range v.Disciplines {
+								<th>{ d }</th>
+							}
+							<th>{ p.T("standings.total") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range div.Rows {
+							<tr>
+								<td>{ row.Rank }</td>
+								<td>{ row.Bib }</td>
+								<td>{ row.Name }</td>
+								<td>{ row.Club }</td>
+								<td>{ row.BirthYear }</td>
+								for _, cell := range row.Cells {
+									<td>
+										{ cell.Mark }
+										if cell.Points != "" {
+											<small>{ " (" + cell.Points + " " + p.T("standings.points_abbr") + ")" }</small>
+										}
+									</td>
+								}
+								<td><strong>{ row.Total }</strong></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		}
+	}
+}

@@ -29,7 +29,15 @@ func newTestMeets(t *testing.T) (*MeetService, *store.Store) {
 	if err != nil {
 		t.Fatalf("BuiltinCategorySchemes: %v", err)
 	}
-	return NewMeetService(s.DB(), catalog, schemes), s
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		t.Fatalf("BuiltinScoringTables: %v", err)
+	}
+	templates, err := domain.BuiltinMeetTemplates()
+	if err != nil {
+		t.Fatalf("BuiltinMeetTemplates: %v", err)
+	}
+	return NewMeetService(s.DB(), catalog, schemes, tables, templates), s
 }
 
 var organizer = Session{AccountID: "01ORG", Username: "orga", Role: RoleMeetOrganizer}

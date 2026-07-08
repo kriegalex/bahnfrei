@@ -4,10 +4,10 @@
   "name": "UBS Kids Cup (UKC)",
   "source": "docs/research/competitive-analysis.md §C7.2-C7.3 (ubs-kidscup.ch, verified field observation, UBS Kids Cup Le Mouret 2026-07-04); docs/requirements/system-requirements.md SYS-053",
   "transition": "calendar-year",
-  "notes": "Per-birth-year youth series divisions M7...M15 / W7...W15 (age = competition year minus birth year, same calendar-year convention as the Swiss Athletics scheme). 'UKC for all' is an additional open/mixed division observed on federation result lists (C7.3); modelled here as an elective, sex-agnostic category not returned by default resolution. No start-up/start-down permission is documented for this series in the sourced research, so both flags default to false (open question for the tech lead if a club requests start-up for younger siblings).",
+  "notes": "Per-birth-year youth series divisions M7...M15 / W7...W15 (age = competition year minus birth year, same calendar-year convention as the Swiss Athletics scheme). M7/W7 include younger children: Reglement (Stand Dezember 2025) category table, 'in der Kategorie M7 und W7 sind auch jüngere Kinder startberechtigt'. 'UKC for all' is an additional open/mixed division observed on federation result lists (C7.3); modelled here as an elective, sex-agnostic category not returned by default resolution. No start-up/start-down permission is documented for this series in the sourced research, so both flags default to false (open question for the tech lead if a club requests start-up for younger siblings).",
   "categories": [
-    {"code": "M7", "sex": "M", "minAge": 7, "maxAge": 7, "rank": 1, "label": "Boys born to be 7"},
-    {"code": "W7", "sex": "W", "minAge": 7, "maxAge": 7, "rank": 1, "label": "Girls born to be 7"},
+    {"code": "M7", "sex": "M", "minAge": 0, "maxAge": 7, "rank": 1, "label": "Boys aged 7 or younger"},
+    {"code": "W7", "sex": "W", "minAge": 0, "maxAge": 7, "rank": 1, "label": "Girls aged 7 or younger"},
     {"code": "M8", "sex": "M", "minAge": 8, "maxAge": 8, "rank": 2, "label": "Boys born to be 8"},
     {"code": "W8", "sex": "W", "minAge": 8, "maxAge": 8, "rank": 2, "label": "Girls born to be 8"},
     {"code": "M9", "sex": "M", "minAge": 9, "maxAge": 9, "rank": 3, "label": "Boys born to be 9"},

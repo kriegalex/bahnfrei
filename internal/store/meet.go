@@ -50,11 +50,12 @@ func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error)
 		return MeetRecord{}, err
 	}
 	_, err := db.ExecContext(ctx, `INSERT INTO meets
-		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 		m.ID, m.Name, m.Venue, m.HomologationRef,
 		m.StartDate.Format(dayFormat), m.EndDate.Format(dayFormat),
-		m.Organizer, string(m.Tier), string(m.Status), m.CategorySchemeID)
+		m.Organizer, string(m.Tier), string(m.Status), m.CategorySchemeID,
+		m.TemplateID, m.ScoringTableID)
 	if err != nil {
 		return MeetRecord{}, fmt.Errorf("create meet %q: %w", m.Name, err)
 	}
@@ -64,14 +65,14 @@ func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error)
 // GetMeet looks up one meet by ID.
 func GetMeet(ctx context.Context, db DBTX, id string) (MeetRecord, error) {
 	return scanMeet(db.QueryRowContext(ctx, `SELECT id, name, venue, homologation_ref,
-		start_date, end_date, organizer, tier, status, category_scheme, version
+		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version
 		FROM meets WHERE id = ?`, id))
 }
 
 // ListMeets returns all meets, newest first.
 func ListMeets(ctx context.Context, db DBTX) ([]MeetRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, name, venue, homologation_ref,
-		start_date, end_date, organizer, tier, status, category_scheme, version
+		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version
 		FROM meets ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil, err
@@ -118,7 +119,8 @@ func scanMeet(row *sql.Row) (MeetRecord, error) {
 	var m MeetRecord
 	var start, end, tier, status string
 	err := row.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
-		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID, &m.Version)
+		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
+		&m.TemplateID, &m.ScoringTableID, &m.Version)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return MeetRecord{}, ErrNotFound
@@ -132,7 +134,8 @@ func scanMeetRow(rows *sql.Rows) (MeetRecord, error) {
 	var m MeetRecord
 	var start, end, tier, status string
 	if err := rows.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
-		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID, &m.Version); err != nil {
+		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
+		&m.TemplateID, &m.ScoringTableID, &m.Version); err != nil {
 		return MeetRecord{}, err
 	}
 	return decodeMeet(m, start, end, tier, status)

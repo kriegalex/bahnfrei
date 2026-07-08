@@ -41,6 +41,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets", organize(s.handleMeetsList))
 	mux.HandleFunc("GET /meets/new", organize(s.handleMeetNewForm))
 	mux.HandleFunc("POST /meets", organize(s.handleMeetCreate))
+	mux.HandleFunc("GET /meets/from-template", organize(s.handleTemplateMeetForm))
+	mux.HandleFunc("POST /meets/from-template", organize(s.handleTemplateMeetCreate))
 	mux.HandleFunc("GET /meets/{id}", organize(s.handleMeetDetail))
 	mux.HandleFunc("GET /meets/{id}/edit", organize(s.handleMeetEditForm))
 	mux.HandleFunc("POST /meets/{id}/edit", organize(s.handleMeetEditSubmit))
@@ -49,6 +51,15 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/units/{unit}/schedule", organize(s.handleUnitSchedule))
 	mux.HandleFunc("POST /meets/{id}/timetable/publish", organize(s.handleTimetablePublish))
 	mux.HandleFunc("GET /meets/{id}/sanctioning", organize(s.handleSanctioning))
+
+	// Roster & standings (UC-033): competition-office level and above —
+	// day-of-competition surfaces (SYS-090).
+	office := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleCompetitionOffice, s.cats, h)
+	}
+	mux.HandleFunc("GET /meets/{id}/roster", office(s.handleRoster))
+	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
+	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 
 	// Public read (SYS-090): the current published timetable, stable URL.
 	mux.HandleFunc("GET /m/{id}/timetable", s.handlePublicTimetable)
