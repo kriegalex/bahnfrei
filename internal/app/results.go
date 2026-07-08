@@ -18,18 +18,34 @@ import (
 var ErrDuplicateParticipant = store.ErrDuplicateParticipant
 
 // ResultsService hosts participation, scored result capture and combined
-// standings (UC-033 #2–#4; SYS-053/052). Attempt-level capture UIs
-// (TASK-008) sit on top of this service.
+// standings (UC-033 #2–#4; SYS-053/052), plus the attempt-level field and
+// track capture flows on top (TASK-008, UC-010/UC-011).
 type ResultsService struct {
-	db      *sql.DB
-	schemes map[string]*domain.CategoryScheme
-	tables  map[string]*domain.ScoringTable
+	db        *sql.DB
+	catalog   *domain.DisciplineCatalog
+	schemes   map[string]*domain.CategoryScheme
+	tables    map[string]*domain.ScoringTable
+	templates map[string]*domain.MeetTemplate
+	onChange  func(meetID string)
 }
 
-// NewResultsService wires a ResultsService; schemes and tables are
-// normally the built-in data.
-func NewResultsService(db *sql.DB, schemes map[string]*domain.CategoryScheme, tables map[string]*domain.ScoringTable) *ResultsService {
-	return &ResultsService{db: db, schemes: schemes, tables: tables}
+// NewResultsService wires a ResultsService; catalog, schemes, tables and
+// templates are normally the built-in data.
+func NewResultsService(db *sql.DB, catalog *domain.DisciplineCatalog, schemes map[string]*domain.CategoryScheme,
+	tables map[string]*domain.ScoringTable, templates map[string]*domain.MeetTemplate) *ResultsService {
+	return &ResultsService{db: db, catalog: catalog, schemes: schemes, tables: tables, templates: templates}
+}
+
+// OnResultsChanged registers the live-update hook: fn runs after every
+// committed capture write with the affected meet's ID (UC-011 #4 — the web
+// layer publishes it on the SSE bus, SYS-071). Set once at wiring time.
+func (s *ResultsService) OnResultsChanged(fn func(meetID string)) { s.onChange = fn }
+
+// notifyChanged fires the registered live-update hook, if any.
+func (s *ResultsService) notifyChanged(meetID string) {
+	if s.onChange != nil {
+		s.onChange(meetID)
+	}
 }
 
 // ParticipantInput is one athlete registration: person data (SYS-010)
@@ -125,6 +141,7 @@ type ResultInput struct {
 	Mark           string
 	Timing         domain.Timing
 	Status         domain.QualificationStatus // non-empty for DNS/NM/DQ/…
+	StatusDetail   string                     // DQ rule reference (SYS-045)
 }
 
 // SaveResult stores a settled result and scores it against the meet's
@@ -150,25 +167,22 @@ func (s *ResultsService) SaveResult(ctx context.Context, actor Session, meetID s
 	}
 
 	result := domain.Result{
-		UnitID:    unitID,
-		AthleteID: athlete.ID,
-		Mark:      in.Mark,
-		Status:    in.Status,
+		UnitID:       unitID,
+		AthleteID:    athlete.ID,
+		Mark:         in.Mark,
+		Status:       in.Status,
+		StatusDetail: in.StatusDetail,
 	}
-	if in.Status == domain.StatusNone {
+	if in.Status != domain.StatusNone {
+		if err := domain.ValidateCaptureStatus(in.Status, in.StatusDetail); err != nil {
+			return store.ResultRecord{}, err
+		}
+	} else {
 		if in.Mark == "" {
 			return store.ResultRecord{}, fmt.Errorf("a mark or a status is required")
 		}
-		if meet.ScoringTableID != "" {
-			table, ok := s.tables[meet.ScoringTableID]
-			if !ok {
-				return store.ResultRecord{}, fmt.Errorf("meet %s references unknown scoring table %q", meetID, meet.ScoringTableID)
-			}
-			pts, err := table.Points(in.DisciplineCode, in.Timing, athlete.Sex, in.Mark)
-			if err != nil {
-				return store.ResultRecord{}, err
-			}
-			result.Points = &pts
+		if result.Points, err = s.scorePoints(meet, in.DisciplineCode, in.Timing, athlete.Sex, in.Mark); err != nil {
+			return store.ResultRecord{}, err
 		}
 	}
 
@@ -184,7 +198,7 @@ func (s *ResultsService) SaveResult(ctx context.Context, actor Session, meetID s
 	}
 	after, _ := json.Marshal(map[string]any{
 		"discipline": in.DisciplineCode, "mark": in.Mark, "timing": in.Timing,
-		"status": in.Status, "points": result.Points,
+		"status": in.Status, "statusDetail": in.StatusDetail, "points": result.Points,
 	})
 	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
 		Actor: actor.AccountID, Action: "result.save",
@@ -195,6 +209,7 @@ func (s *ResultsService) SaveResult(ctx context.Context, actor Session, meetID s
 	if err := tx.Commit(); err != nil {
 		return store.ResultRecord{}, fmt.Errorf("save result: %w", err)
 	}
+	s.notifyChanged(meetID)
 	return rec, nil
 }
 

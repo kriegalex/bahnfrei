@@ -87,12 +87,12 @@ inspection/analysis procedure.
 | SYS-029 | UC-009 #1–#3 | T | Phase B |
 | SYS-030 | UC-009 #4 | T | Phase B |
 | SYS-031 | UC-013 #1 | T | Phase B |
-| SYS-040 | UC-010 #1 | T | Phase B |
-| SYS-041 | UC-010 #2, #5 | T | Phase B |
-| SYS-042 | UC-011 #1–#4 | T | Phase B |
+| SYS-040 | UC-010 #1 | T | Phase B *(partial: TASK-008 proves 0.01 s FAT-resolution capture for manually entered electronic times — `internal/domain` `TestValidateFATTime`; `internal/app` `TestUC010_2_HandTimeRoundUpAndProvenance`; per-race wind, finishing order and reaction times land with UC-010 full track capture, TASK-019/020)* |
+| SYS-041 | UC-010 #2, #5 | T | TASK-008 (field & track capture): `internal/domain` `TestRoundUpHandTime` (D5.1 round-up fixtures); `internal/app` `TestUC010_2_HandTimeRoundUpAndProvenance` (manual vs electronic scoring columns, provenance kept); `internal/web` `TestUC010_TrackCaptureFlow` (hand marker "h" on every rendered output) — road-event whole-second rounding: TASK-019 |
+| SYS-042 | UC-011 #1–#4 | T | TASK-008 (field & track capture): `internal/domain` `TestAttemptValidate` (0.01 m marks, X/–/r, wind only where relevant), `TestRankFieldSeries_NextBestTieBreak`/`_IdenticalSeriesShareRank` (UC-011 #2), `_RetireeStillRanks` (UC-011 #3), `TestFieldContinuation_CutTop8`/`_BoundaryTieAllAdvance`/`_RetireeAndNMExcluded` (UC-011 #1); `internal/app` `TestUC011_FieldCaptureGridAndTieBreak` (UC-011 #4 recompute-on-save), `TestUC011_1_DefaultSeriesCutAndContinuation`, `TestUC011_3_RetireeStillRanks`, `TestCaptureValidationAndAuthorization`, `TestOnResultsChangedHook`; `internal/store` `TestSaveAttemptInsertAndRecapture`, `TestSaveAttemptConflicts`, `TestListUnitAttemptsOrdering`; `internal/web` `TestUC011_CaptureGridFlow` (grid + live standings over SSE) |
 | SYS-043 | UC-012 #1–#4 | T | Phase B |
 | SYS-044 | UC-013 #1–#3 | T | Phase B |
-| SYS-045 | UC-010 #3 | T | Phase B |
+| SYS-045 | UC-010 #3 | T | TASK-008 (field & track capture): `internal/domain` `TestValidateCaptureStatus` (CR 25 capture vocabulary; DQ requires rule reference), `TestRenderStatus` ("DQ (TR16.8)" convention); `internal/app` `TestUC010_3_StatusVocabulary`; `internal/store` `TestResultStatusDetailRoundTrip`; `internal/web` `TestUC010_TrackCaptureFlow` — qualification codes (Q/q/…) render with round progression, TASK-018 |
 | SYS-046 | UC-015 #2–#3 | T | TASK-003 (storage layer): `internal/store` `TestAuditImmutableByTrigger`, `TestAuditAppendAndTrail`; correction-propagation flow lands with TASK-019 |
 | SYS-047 | UC-015 #1, #4 | T | Phase B |
 | SYS-048 *(L)* | UC-029 | T | Phase B (Later) |
@@ -118,7 +118,7 @@ inspection/analysis procedure.
 | SYS-080 *(Later — DEC-013)* | UC-019 #1, #3 | T | Phase B (venue-node gate) |
 | SYS-081 | UC-020 #1–#2 | T | TASK-003 (storage layer): `internal/store` `TestKill9Durability` (kill-9 mid-burst, confirmed-write survival, consistency-gated reopen), `TestOpenDurabilityPragmas` (WAL + synchronous=FULL); app-level drill in TASK-014 |
 | SYS-082 *(Later — DEC-013)* | UC-019 #2 | T | Phase B (venue-node gate) |
-| SYS-083 | UC-021 #1–#3 | T | TASK-003 (primitive): `internal/store` `TestOptimisticUpdateConflictSurfaced` (conflict surfaced, stale write rejected); full 10-operator suite in TASK-025 |
+| SYS-083 | UC-021 #1–#3 | T | TASK-003 (primitive): `internal/store` `TestOptimisticUpdateConflictSurfaced` (conflict surfaced, stale write rejected); TASK-008 (capture path, UC-021 #2): `internal/store` `TestSaveAttemptConflicts`, `internal/app` `TestCaptureConflictSurfaced` (both versions surfaced, never silent last-write-wins); full 10-operator suite in TASK-025 |
 | SYS-084 | UC-020 #3 | T | Phase B |
 | SYS-085 | UC-034 #1–#3, #6 | T | Phase B |
 | SYS-086 | UC-034 #4–#5 | T | Phase B |

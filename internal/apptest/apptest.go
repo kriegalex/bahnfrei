@@ -77,6 +77,6 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
 		Sessions: sessions,
 		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
-		Results:  app.NewResultsService(st.DB(), schemes, tables),
+		Results:  app.NewResultsService(st.DB(), catalog, schemes, tables, templates),
 	}
 }

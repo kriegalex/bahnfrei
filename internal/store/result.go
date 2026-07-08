@@ -43,15 +43,16 @@ func SaveResult(ctx context.Context, db DBTX, r domain.Result, timing domain.Tim
 	}
 	r.ID = NewID()
 	_, err = db.ExecContext(ctx, `INSERT INTO results
-		(id, unit_id, athlete_id, mark, timing, status, points, wind, lane, placing, record_flags, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+		(id, unit_id, athlete_id, mark, timing, status, status_detail, points, wind, lane, placing, record_flags, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
 		ON CONFLICT (unit_id, athlete_id) DO UPDATE SET
 		mark = excluded.mark, timing = excluded.timing, status = excluded.status,
+		status_detail = excluded.status_detail,
 		points = excluded.points, wind = excluded.wind, lane = excluded.lane,
 		placing = excluded.placing, record_flags = excluded.record_flags,
 		version = results.version + 1`,
 		r.ID, r.UnitID, r.AthleteID, r.Mark, string(timing), string(r.Status),
-		r.Points, r.Wind, r.Lane, r.Placing, string(flags))
+		r.StatusDetail, r.Points, r.Wind, r.Lane, r.Placing, string(flags))
 	if err != nil {
 		return ResultRecord{}, fmt.Errorf("save result unit %s athlete %s: %w", r.UnitID, r.AthleteID, err)
 	}
@@ -61,7 +62,7 @@ func SaveResult(ctx context.Context, db DBTX, r domain.Result, timing domain.Tim
 // GetResult returns the settled result for (unit, athlete).
 func GetResult(ctx context.Context, db DBTX, unitID, athleteID string) (ResultRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, unit_id, athlete_id, mark, timing,
-		status, points, wind, lane, placing, record_flags, version
+		status, status_detail, points, wind, lane, placing, record_flags, version
 		FROM results WHERE unit_id = ? AND athlete_id = ?`, unitID, athleteID)
 	if err != nil {
 		return ResultRecord{}, err
@@ -80,7 +81,7 @@ func GetResult(ctx context.Context, db DBTX, unitID, athleteID string) (ResultRe
 // and discipline, the standings computation's input (UC-033 #2).
 func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult, error) {
 	rows, err := db.QueryContext(ctx, `SELECT r.id, r.unit_id, r.athlete_id, r.mark,
-		r.timing, r.status, r.points, r.wind, r.lane, r.placing, r.record_flags, r.version,
+		r.timing, r.status, r.status_detail, r.points, r.wind, r.lane, r.placing, r.record_flags, r.version,
 		e.id, e.discipline_code
 		FROM results r
 		JOIN units u ON u.id = r.unit_id
@@ -98,7 +99,7 @@ func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult,
 		var m MeetResult
 		var timing, status, flags string
 		if err := rows.Scan(&m.ID, &m.UnitID, &m.AthleteID, &m.Mark, &timing, &status,
-			&m.Points, &m.Wind, &m.Lane, &m.Placing, &flags, &m.Version,
+			&m.StatusDetail, &m.Points, &m.Wind, &m.Lane, &m.Placing, &flags, &m.Version,
 			&m.EventID, &m.DisciplineCode); err != nil {
 			return nil, err
 		}
@@ -112,13 +113,35 @@ func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult,
 	return out, rows.Err()
 }
 
+// ListUnitResults returns every settled result of one unit — the capture
+// view's and unit-ranking computation's input.
+func ListUnitResults(ctx context.Context, db DBTX, unitID string) ([]ResultRecord, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, unit_id, athlete_id, mark, timing,
+		status, status_detail, points, wind, lane, placing, record_flags, version
+		FROM results WHERE unit_id = ? ORDER BY athlete_id`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ResultRecord
+	for rows.Next() {
+		r, err := scanResult(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func scanResult(rows interface {
 	Scan(dest ...any) error
 }) (ResultRecord, error) {
 	var r ResultRecord
 	var timing, status, flags string
 	if err := rows.Scan(&r.ID, &r.UnitID, &r.AthleteID, &r.Mark, &timing, &status,
-		&r.Points, &r.Wind, &r.Lane, &r.Placing, &flags, &r.Version); err != nil {
+		&r.StatusDetail, &r.Points, &r.Wind, &r.Lane, &r.Placing, &flags, &r.Version); err != nil {
 		return ResultRecord{}, err
 	}
 	r.Timing = domain.Timing(timing)

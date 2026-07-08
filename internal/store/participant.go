@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 )
@@ -44,7 +43,7 @@ func RegisterParticipant(ctx context.Context, db DBTX, meetID, athleteID, bib st
 	_, err := db.ExecContext(ctx, `INSERT INTO participants (id, meet_id, athlete_id, bib, version)
 		VALUES (?, ?, ?, ?, 1)`, p.ID, p.MeetID, p.AthleteID, p.Bib)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueViolation(err) {
 			return Participant{}, ErrDuplicateParticipant
 		}
 		return Participant{}, fmt.Errorf("register participant: %w", err)

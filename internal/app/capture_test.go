@@ -1,0 +1,407 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/kriegalex/bahnfrei/internal/domain"
+	"github.com/kriegalex/bahnfrei/internal/store"
+)
+
+var fieldOfficial = Session{AccountID: "01FLD", Username: "field", Role: RoleFieldOfficial}
+
+// unitOf resolves the single unit of a meet's discipline in tests.
+func unitOf(t *testing.T, meets *MeetService, meetID, disciplineCode string) string {
+	t.Helper()
+	detail, err := meets.Meet(context.Background(), meetID)
+	if err != nil {
+		t.Fatalf("Meet: %v", err)
+	}
+	for _, u := range detail.Units {
+		if u.DisciplineCode == disciplineCode {
+			return u.UnitID
+		}
+	}
+	t.Fatalf("meet %s has no %s unit", meetID, disciplineCode)
+	return ""
+}
+
+func fieldAttempt(t *testing.T, results *ResultsService, meetID, unitID string, in FieldAttemptInput) store.AttemptRecord {
+	t.Helper()
+	rec, err := results.SaveFieldAttempt(context.Background(), fieldOfficial, meetID, unitID, in)
+	if err != nil {
+		t.Fatalf("SaveFieldAttempt(%+v): %v", in, err)
+	}
+	return rec
+}
+
+// TestUC011_FieldCaptureGridAndTieBreak walks the UKC zone long jump
+// through the horizontal-attempt grid (UC-011 #2/#4 at the service level):
+// attempts settle into a scored best-mark result after every save, and the
+// unit standings apply the next-best tie-break.
+func TestUC011_FieldCaptureGridAndTieBreak(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	bea := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Bea", LastName: "Beispiel", BirthYear: 2014, Sex: domain.SexFemale, Bib: "102",
+	})
+
+	// Anna: 3.42, X, 3.10 — Bea: 3.20, 3.42, 3.30. Equal bests; Bea's
+	// better second-best (3.30 > 3.10) decides (UC-011 #2).
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.42"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 2, Kind: domain.AttemptFoul})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 3, Kind: domain.AttemptValid, Mark: "3.10"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: bea.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.20"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: bea.AthleteID, Seq: 2, Kind: domain.AttemptValid, Mark: "3.42"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: bea.AthleteID, Seq: 3, Kind: domain.AttemptValid, Mark: "3.30"})
+
+	v, err := results.UnitCapture(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitCapture: %v", err)
+	}
+	if v.Family != domain.FamilyFieldHorizontal || v.Config.Attempts != 3 || v.Config.CutAfter != 0 {
+		t.Errorf("UKC config = %+v, want 3 trials, no cut (template rule data)", v.Config)
+	}
+	if v.WindRelevant {
+		t.Error("ZoneLJ is not wind-relevant (catalog data)")
+	}
+	if len(v.Rows) != 2 || len(v.Rows[0].Attempts) != 3 {
+		t.Fatalf("grid = %d rows × %d attempts", len(v.Rows), len(v.Rows[0].Attempts))
+	}
+	if got := v.Rows[0].Attempts[1]; got == nil || got.Kind != domain.AttemptFoul {
+		t.Errorf("anna trial 2 = %+v, want foul", got)
+	}
+	if len(v.Standings) != 2 || v.Standings[0].AthleteID != bea.AthleteID || v.Standings[0].Rank != 1 {
+		t.Fatalf("standings = %+v, want Bea first by next-best tie-break", v.Standings)
+	}
+	if v.Standings[1].AthleteID != anna.AthleteID || v.Standings[1].Rank != 2 {
+		t.Errorf("standings = %+v, want Anna second", v.Standings)
+	}
+	if v.Continuation != nil {
+		t.Errorf("continuation = %v, want none without a cut", v.Continuation)
+	}
+
+	// Every save settles a scored result (UC-033 #2 alignment): the best
+	// mark carries the UKC points for the athlete's sex column.
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPts, err := tables[domain.ScoringTableUBSKidsCup].Points("ZoneLJ", domain.TimingNone, domain.SexFemale, "3.42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := v.Rows[0].Result; r == nil || r.Mark != "3.42" || r.Points == nil || *r.Points != wantPts {
+		t.Errorf("anna settled result = %+v, want best 3.42 with %d points", v.Rows[0].Result, wantPts)
+	}
+}
+
+// TestUC011_3_RetireeStillRanks: after a valid mark, an `r` attempt keeps
+// the best mark ranked with status r.
+func TestUC011_3_RetireeStillRanks(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	bea := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Bea", LastName: "Beispiel", BirthYear: 2014, Sex: domain.SexFemale, Bib: "102",
+	})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.50"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 2, Kind: domain.AttemptRetire})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: bea.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.40"})
+
+	v, err := results.UnitCapture(context.Background(), rec.ID, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Standings[0].AthleteID != anna.AthleteID || v.Standings[0].Rank != 1 || v.Standings[0].Status != domain.StatusR {
+		t.Errorf("standings = %+v, want retiree first with status r (UC-011 #3)", v.Standings)
+	}
+	if v.Standings[0].Points == nil {
+		t.Error("retiree's best mark must keep its points")
+	}
+}
+
+// TestUC011_1_DefaultSeriesCutAndContinuation: a non-template meet gets the
+// WA default series (3+3, cut to top 8) and, once round 3 is complete, the
+// continuation in reverse-ranking order.
+func TestUC011_1_DefaultSeriesCutAndContinuation(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	meet, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Abendmeeting", Venue: "Wankdorf",
+		StartDate: ukcDay(), EndDate: ukcDay(),
+		CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	if _, err := meets.AddEvent(ctx, organizer, meet.ID, AddEventRequest{
+		DisciplineCode: "LJ", CategoryCodes: []string{"U18 M"},
+	}); err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	unitID := unitOf(t, meets, meet.ID, "LJ")
+
+	w := 1.2
+	var athletes []string
+	for i := 1; i <= 9; i++ {
+		p := register(t, results, meet.ID, ParticipantInput{
+			FirstName: "A", LastName: fmt.Sprintf("Jumper%02d", i), BirthYear: 2009,
+			Sex: domain.SexMale, Bib: fmt.Sprintf("%d", i),
+		})
+		athletes = append(athletes, p.AthleteID)
+		// Bests 6.01..6.09; LJ is wind-relevant, so per-attempt wind is legal.
+		fieldAttempt(t, results, meet.ID, unitID, FieldAttemptInput{
+			AthleteID: p.AthleteID, Seq: 1, Kind: domain.AttemptValid,
+			Mark: fmt.Sprintf("6.%02d", i), Wind: &w,
+		})
+		fieldAttempt(t, results, meet.ID, unitID, FieldAttemptInput{AthleteID: p.AthleteID, Seq: 2, Kind: domain.AttemptPass})
+		fieldAttempt(t, results, meet.ID, unitID, FieldAttemptInput{AthleteID: p.AthleteID, Seq: 3, Kind: domain.AttemptFoul})
+	}
+
+	v, err := results.UnitCapture(ctx, meet.ID, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Config != (CaptureConfig{Attempts: 6, CutAfter: 3, CutTo: 8}) {
+		t.Fatalf("default config = %+v", v.Config)
+	}
+	if len(v.Continuation) != 8 {
+		t.Fatalf("continuation = %v, want the top 8 (UC-011 #1)", v.Continuation)
+	}
+	// Reverse-ranking order: 8th best (jumper 2, 6.02) jumps first, best
+	// (jumper 9, 6.09) last; jumper 1 (6.01) is cut.
+	if v.Continuation[0] != athletes[1] || v.Continuation[7] != athletes[8] {
+		t.Errorf("continuation order = %v, want reverse ranking", v.Continuation)
+	}
+	for _, id := range v.Continuation {
+		if id == athletes[0] {
+			t.Error("the 9th-ranked athlete must be cut after round 3")
+		}
+	}
+	// No points on a meet without a scoring table.
+	if v.Standings[0].Points != nil {
+		t.Errorf("points = %v, want nil without a scoring table", v.Standings[0].Points)
+	}
+}
+
+// TestUC010_2_HandTimeRoundUpAndProvenance: a manual 60 m time rounds up to
+// the next 0.1 s and stays distinguishable from FAT (SYS-041), scoring
+// against the manual column of the UKC table.
+func TestUC010_2_HandTimeRoundUpAndProvenance(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, meets, rec.ID, "60m")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	bea := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Bea", LastName: "Beispiel", BirthYear: 2014, Sex: domain.SexFemale, Bib: "102",
+	})
+
+	manual, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "9.32", Timing: domain.TimingManual,
+	})
+	if err != nil {
+		t.Fatalf("SaveTrackResult(manual): %v", err)
+	}
+	if manual.Mark != "9.4" || manual.Timing != domain.TimingManual {
+		t.Errorf("manual result = mark %q timing %q, want 9.4/manual (D5.1 round-up)", manual.Mark, manual.Timing)
+	}
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPts, err := tables[domain.ScoringTableUBSKidsCup].Points("60m", domain.TimingManual, domain.SexFemale, "9.4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manual.Points == nil || *manual.Points != wantPts {
+		t.Errorf("manual points = %v, want %d (manual scoring column)", manual.Points, wantPts)
+	}
+
+	fat, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: bea.AthleteID, Time: "9.32", Timing: domain.TimingElectronic,
+	})
+	if err != nil {
+		t.Fatalf("SaveTrackResult(electronic): %v", err)
+	}
+	if fat.Mark != "9.32" || fat.Timing != domain.TimingElectronic {
+		t.Errorf("FAT result = mark %q timing %q, want unrounded 9.32/electronic (SYS-040)", fat.Mark, fat.Timing)
+	}
+
+	v, err := results.UnitCapture(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 9.32 (FAT) ranks ahead of 9.4 (manual); provenance travels with each row.
+	if v.Standings[0].AthleteID != bea.AthleteID || v.Standings[0].Timing != domain.TimingElectronic {
+		t.Errorf("track standings = %+v", v.Standings)
+	}
+	if v.Standings[1].Timing != domain.TimingManual {
+		t.Errorf("manual provenance lost: %+v", v.Standings[1])
+	}
+}
+
+// TestUC010_3_StatusVocabulary: statuses are restricted to the CR 25
+// capture set; a DQ without a rule reference is rejected (SYS-045).
+func TestUC010_3_StatusVocabulary(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, meets, rec.ID, "60m")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: anna.AthleteID, Status: domain.StatusDQ,
+	}); err == nil {
+		t.Fatal("DQ without rule reference must be rejected (SYS-045)")
+	}
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: anna.AthleteID, Status: domain.StatusQ,
+	}); err == nil {
+		t.Fatal("progression codes are not capture statuses (SYS-045)")
+	}
+	dq, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: anna.AthleteID, Status: domain.StatusDQ, StatusDetail: "TR16.8",
+	})
+	if err != nil {
+		t.Fatalf("SaveTrackResult(DQ TR16.8): %v", err)
+	}
+	if got := domain.RenderStatus(dq.Status, dq.StatusDetail); got != "DQ (TR16.8)" {
+		t.Errorf("rendered status = %q (CR 25 convention)", got)
+	}
+	if dq.Points != nil {
+		t.Errorf("a DQ scores no points, got %v", dq.Points)
+	}
+}
+
+// TestCaptureConflictSurfaced is UC-021 #2 at the service level: a
+// concurrent capture of the same trial returns AttemptConflictError with
+// the stored attempt — both versions available, nothing overwritten.
+func TestCaptureConflictSurfaced(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.42"})
+
+	_, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, unitID, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.10",
+	})
+	var conflict *AttemptConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("concurrent capture = %v, want AttemptConflictError", err)
+	}
+	if !errors.Is(err, ErrConflict) {
+		t.Error("conflict must match ErrConflict for generic handling")
+	}
+	if conflict.Current.Mark != "3.42" {
+		t.Errorf("conflict carries %q, want the stored 3.42", conflict.Current.Mark)
+	}
+
+	// Re-capture with the stored version succeeds (an authorized correction).
+	if _, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, unitID, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.10",
+		ExpectedVersion: conflict.Current.Version,
+	}); err != nil {
+		t.Fatalf("versioned correction: %v", err)
+	}
+}
+
+func TestCaptureValidationAndAuthorization(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	ljUnit := unitOf(t, meets, rec.ID, "ZoneLJ")
+	trackUnit := unitOf(t, meets, rec.ID, "60m")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	submitter := Session{AccountID: "01SUB", Username: "club", Role: RoleEntrySubmitter}
+
+	var forbidden ErrForbidden
+	if _, err := results.SaveFieldAttempt(ctx, submitter, rec.ID, ljUnit, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.00",
+	}); !errors.As(err, &forbidden) {
+		t.Errorf("entry submitter capturing = %v, want ErrForbidden (SYS-090)", err)
+	}
+	if _, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, trackUnit, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.00",
+	}); err == nil {
+		t.Error("attempt grid on a track unit must be rejected")
+	}
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, ljUnit, TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "9.40", Timing: domain.TimingManual,
+	}); err == nil {
+		t.Error("track capture on a field unit must be rejected")
+	}
+	if _, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, ljUnit, FieldAttemptInput{
+		AthleteID: "01GHOST", Seq: 1, Kind: domain.AttemptValid, Mark: "3.00",
+	}); err == nil {
+		t.Error("capture for an unregistered athlete must be rejected")
+	}
+	if _, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, ljUnit, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 4, Kind: domain.AttemptValid, Mark: "3.00",
+	}); err == nil {
+		t.Error("trial 4 exceeds the UKC 3-trial series (SYS-042)")
+	}
+	w := 1.0
+	if _, err := results.SaveFieldAttempt(ctx, fieldOfficial, rec.ID, ljUnit, FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.00", Wind: &w,
+	}); err == nil {
+		t.Error("wind on the non-wind-relevant ZoneLJ must be rejected")
+	}
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, trackUnit, TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "9.40",
+	}); err == nil {
+		t.Error("a time without a timing method must be rejected (SYS-041)")
+	}
+	if _, err := results.UnitCapture(ctx, rec.ID, "01NOUNIT"); !errors.Is(err, ErrMeetNotFound) {
+		t.Errorf("UnitCapture(unknown unit) = %v, want not-found", err)
+	}
+}
+
+// TestOnResultsChangedHook: every committed capture fires the live-update
+// hook with the meet ID (UC-011 #4 — the SSE publication seam).
+func TestOnResultsChangedHook(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	var fired []string
+	results.OnResultsChanged(func(meetID string) { fired = append(fired, meetID) })
+
+	fieldAttempt(t, results, rec.ID, unitOf(t, meets, rec.ID, "ZoneLJ"), FieldAttemptInput{
+		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.42",
+	})
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitOf(t, meets, rec.ID, "60m"), TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "9.32", Timing: domain.TimingManual,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fired) != 2 || fired[0] != rec.ID || fired[1] != rec.ID {
+		t.Errorf("hook fired = %v, want twice with the meet ID", fired)
+	}
+}

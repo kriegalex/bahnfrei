@@ -1,0 +1,221 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// captureIndexPage lists a meet's capturable units for the field official
+// (UC-011/UC-010: track and horizontal field events in the PoC slice).
+templ captureIndexPage(p PageData, v captureIndexView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("capture.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Units) == 0 {
+			<p>{ p.T("capture.units_empty") }</p>
+		} else {
+			<ul>
+				for _, u := range v.Units {
+					<li>
+						<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a>
+						{ " (" + p.T("family."+u.Family) + ")" }
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+// capturePage is the per-unit capture surface (TASK-008): the
+// horizontal-attempt grid for field events (SYS-042) or the manual/FAT
+// time form for track events (SYS-040/041), plus the live standings that
+// refresh over SSE (UC-011 #4; /static/capture.js drives the refresh —
+// the CSP forbids inline scripts).
+templ capturePage(p PageData, v captureView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { v.Discipline }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("capture.back_to_units") }</a></p>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("capture.no_participants") }</p>
+		} else if v.IsField {
+			@fieldGrid(p, v)
+		} else {
+			@trackForm(p, v)
+		}
+		<section
+			id="capture-standings"
+			data-sse-topic={ "meet-" + v.MeetID }
+			data-sse-event="results"
+			data-sse-refresh={ "/meets/" + v.MeetID + "/capture/" + v.UnitID + "/standings" }
+		>
+			@captureStandings(p, v)
+		</section>
+		<script src="/static/capture.js"></script>
+	}
+}
+
+// fieldGrid renders the horizontal-attempt grid: one input per trial that
+// takes a mark in metres or the D5.2 symbols (X foul, – pass, r
+// retirement), with per-attempt wind where relevant (SYS-042, UC-011).
+templ fieldGrid(p PageData, v captureView) {
+	<p>{ p.T("capture.value_help") }</p>
+	<table class="capture-grid">
+		<thead>
+			<tr>
+				<th>{ p.T("roster.bib") }</th>
+				<th>{ p.T("roster.name") }</th>
+				for i := 1; i <= v.Attempts; i++ {
+					<th>{ p.T("capture.trial_abbr") + intToStr(int64(i)) }</th>
+				}
+				<th>{ p.T("capture.result") }</th>
+				<th>{ p.T("standings.points_abbr") }</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, row := range v.Rows {
+				<tr>
+					<td>{ row.Bib }</td>
+					<td>{ row.Name }</td>
+					for _, cell := range row.Cells {
+						<td>
+							<form action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/attempt") } method="post" class="cell-form">
+								<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+								<input type="hidden" name="athlete" value={ row.AthleteID }/>
+								<input type="hidden" name="seq" value={ cell.Seq }/>
+								<input type="hidden" name="version" value={ cell.Version }/>
+								<input
+									type="text"
+									name="value"
+									value={ cell.Value }
+									size="6"
+									aria-label={ p.T("capture.trial_abbr") + cell.Seq + " " + row.Name }
+								/>
+								if v.WindRelevant {
+									<input
+										type="text"
+										name="wind"
+										value={ cell.Wind }
+										size="4"
+										placeholder={ p.T("capture.wind") }
+										aria-label={ p.T("capture.wind") + " " + row.Name }
+									/>
+								}
+								<button type="submit">{ p.T("capture.save") }</button>
+							</form>
+						</td>
+					}
+					<td>{ row.Result }</td>
+					<td>{ row.Points }</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+// trackForm renders manual/FAT time entry per athlete (UC-010 subset for
+// the UKC 60 m): time + timing method, or a CR 25 status — a DQ demands
+// its rule reference (SYS-045).
+templ trackForm(p PageData, v captureView) {
+	// One form element per athlete outside the table; the row's inputs
+	// associate via the HTML form attribute (a form must not span table
+	// cells as a descendant of <tr>).
+	for _, row := range v.Rows {
+		<form
+			id={ "track-" + row.AthleteID }
+			action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/track") }
+			method="post"
+		>
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<input type="hidden" name="athlete" value={ row.AthleteID }/>
+		</form>
+	}
+	<table class="capture-grid">
+		<thead>
+			<tr>
+				<th>{ p.T("roster.bib") }</th>
+				<th>{ p.T("roster.name") }</th>
+				<th>{ p.T("capture.time") }</th>
+				<th>{ p.T("capture.timing") }</th>
+				<th>{ p.T("capture.status") }</th>
+				<th>{ p.T("capture.dq_rule") }</th>
+				<th></th>
+				<th>{ p.T("capture.result") }</th>
+				<th>{ p.T("standings.points_abbr") }</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, row := range v.Rows {
+				<tr>
+					<td>{ row.Bib }</td>
+					<td>{ row.Name }</td>
+					<td>
+						<input type="text" name="time" size="7" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.time") + " " + row.Name }/>
+					</td>
+					<td>
+						<select name="timing" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.timing") + " " + row.Name }>
+							for _, t := range v.TrackTimings {
+								<option value={ t }>{ p.T("capture.timing." + t) }</option>
+							}
+						</select>
+					</td>
+					<td>
+						<select name="status" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
+							<option value="">{ p.T("capture.status.none") }</option>
+							for _, st := range v.TrackStatuses {
+								<option value={ st }>{ st }</option>
+							}
+						</select>
+					</td>
+					<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+					<td><button type="submit" form={ "track-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
+					<td>{ row.Result }</td>
+					<td>{ row.Points }</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+// captureStandings is the live-refreshing unit ranking (UC-011 #4): rank
+// by best mark with the D5.6 tie-break for field events, by time for
+// track; hand times stay marked (SYS-041).
+templ captureStandings(p PageData, v captureView) {
+	<h2>{ p.T("capture.standings") }</h2>
+	if len(v.Standings) == 0 {
+		<p>{ p.T("capture.standings_empty") }</p>
+	} else {
+		<table>
+			<thead>
+				<tr>
+					<th>{ p.T("standings.rank") }</th>
+					<th>{ p.T("roster.bib") }</th>
+					<th>{ p.T("roster.name") }</th>
+					<th>{ p.T("capture.result") }</th>
+					<th>{ p.T("standings.points_abbr") }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range v.Standings {
+					<tr>
+						<td>{ row.Rank }</td>
+						<td>{ row.Bib }</td>
+						<td>{ row.Name }</td>
+						<td>
+							{ row.Mark }
+							if row.Status != "" {
+								{ " " + row.Status }
+							}
+						</td>
+						<td>{ row.Points }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+	if len(v.Continuation) > 0 {
+		<h3>{ p.T("capture.continuation", "n", intToStr(int64(v.CutTo))) }</h3>
+		<ol>
+			for _, name := range v.Continuation {
+				<li>{ name }</li>
+			}
+		</ol>
+	}
+}

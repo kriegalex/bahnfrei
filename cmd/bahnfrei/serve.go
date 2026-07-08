@@ -132,7 +132,7 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		return serveDeps{}, fmt.Errorf("load meet templates: %w", err)
 	}
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
-	results := app.NewResultsService(st.DB(), schemes, tables)
+	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 
 	cats, err := i18n.Load()
 	if err != nil {

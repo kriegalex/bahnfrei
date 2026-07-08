@@ -61,6 +61,18 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 
+	// Field & track capture (TASK-008, UC-011/UC-010 subset): the on-venue
+	// capture surface, field-official level and above (SYS-090; per-event
+	// scoping arrives with TASK-013).
+	captureRole := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleFieldOfficial, s.cats, h)
+	}
+	mux.HandleFunc("GET /meets/{id}/capture", captureRole(s.handleCaptureIndex))
+	mux.HandleFunc("GET /meets/{id}/capture/{unit}", captureRole(s.handleCaptureUnit))
+	mux.HandleFunc("GET /meets/{id}/capture/{unit}/standings", captureRole(s.handleCaptureStandings))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/attempt", captureRole(s.handleCaptureAttempt))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
+
 	// Public read (SYS-090): the current published timetable, stable URL.
 	mux.HandleFunc("GET /m/{id}/timetable", s.handlePublicTimetable)
 

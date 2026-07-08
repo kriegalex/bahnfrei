@@ -44,6 +44,12 @@ type Server struct {
 // timetable events on it, UC-001 #4/SYS-071).
 func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, results *app.ResultsService, cats i18n.Catalogs, bus *Bus) *Server {
 	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, results: results, cats: cats, bus: bus}
+	// Every committed capture write fans out to the meet's SSE topic — the
+	// capture and (later) public live pages refresh from it (UC-011 #4,
+	// SYS-071).
+	results.OnResultsChanged(func(meetID string) {
+		bus.Publish("meet-"+meetID, Event{Name: "results", Data: `{"meet":"` + meetID + `"}`})
+	})
 	s.httpSrv = &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           s.routes(),

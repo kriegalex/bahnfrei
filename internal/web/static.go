@@ -15,7 +15,9 @@ import (
 // htmx 2.0.4, vendored verbatim (Zero-Clause BSD license, htmx-LICENSE);
 // base.css is project-authored.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/base.css
+// capture.js is the capture page's SSE-driven standings refresh (UC-011 #4).
+//
+//go:embed static/htmx.min.js static/htmx-LICENSE static/base.css static/capture.js
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.

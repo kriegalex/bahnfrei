@@ -297,16 +297,19 @@ const (
 // (per-trial X/O/– for field events) is owned by the capture-UI tasks
 // (TASK-008/021); this is the settled-result shape.
 type Result struct {
-	ID          string
-	UnitID      string
-	AthleteID   string
-	Lane        int
-	Mark        string // encoded per discipline unit (time/distance/height/points)
-	Wind        *float64
-	Status      QualificationStatus
-	Points      *int
-	Placing     *int
-	RecordFlags []string // e.g. "PB", "SB", "NR" (D6.1)
+	ID        string
+	UnitID    string
+	AthleteID string
+	Lane      int
+	Mark      string // encoded per discipline unit (time/distance/height/points)
+	Wind      *float64
+	Status    QualificationStatus
+	// StatusDetail qualifies Status where CR 25 demands it — a DQ's rule
+	// reference ("TR16.8"), rendered as "DQ (TR16.8)" (SYS-045).
+	StatusDetail string
+	Points       *int
+	Placing      *int
+	RecordFlags  []string // e.g. "PB", "SB", "NR" (D6.1)
 }
 
 // RecordType is the WA/Swiss record-abbreviation vocabulary (D6.1).

@@ -19,6 +19,13 @@ var ErrVersionConflict = errors.New("version conflict: entity was modified concu
 // ErrNotFound means the target row does not exist.
 var ErrNotFound = errors.New("entity not found")
 
+// isUniqueViolation reports whether err is a SQLite UNIQUE-constraint
+// failure. modernc.org/sqlite exposes no typed error for this; matching the
+// message is the accepted idiom (see account.go).
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
 // Set is one column assignment for OptimisticUpdate.
 type Set struct {
 	Column string

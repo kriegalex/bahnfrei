@@ -20,6 +20,10 @@ var office = Session{AccountID: "01OFF", Username: "office", Role: RoleCompetiti
 func newTestResults(t *testing.T) (*MeetService, *ResultsService, *store.Store) {
 	t.Helper()
 	meets, st := newTestMeets(t)
+	catalog, err := domain.BuiltinDisciplineCatalog()
+	if err != nil {
+		t.Fatalf("BuiltinDisciplineCatalog: %v", err)
+	}
 	schemes, err := domain.BuiltinCategorySchemes()
 	if err != nil {
 		t.Fatalf("BuiltinCategorySchemes: %v", err)
@@ -28,7 +32,11 @@ func newTestResults(t *testing.T) (*MeetService, *ResultsService, *store.Store) 
 	if err != nil {
 		t.Fatalf("BuiltinScoringTables: %v", err)
 	}
-	return meets, NewResultsService(st.DB(), schemes, tables), st
+	templates, err := domain.BuiltinMeetTemplates()
+	if err != nil {
+		t.Fatalf("BuiltinMeetTemplates: %v", err)
+	}
+	return meets, NewResultsService(st.DB(), catalog, schemes, tables, templates), st
 }
 
 func ukcDay() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }
@@ -316,9 +324,13 @@ func TestUC033_5_ScoringTableSwapAtServiceLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	swapped := NewResultsService(st.DB(), schemes, map[string]*domain.ScoringTable{
+	catalog, err := domain.BuiltinDisciplineCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	swapped := NewResultsService(st.DB(), catalog, schemes, map[string]*domain.ScoringTable{
 		domain.ScoringTableUBSKidsCup: revised,
-	})
+	}, nil)
 	r, err := swapped.SaveResult(context.Background(), office, rec.ID, ResultInput{
 		AthleteID: anna.AthleteID, DisciplineCode: "ZoneLJ", Mark: "4.12",
 	})
