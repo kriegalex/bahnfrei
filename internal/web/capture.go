@@ -182,7 +182,14 @@ func markWithProvenance(mark string, timing domain.Timing) string {
 }
 
 func (s *Server) handleCaptureUnit(w http.ResponseWriter, r *http.Request) {
-	v, err := s.captureView(r, r.PathValue("id"), r.PathValue("unit"))
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	// Opening a unit takes its capture lock for the field official (SYS-086):
+	// best-effort — a busy lock or a non-capturable unit must not block the
+	// read of the capture page (the office reconciles a contested lock).
+	if actor, ok := sessionFromContext(r.Context()); ok {
+		_, _ = s.results.EnsureCheckout(r.Context(), actor, meetID, unitID, deviceLabelOr(r.Header.Get("X-Device-Label")))
+	}
+	v, err := s.captureView(r, meetID, unitID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return

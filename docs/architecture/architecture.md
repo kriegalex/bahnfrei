@@ -45,7 +45,7 @@ by external modules), the executable under `cmd/bahnfrei/`.
 | `domain/` | Pure domain: entities (SyRS §2), rule engines — category resolver, seeding (TR20), progression, scoring (WA tables, UKC), countback, eligibility, wind legality, records flagging. **No I/O.** Fixture suites per engine (SYS-142) | 005, 014, 026–031, 040–053 |
 | `app/` | Use-case services orchestrating domain + storage + audit; authorization checks (SYS-090); result-confirm flow with provenance | 046, 047, 090 |
 | `store/` | SQLite persistence, migrations, optimistic versioning, audit log, backup, retention jobs (ADR-004) | 081, 084, 101, 102 |
-| `sync/` | Publication queue dispatcher (venue) and applier (hub); entries-snapshot pull | 082 |
+| `sync/` | Offline-capture wire protocol (checkout/replay contract, ADR-004 §8 — server half in `app`/`web`); *later*: publication queue dispatcher (venue) and applier (hub), entries-snapshot pull | 082, 085–087 |
 | `exchange/` | omx/v1 schema (ADR-005), CSV import/export, Alabus mapping profile, Lynx file adapters + directory watcher (ADR-006) | 013, 060–062, 073 |
 | `web/` | HTTP handlers, SSR templates, HTMX endpoints, SSE, i18n rendering, public pages incl. unofficial-results labeling (SYS-076), WCAG-conformant markup | 070–076, 110–114 |
 | `pdf/` | Printable documents | 072 |
@@ -53,6 +53,12 @@ by external modules), the executable under `cmd/bahnfrei/`.
 
 Dependency rule: `domain` imports nothing above it; `web` never touches `store` directly
 (goes through `app`). Enforced by a lint rule in CI.
+
+Outside the Go module: `islands/` holds the TypeScript island sources (ADR-003 — strict
+`tsconfig` per compilation unit, DOM islands vs. the capture service worker; compiled to
+readable ES2020 in `internal/web/static/` by `scripts/build-islands`, emitted JS committed
+with a CI freshness check) and `e2e/` holds the Playwright suite (§5.3) that drives the
+real binary — per-test server on a temp SQLite DB, seeded through the product's own forms.
 
 ## 4. Cross-cutting concerns
 

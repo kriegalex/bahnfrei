@@ -58,6 +58,41 @@ main {
   font-weight: bold;
 }
 
+/* Offline-capture indicator (UC-034; SYS-087): unobtrusive by default,
+   clearly coloured when offline or syncing. */
+.offline-status {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  margin: 0.25rem 0;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
+  background: #e6f4ea;
+  color: #14532d;
+}
+.offline-status[data-state="offline"] {
+  background: #fff4e5;
+  color: #7a3d00;
+}
+.offline-status[data-state="syncing"] {
+  background: #e5efff;
+  color: #003a7a;
+}
+.offline-notice {
+  margin: 0.25rem 0;
+  color: #7a3d00;
+  font-size: 0.9rem;
+}
+
+/* Office blip-tolerance banner (UC-034 #7; SYS-087). */
+.offline-banner {
+  background: #7a3d00;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  font-weight: bold;
+}
+.offline-banner[hidden] { display: none; }
+
 a, button, input, select {
   font-size: 1rem;
 }

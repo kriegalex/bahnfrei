@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// reconciliationPage is the office-facing surface for captures that could not
+// be applied on replay (UC-034 #4/#5, SYS-086): pending items grouped by unit
+// with what/who and the reason (stale checkout vs office start-list change vs
+// apply conflict), each resolved by an explicit apply or discard. A capture is
+// never silently discarded — the office decides.
+templ reconciliationPage(p PageData, v reconciliationView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("reconciliation.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Groups) == 0 {
+			<p>{ p.T("reconciliation.empty") }</p>
+		} else {
+			<p>{ p.T("reconciliation.intro") }</p>
+			for _, g := range v.Groups {
+				<h2>{ g.Discipline }</h2>
+				<table class="reconciliation">
+					<thead>
+						<tr>
+							<th>{ p.T("reconciliation.trial") }</th>
+							<th>{ p.T("capture.result") }</th>
+							<th>{ p.T("reconciliation.reason") }</th>
+							<th>{ p.T("reconciliation.captured_by") }</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, e := range g.Entries {
+							<tr>
+								<td>{ p.T("capture.trial_abbr") + e.Trial }</td>
+								<td>{ e.Value }</td>
+								<td>{ p.T("reconciliation.reason." + e.Reason) }</td>
+								<td>{ e.CapturedBy }{ deviceSuffix(e.DeviceLabel) }</td>
+								<td>
+									<form action={ templ.URL("/meets/" + v.MeetID + "/reconciliation/" + e.ItemID + "/apply") } method="post" class="inline-form">
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<button type="submit">{ p.T("reconciliation.apply") }</button>
+									</form>
+									<form action={ templ.URL("/meets/" + v.MeetID + "/reconciliation/" + e.ItemID + "/discard") } method="post" class="inline-form">
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<button type="submit">{ p.T("reconciliation.discard") }</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		}
+	}
+}

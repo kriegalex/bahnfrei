@@ -53,6 +53,19 @@ func TestParseServeFlagsRejectsInvalidTLSMode(t *testing.T) {
 	}
 }
 
+// TestParseServeFlagsAcceptsTLSModeOff: "off" is the dev/E2E plaintext mode
+// (never a default — SYS-093 requires TLS on non-local networks).
+func TestParseServeFlagsAcceptsTLSModeOff(t *testing.T) {
+	var out strings.Builder
+	cfg, err := parseServeFlags([]string{"--tls-mode=off"}, &out)
+	if err != nil {
+		t.Fatalf("parseServeFlags(--tls-mode=off): %v", err)
+	}
+	if cfg.tlsMode != "off" {
+		t.Errorf("tlsMode = %q, want off", cfg.tlsMode)
+	}
+}
+
 func TestParseServeFlagsACMERequiresDomain(t *testing.T) {
 	var out strings.Builder
 	if _, err := parseServeFlags([]string{"--role=hub"}, &out); err == nil {

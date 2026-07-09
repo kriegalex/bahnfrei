@@ -28,6 +28,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /events/{topic}", s.handleEvents)
 	mux.HandleFunc("GET /admin", requireRole(app.RoleInstanceAdmin, s.cats, s.handleAdminPlaceholder))
 	mux.Handle("GET /static/", staticHandler())
+	// The capture service worker is served from a root-path URL so it can
+	// claim the /meets/…/capture/ scope (UC-034 #3); see handleServiceWorker.
+	mux.HandleFunc("GET /capture-sw.js", s.handleServiceWorker)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	// First-run setup (UC-001 #1): available only while no account exists.
@@ -72,6 +75,20 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/standings", captureRole(s.handleCaptureStandings))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/attempt", captureRole(s.handleCaptureAttempt))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
+
+	// Offline capture queue (TASK-009, UC-034 / SYS-085/086): the checkout
+	// and replay endpoints are this app's one JSON API (see internal/sync
+	// doc.go and internal/web/sync.go for why). Field-official level and above.
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/checkout", captureRole(s.handleUnitCheckout))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/sync", captureRole(s.handleUnitSync))
+
+	// Checkout override, start-list revision and reconciliation are office
+	// actions (SYS-086, audited per SYS-046).
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/override", office(s.handleCheckoutOverride))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/revise-startlist", office(s.handleReviseStartList))
+	mux.HandleFunc("GET /meets/{id}/reconciliation", office(s.handleReconciliation))
+	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/apply", office(s.handleReconciliationResolve(true)))
+	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/discard", office(s.handleReconciliationResolve(false)))
 
 	// Public read (SYS-090): the current published timetable, stable URL.
 	mux.HandleFunc("GET /m/{id}/timetable", s.handlePublicTimetable)

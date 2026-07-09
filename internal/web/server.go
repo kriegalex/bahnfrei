@@ -68,11 +68,16 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if err != nil {
 		return fmt.Errorf("build TLS config: %w", err)
 	}
-	s.httpSrv.TLSConfig = tlsCfg
-	tlsLn := tls.NewListener(ln, tlsCfg)
+	// TLSModeOff (dev/E2E only) yields a nil config: serve plaintext HTTP on
+	// the bare listener. Every production mode wraps the listener in TLS.
+	srvLn := ln
+	if tlsCfg != nil {
+		s.httpSrv.TLSConfig = tlsCfg
+		srvLn = tls.NewListener(ln, tlsCfg)
+	}
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- s.httpSrv.Serve(tlsLn) }()
+	go func() { errCh <- s.httpSrv.Serve(srvLn) }()
 
 	select {
 	case err := <-errCh:

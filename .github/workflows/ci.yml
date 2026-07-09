@@ -73,6 +73,38 @@ jobs:
             echo "no TypeScript islands yet (first arrive with TASK-005) — nothing to typecheck"
           fi
 
+  islands-fresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - name: Rebuild TS islands and verify the committed JS is fresh
+        run: |
+          ./scripts/build-islands
+          git diff --exit-code internal/web/static
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci
+      - name: Install Playwright chromium
+        working-directory: e2e
+        run: npx playwright install chromium --with-deps
+      - name: UC-034 browser E2E suite (SYS-085/086/087)
+        working-directory: e2e
+        run: npm run test:e2e
+
   licence-scan:
     runs-on: ubuntu-latest
     steps:

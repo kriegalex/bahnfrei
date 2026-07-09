@@ -16,8 +16,12 @@ import (
 // base.css is project-authored.
 //
 // capture.js is the capture page's SSE-driven standings refresh (UC-011 #4).
+// capture-offline.js, office-banner.js and service-worker.js are the TASK-009
+// offline-capture islands (UC-034; SYS-085/087), compiled from islands/*.ts by
+// scripts/build-islands — the emitted JS is committed and embedded so the
+// binary is self-contained (ADR-002/ADR-003).
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/base.css static/capture.js
+//go:embed static/htmx.min.js static/htmx-LICENSE static/base.css static/capture.js static/capture-offline.js static/office-banner.js static/service-worker.js
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.
@@ -27,4 +31,21 @@ func staticHandler() http.Handler {
 		panic(err) // embed layout is fixed at compile time
 	}
 	return http.StripPrefix("/static/", http.FileServerFS(sub))
+}
+
+// handleServiceWorker serves the capture-surface service worker (UC-034 #3)
+// from a root-path URL (/capture-sw.js). A service worker may only claim a
+// scope at or below its own script path, so the worker that must control
+// /meets/{id}/capture/… is served here rather than under /static/. The
+// Service-Worker-Allowed header explicitly permits the /meets/ scope.
+func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
+	body, err := staticAssets.ReadFile("static/service-worker.js")
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Service-Worker-Allowed", "/meets/")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(body)
 }

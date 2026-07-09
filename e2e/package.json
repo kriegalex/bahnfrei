@@ -1,0 +1,13 @@
+{
+  "name": "bahnfrei-e2e",
+  "private": true,
+  "description": "Browser end-to-end suite (Playwright, ADR-003 §ratified E2E tool) for UC-034 offline-tolerant field capture. SPDX-License-Identifier: AGPL-3.0-only",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1"
+  }
+}

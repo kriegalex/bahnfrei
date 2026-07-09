@@ -1,0 +1,16 @@
+{
+  "//": "SPDX-License-Identifier: AGPL-3.0-only — Copyright (c) 2026 Bahnfrei contributors. Typecheck-only config for the Playwright E2E suite (tests run via @playwright/test's own transpiler; nothing is emitted). CI's typecheck-islands job discovers this file and runs `npm ci` + `tsc --noEmit` against it.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["playwright.config.ts", "helpers/**/*.ts", "tests/**/*.ts"]
+}

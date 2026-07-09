@@ -1,0 +1,28 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Bahnfrei contributors
+#
+# Compiles the TypeScript capture islands (TASK-009, ADR-003) to readable
+# ES2020 JavaScript that the Go binary embeds under internal/web/static/.
+# There is no bundler and no minifier by design: the CSP forbids external
+# modules and the emitted JS is reviewed as-is.
+#
+#   scripts/build-islands
+#
+# Freshness contract: the emitted *.js under internal/web/static/ is COMMITTED
+# and MUST be rebuilt whenever an island's .ts source changes. CI enforces this
+# by re-running this script and failing on any `git diff` in static/ (see the
+# build-islands job in .github/workflows/ci.yml). Node v26 + npx are assumed;
+# TypeScript is fetched on demand via `npx -p typescript` (matching the
+# existing typecheck-islands CI job), so no node_modules is required here.
+set -eu
+
+cd "$(dirname "$0")/.."
+
+echo "building islands (islands/tsconfig.json)…"
+npx --yes -p typescript tsc -p islands/tsconfig.json
+
+echo "building service worker (islands/sw/tsconfig.json)…"
+npx --yes -p typescript tsc -p islands/sw/tsconfig.json
+
+echo "islands built into internal/web/static/"

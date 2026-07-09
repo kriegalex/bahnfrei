@@ -50,7 +50,7 @@ func parseServeFlags(args []string, out io.Writer) (serveConfig, error) {
 	role := fs.String("role", roleVenue, "instance role: venue|hub")
 	addr := fs.String("addr", ":8443", "listen address")
 	dataDir := fs.String("data-dir", ".", "directory for the database and TLS cache")
-	tlsMode := fs.String("tls-mode", "", "TLS certificate mode: local|acme (default: local for venue, acme for hub)")
+	tlsMode := fs.String("tls-mode", "", "TLS certificate mode: local|acme|off (default: local for venue, acme for hub; off = plaintext HTTP, dev/E2E only, never on a non-local network per SYS-093)")
 	acmeDomain := fs.String("acme-domain", "", "comma-separated domain(s) to obtain an ACME certificate for (hub/acme mode)")
 	acmeEmail := fs.String("acme-email", "", "ACME account contact email (hub/acme mode)")
 	sessionTTL := fs.Duration("session-ttl", web.SessionTTLDefault, "how long a login session stays valid (SYS-091)")
@@ -70,8 +70,8 @@ func parseServeFlags(args []string, out io.Writer) (serveConfig, error) {
 			mode = string(web.TLSModeLocal)
 		}
 	}
-	if mode != string(web.TLSModeLocal) && mode != string(web.TLSModeACME) {
-		return serveConfig{}, fmt.Errorf("invalid --tls-mode %q: must be %q or %q", mode, web.TLSModeLocal, web.TLSModeACME)
+	if mode != string(web.TLSModeLocal) && mode != string(web.TLSModeACME) && mode != string(web.TLSModeOff) {
+		return serveConfig{}, fmt.Errorf("invalid --tls-mode %q: must be %q, %q or %q", mode, web.TLSModeLocal, web.TLSModeACME, web.TLSModeOff)
 	}
 	if mode == string(web.TLSModeACME) && *acmeDomain == "" {
 		return serveConfig{}, fmt.Errorf("--tls-mode=acme requires --acme-domain")

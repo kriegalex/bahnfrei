@@ -8,7 +8,11 @@ package web
 templ captureIndexPage(p PageData, v captureIndexView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("capture.title") }</h1>
-		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a>
+			{ " · " }
+			<a href={ templ.URL("/meets/" + v.MeetID + "/reconciliation") }>{ p.T("reconciliation.title") }</a>
+		</p>
 		if len(v.Units) == 0 {
 			<p>{ p.T("capture.units_empty") }</p>
 		} else {
@@ -36,6 +40,7 @@ templ capturePage(p PageData, v captureView) {
 		if len(v.Rows) == 0 {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else if v.IsField {
+			@offlineCaptureControls(p, v)
 			@fieldGrid(p, v)
 		} else {
 			@trackForm(p, v)
@@ -49,7 +54,40 @@ templ capturePage(p PageData, v captureView) {
 			@captureStandings(p, v)
 		</section>
 		<script src="/static/capture.js"></script>
+		if v.IsField {
+			<script src="/static/capture-offline.js"></script>
+		}
 	}
+}
+
+// offlineCaptureControls renders the offline-capture island's status
+// indicator plus its configuration/i18n block (UC-034; SYS-085/087). The
+// island (/static/capture-offline.js) reads everything from the config
+// element's data-* attributes — the CSP forbids inline scripts, so no
+// English is hardcoded in TypeScript: all strings arrive translated here.
+templ offlineCaptureControls(p PageData, v captureView) {
+	<div
+		id="capture-offline-status"
+		class="offline-status"
+		role="status"
+		aria-live="polite"
+	>{ p.T("capture.offline.online") }</div>
+	<div
+		id="capture-offline-config"
+		hidden
+		data-sync-url={ "/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sync" }
+		data-checkout-url={ "/meets/" + v.MeetID + "/capture/" + v.UnitID + "/checkout" }
+		data-unit-id={ v.UnitID }
+		data-meet-id={ v.MeetID }
+		data-csrf={ p.CSRFToken }
+		data-sw-url="/capture-sw.js"
+		data-sw-scope={ "/meets/" + v.MeetID + "/capture/" }
+		data-i18n-online={ p.T("capture.offline.online") }
+		data-i18n-offline={ p.T("capture.offline.offline") }
+		data-i18n-syncing={ p.T("capture.offline.syncing") }
+		data-i18n-pending={ p.T("capture.offline.pending", "n", "{n}") }
+		data-i18n-reconcile={ p.T("capture.offline.reconcile") }
+	></div>
 }
 
 // fieldGrid renders the horizontal-attempt grid: one input per trial that
@@ -76,7 +114,13 @@ templ fieldGrid(p PageData, v captureView) {
 					<td>{ row.Name }</td>
 					for _, cell := range row.Cells {
 						<td>
-							<form action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/attempt") } method="post" class="cell-form">
+							<form
+								action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/attempt") }
+								method="post"
+								class="cell-form"
+								data-athlete={ row.AthleteID }
+								data-seq={ cell.Seq }
+							>
 								<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 								<input type="hidden" name="athlete" value={ row.AthleteID }/>
 								<input type="hidden" name="seq" value={ cell.Seq }/>

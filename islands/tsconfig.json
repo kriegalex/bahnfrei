@@ -1,0 +1,19 @@
+{
+  "//": "SPDX-License-Identifier: AGPL-3.0-only — Copyright (c) 2026 Bahnfrei contributors. Strict TS config for the DOM-side capture islands (ADR-003: TypeScript, minimal, per-widget). Emits readable ES2020 into internal/web/static/ (no bundler, no minify); the Go binary embeds the emitted .js. Compile with scripts/build-islands; the service worker has its own tsconfig under sw/ (WebWorker lib, incompatible with DOM in one program).",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "removeComments": false,
+    "newLine": "lf",
+    "rootDir": "src",
+    "outDir": "../internal/web/static"
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -51,12 +51,25 @@ templ layout(p PageData) {
 					</form>
 				</nav>
 			</header>
+			if p.LoggedIn {
+				// Office blip-tolerance banner (UC-034 #7; SYS-087): the
+				// office-banner island unhides this on a connectivity drop and
+				// re-hides it on reconnect. Rendered on authenticated operator
+				// surfaces only; the CSP forbids inline scripts so the string
+				// arrives translated here, not in the TypeScript.
+				<div id="offline-banner" class="offline-banner" role="alert" hidden>
+					{ p.T("offline.banner.degraded") }
+				</div>
+			}
 			<main id="main" aria-live="polite">
 				if p.FlashError != "" {
 					<p class="error" role="alert">{ p.FlashError }</p>
 				}
 				{ children... }
 			</main>
+			if p.LoggedIn {
+				<script src="/static/office-banner.js"></script>
+			}
 		</body>
 	</html>
 }

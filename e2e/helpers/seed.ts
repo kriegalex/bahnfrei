@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+//
+// HTTP-level seeding for the UC-034 suite, driving the same operator forms
+// the Go web tests use (internal/web/capture_test.go's ukcCaptureFixture):
+// first-run setup, login, a UBS Kids Cup template meet, two athletes. No
+// test-only server hooks — everything goes through real product endpoints.
+// Uses the browser context's own APIRequestContext so cookies (session,
+// CSRF) are shared with the page.
+import { expect, type APIRequestContext } from "@playwright/test";
+
+export const ADMIN = { username: "admin", password: "s3cret-passphrase" };
+
+export function csrfFrom(html: string): string {
+  const m = html.match(/name="csrf_token" value="([^"]+)"/);
+  if (!m) {
+    throw new Error("csrf_token hidden field not found");
+  }
+  return m[1];
+}
+
+async function getBody(request: APIRequestContext, url: string): Promise<string> {
+  const res = await request.get(url);
+  expect(res.ok(), `GET ${url} -> ${res.status()}`).toBe(true);
+  return res.text();
+}
+
+async function postForm(
+  request: APIRequestContext,
+  csrfPage: string,
+  target: string,
+  form: Record<string, string>,
+): Promise<string> {
+  const csrf = csrfFrom(await getBody(request, csrfPage));
+  const res = await request.post(target, {
+    form: { ...form, csrf_token: csrf },
+    maxRedirects: 0,
+  });
+  expect(res.status(), `POST ${target} -> ${res.status()}`).toBe(303);
+  return res.headers()["location"] ?? "";
+}
+
+/** First-run setup + login as the admin account (all roles). */
+export async function setupAndLogin(
+  request: APIRequestContext,
+  baseURL: string,
+): Promise<void> {
+  // Setup only exists while no account does (it redirects to /login once
+  // bootstrapped); a second context just logs in.
+  const setup = await request.get(baseURL + "/setup");
+  if (setup.ok() && setup.url().includes("/setup")) {
+    const res = await request.post(baseURL + "/setup", {
+      form: {
+        username: ADMIN.username,
+        display_name: "Administrator",
+        password: ADMIN.password,
+        csrf_token: csrfFrom(await setup.text()),
+      },
+      maxRedirects: 0,
+    });
+    expect(res.status()).toBe(303);
+  }
+  await postForm(request, baseURL + "/login", baseURL + "/login", {
+    username: ADMIN.username,
+    password: ADMIN.password,
+  });
+}
+
+export interface UkcFixture {
+  meetID: string;
+  /** discipline name -> unit ID (e.g. "Zone Long Jump (UKC)"). */
+  units: Record<string, string>;
+  /** bib -> athlete ID. */
+  athletes: Record<string, string>;
+  unitURL: string; // the zone long jump capture page (the offline surface)
+}
+
+/** Creates a UKC template meet with two W12 girls and maps its units. */
+export async function seedUkcMeet(
+  request: APIRequestContext,
+  baseURL: string,
+): Promise<UkcFixture> {
+  const location = await postForm(
+    request,
+    baseURL + "/meets/from-template",
+    baseURL + "/meets/from-template",
+    { template: "ubs-kids-cup", date: "2026-08-15", venue: "Le Mouret" },
+  );
+  const meetID = location.replace("/meets/", "");
+  expect(meetID).toMatch(/^[0-9A-Za-z]+$/);
+
+  for (const athlete of [
+    { first_name: "Anna", last_name: "Muster", birth_year: "2014", sex: "W", bib: "101" },
+    { first_name: "Bea", last_name: "Beispiel", birth_year: "2014", sex: "W", bib: "102" },
+  ]) {
+    await postForm(
+      request,
+      `${baseURL}/meets/${meetID}/roster`,
+      `${baseURL}/meets/${meetID}/roster`,
+      athlete,
+    );
+  }
+
+  const index = await getBody(request, `${baseURL}/meets/${meetID}/capture`);
+  const units: Record<string, string> = {};
+  for (const m of index.matchAll(
+    new RegExp(`/meets/${meetID}/capture/([0-9A-Za-z]+)">([^<]+)<`, "g"),
+  )) {
+    units[m[2]] = m[1];
+  }
+  expect(Object.keys(units), "the 3 UKC disciplines").toHaveLength(3);
+
+  const unitID = units["Zone Long Jump (UKC)"];
+  const unitURL = `${baseURL}/meets/${meetID}/capture/${unitID}`;
+  const page = await getBody(request, unitURL);
+  const athletes: Record<string, string> = {};
+  for (const m of page.matchAll(
+    /<tr>\s*<td>(\d+)<\/td>[\s\S]*?name="athlete" value="([0-9A-Za-z]+)"/g,
+  )) {
+    athletes[m[1]] = m[2];
+  }
+  expect(Object.keys(athletes).length).toBeGreaterThan(0);
+  return { meetID, units, athletes, unitURL };
+}

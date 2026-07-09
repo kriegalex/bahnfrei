@@ -36,6 +36,13 @@ const (
 	// TLSModeACME manages a publicly-trusted certificate via certmagic/ACME
 	// (ADR-003), for the internet-reachable hub role (ADR-002).
 	TLSModeACME TLSMode = "acme"
+	// TLSModeOff serves plaintext HTTP with no TLS. It exists for local
+	// development and the browser end-to-end suite only (loopback is a
+	// secure context, so service workers register over http://localhost —
+	// UC-034 #3): SYS-093 still requires TLS on any non-local network, so
+	// this mode MUST NOT be used for real venue/hub deployments and is never
+	// a default.
+	TLSModeOff TLSMode = "off"
 )
 
 // TLSConfig configures certificate acquisition for the HTTP server.
@@ -63,6 +70,8 @@ type TLSConfig struct {
 // internet-reachable domain; local mode never touches the network.
 func NewTLSConfig(ctx context.Context, cfg TLSConfig) (*tls.Config, error) {
 	switch cfg.Mode {
+	case TLSModeOff:
+		return nil, nil // plaintext HTTP; Serve skips the TLS listener wrapper
 	case TLSModeLocal:
 		return localTLSConfig(cfg)
 	case TLSModeACME:
