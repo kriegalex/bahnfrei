@@ -90,8 +90,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/apply", office(s.handleReconciliationResolve(true)))
 	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/discard", office(s.handleReconciliationResolve(false)))
 
-	// Public read (SYS-090): the current published timetable, stable URL.
+	// Public read (SYS-090/070): unauthenticated, stable /m/{id}/... URLs
+	// that keep serving a meet's archived state after it closes (UC-017).
+	mux.HandleFunc("GET /m/{id}", s.handlePublicMeet)
 	mux.HandleFunc("GET /m/{id}/timetable", s.handlePublicTimetable)
+	mux.HandleFunc("GET /m/{id}/startlists", s.handlePublicStartLists)
+	mux.HandleFunc("GET /m/{id}/results", s.handlePublicResults)
+	mux.HandleFunc("GET /m/{id}/results/live", s.handlePublicResultsLive)
 
 	var h http.Handler = mux
 	h = csrfMiddleware()(h)

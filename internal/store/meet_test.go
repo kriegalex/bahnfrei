@@ -130,6 +130,56 @@ func TestMeetUpdateAndStatus(t *testing.T) {
 	}
 }
 
+// TestMeetResultsPositioningSYS076 covers the SYS-076 official-results
+// positioning columns: a freshly created meet defaults to
+// federation_official (the conservative default — a new meet never
+// silently implies it is an authoritative publication), the organizer can
+// switch to primary (or back) with the source name/URL round-tripping
+// through UpdateMeet, and an invalid positioning value is rejected by both
+// CreateMeet and UpdateMeet.
+func TestMeetResultsPositioningSYS076(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	m := testMeet(t, s)
+	if m.ResultsPositioning != domain.ResultsPositioningFederationOfficial {
+		t.Errorf("default results positioning = %q, want federation_official", m.ResultsPositioning)
+	}
+	got, err := GetMeet(ctx, s.DB(), m.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ResultsPositioning != domain.ResultsPositioningFederationOfficial || got.OfficialSourceName != "" {
+		t.Errorf("round-tripped default positioning = %+v", got)
+	}
+
+	edited := m.Meet
+	edited.ResultsPositioning = domain.ResultsPositioningPrimary
+	edited.OfficialSourceName = "Swiss Athletics"
+	edited.OfficialSourceURL = "https://www.swiss-athletics.ch/results"
+	if _, err := UpdateMeet(ctx, s.DB(), m.ID, m.Version, edited); err != nil {
+		t.Fatalf("UpdateMeet(positioning): %v", err)
+	}
+	got, err = GetMeet(ctx, s.DB(), m.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ResultsPositioning != domain.ResultsPositioningPrimary ||
+		got.OfficialSourceName != "Swiss Athletics" ||
+		got.OfficialSourceURL != "https://www.swiss-athletics.ch/results" {
+		t.Errorf("round-tripped positioning override = %+v", got)
+	}
+
+	invalid := m.Meet
+	invalid.ResultsPositioning = "not-a-real-value"
+	if _, err := CreateMeet(ctx, s.DB(), invalid); err == nil {
+		t.Error("CreateMeet accepted an invalid results positioning (SYS-076)")
+	}
+	if _, err := UpdateMeet(ctx, s.DB(), m.ID, got.Version, invalid); err == nil {
+		t.Error("UpdateMeet accepted an invalid results positioning (SYS-076)")
+	}
+}
+
 // TestSessionsPerDay covers SYS-001 "sessions per day" / UC-001 #2 (two
 // days, two sessions per day).
 func TestSessionsPerDay(t *testing.T) {

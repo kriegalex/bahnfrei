@@ -82,15 +82,21 @@ type SessionPlan struct {
 }
 
 // MeetRequest carries the organizer-editable meet attributes (SYS-001).
+// ResultsPositioning/OfficialSourceName/OfficialSourceURL carry the SYS-076
+// official-results positioning; an empty ResultsPositioning defaults to
+// federation_official (the conservative default).
 type MeetRequest struct {
-	Name             string
-	Venue            string
-	HomologationRef  string
-	StartDate        time.Time
-	EndDate          time.Time
-	Tier             string
-	CategorySchemeID string
-	Sessions         []SessionPlan
+	Name               string
+	Venue              string
+	HomologationRef    string
+	StartDate          time.Time
+	EndDate            time.Time
+	Tier               string
+	CategorySchemeID   string
+	Sessions           []SessionPlan
+	ResultsPositioning string
+	OfficialSourceName string
+	OfficialSourceURL  string
 }
 
 func (s *MeetService) validateMeetRequest(req MeetRequest) error {
@@ -101,6 +107,9 @@ func (s *MeetService) validateMeetRequest(req MeetRequest) error {
 		if sp.Day.Before(req.StartDate) || sp.Day.After(req.EndDate) {
 			return fmt.Errorf("session day %s is outside the meet dates", sp.Day.Format("2006-01-02"))
 		}
+	}
+	if req.ResultsPositioning != "" && !domain.ResultsPositioning(req.ResultsPositioning).Valid() {
+		return fmt.Errorf("invalid results positioning %q (SYS-076)", req.ResultsPositioning)
 	}
 	return nil
 }
@@ -122,14 +131,17 @@ func (s *MeetService) CreateMeet(ctx context.Context, actor Session, req MeetReq
 	defer func() { _ = tx.Rollback() }()
 
 	rec, err := store.CreateMeet(ctx, tx, domain.Meet{
-		Name:             req.Name,
-		Venue:            req.Venue,
-		HomologationRef:  req.HomologationRef,
-		StartDate:        req.StartDate,
-		EndDate:          req.EndDate,
-		Organizer:        actor.Username,
-		Tier:             domain.MeetTier(req.Tier),
-		CategorySchemeID: req.CategorySchemeID,
+		Name:               req.Name,
+		Venue:              req.Venue,
+		HomologationRef:    req.HomologationRef,
+		StartDate:          req.StartDate,
+		EndDate:            req.EndDate,
+		Organizer:          actor.Username,
+		Tier:               domain.MeetTier(req.Tier),
+		CategorySchemeID:   req.CategorySchemeID,
+		ResultsPositioning: domain.ResultsPositioning(req.ResultsPositioning),
+		OfficialSourceName: req.OfficialSourceName,
+		OfficialSourceURL:  req.OfficialSourceURL,
 	})
 	if err != nil {
 		return MeetRecord{}, err
@@ -176,12 +188,15 @@ func (s *MeetService) UpdateMeet(ctx context.Context, actor Session, meetID stri
 		return err
 	}
 	if _, err := store.UpdateMeet(ctx, tx, meetID, expectedVersion, domain.Meet{
-		Name:            req.Name,
-		Venue:           req.Venue,
-		HomologationRef: req.HomologationRef,
-		StartDate:       req.StartDate,
-		EndDate:         req.EndDate,
-		Tier:            domain.MeetTier(req.Tier),
+		Name:               req.Name,
+		Venue:              req.Venue,
+		HomologationRef:    req.HomologationRef,
+		StartDate:          req.StartDate,
+		EndDate:            req.EndDate,
+		Tier:               domain.MeetTier(req.Tier),
+		ResultsPositioning: domain.ResultsPositioning(req.ResultsPositioning),
+		OfficialSourceName: req.OfficialSourceName,
+		OfficialSourceURL:  req.OfficialSourceURL,
 	}); err != nil {
 		return err
 	}

@@ -127,6 +127,31 @@ const (
 // custom tier for unsanctioned meets.
 type MeetTier string
 
+// ResultsPositioning is the organizer's per-meet official-results
+// positioning choice (SYS-076): whether a federation channel is the
+// official source (this system's public pages must then carry an
+// "unofficial results" label with a reference to that source) or whether
+// this system itself is the primary/official publication (no label).
+type ResultsPositioning string
+
+const (
+	// ResultsPositioningFederationOfficial marks a federation channel (or
+	// other external system) as the official results source — the default
+	// for sanctioned meets (SYS-076). Every public results page/export
+	// then carries the "unofficial results" label plus a reference to
+	// OfficialSourceName/OfficialSourceURL.
+	ResultsPositioningFederationOfficial ResultsPositioning = "federation_official"
+	// ResultsPositioningPrimary marks this system as the primary/official
+	// publication (e.g. unsanctioned meets) — no unofficial-results label
+	// renders.
+	ResultsPositioningPrimary ResultsPositioning = "primary"
+)
+
+// Valid reports whether p is one of the enumerated positioning values.
+func (p ResultsPositioning) Valid() bool {
+	return p == ResultsPositioningFederationOfficial || p == ResultsPositioningPrimary
+}
+
 // Meet is the SyRS §2 Meet entity: name, venue, date range, sessions,
 // organizer, tier, status (SYS-001/004/006). HomologationRef is the venue's
 // homologation reference recorded for the sanctioning summary (SYS-006).
@@ -136,20 +161,26 @@ type MeetTier string
 // TemplateID/ScoringTableID record which competition template created the
 // meet and which points table scores it (SYS-053) — empty for meets
 // composed by hand.
+// ResultsPositioning/OfficialSourceName/OfficialSourceURL record the
+// organizer's SYS-076 official-results positioning choice for this meet's
+// public pages and exports.
 type Meet struct {
-	ID               string
-	Name             string
-	Venue            string
-	HomologationRef  string
-	StartDate        time.Time
-	EndDate          time.Time
-	Organizer        string
-	Tier             MeetTier
-	Status           MeetStatus
-	CategorySchemeID string
-	TemplateID       string
-	ScoringTableID   string
-	ExternalIDs      ExternalIDs
+	ID                 string
+	Name               string
+	Venue              string
+	HomologationRef    string
+	StartDate          time.Time
+	EndDate            time.Time
+	Organizer          string
+	Tier               MeetTier
+	Status             MeetStatus
+	CategorySchemeID   string
+	TemplateID         string
+	ScoringTableID     string
+	ResultsPositioning ResultsPositioning
+	OfficialSourceName string
+	OfficialSourceURL  string
+	ExternalIDs        ExternalIDs
 }
 
 // Validate checks the minimal Meet invariants (SYS-001).
@@ -162,6 +193,9 @@ func (m *Meet) Validate() error {
 	}
 	if m.EndDate.Before(m.StartDate) {
 		return errors.New("meet: end date before start date")
+	}
+	if m.ResultsPositioning != "" && !m.ResultsPositioning.Valid() {
+		return fmt.Errorf("meet: invalid results positioning %q (SYS-076)", m.ResultsPositioning)
 	}
 	return nil
 }

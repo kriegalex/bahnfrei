@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// publicNav cross-links the meet's public surfaces (SYS-070: overview,
+// timetable, start lists, results at their stable /m/{id}/... URLs).
+templ publicNav(p PageData, meetID string) {
+	<p>
+		<a href={ templ.URL("/m/" + meetID) }>{ p.T("public.nav.overview") }</a>
+		{ " · " }
+		<a href={ templ.URL("/m/" + meetID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a>
+		{ " · " }
+		<a href={ templ.URL("/m/" + meetID + "/startlists") }>{ p.T("public.nav.startlists") }</a>
+		{ " · " }
+		<a href={ templ.URL("/m/" + meetID + "/results") }>{ p.T("public.nav.results") }</a>
+	</p>
+}
+
+// publicMeetPage is the unauthenticated meet overview (SYS-070, UC-017
+// #2/#3): readable on a 360px viewport, no login wall, valid at the same
+// URL for an archived meet.
+templ publicMeetPage(p PageData, v publicMeetView) {
+	@layout(p) {
+		<h1>{ v.MeetName }</h1>
+		<p>{ v.Venue } · { v.Dates } · <strong>{ v.Status }</strong></p>
+		@publicNav(p, v.MeetID)
+	}
+}
+
+// publicStartListsPage lists a meet's participants publicly (SYS-070,
+// UC-017 #2): bib, name, birth year, club — reusing the roster shape.
+templ publicStartListsPage(p PageData, v publicStartListsView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("public.startlists.title") }</h1>
+		@publicNav(p, v.MeetID)
+		if len(v.Rows) == 0 {
+			<p>{ p.T("public.startlists.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("roster.bib") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("roster.birth_year") }</th>
+							<th>{ p.T("roster.club") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.Bib }</td>
+								<td>{ row.Name }</td>
+								<td>{ row.BirthYear }</td>
+								<td>{ row.Club }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// publicResultsFragment renders the refreshable content of the public
+// results page (UC-017 #1: the live-refresh island swaps this in on the
+// meet's "results" SSE event) — the SYS-076 unofficial-results label, the
+// meet-state status line, and the division standings with SYS-074
+// localized discipline labels.
+templ publicResultsFragment(p PageData, v publicResultsView) {
+	<p><strong>{ v.StatusLine }</strong></p>
+	if v.ShowUnofficialLabel {
+		<p class="unofficial-label" role="note">
+			{ p.T("public.results.unofficial_badge") }
+			if v.OfficialSourceName != "" {
+				{ " — " + p.T("public.results.official_reference_prefix") + " " }
+				if v.OfficialSourceURL != "" {
+					<a href={ templ.URL(v.OfficialSourceURL) } rel="noopener" target="_blank">{ v.OfficialSourceName }</a>
+				} else {
+					{ v.OfficialSourceName }
+				}
+			}
+		</p>
+	}
+	if len(v.Divisions) == 0 {
+		<p>{ p.T("standings.empty") }</p>
+	} else {
+		<p>{ p.T("standings.gap_legend") }</p>
+		for _, div := range v.Divisions {
+			<h2>{ div.Code }</h2>
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("standings.rank") }</th>
+							<th>{ p.T("roster.bib") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("roster.club") }</th>
+							<th>{ p.T("roster.birth_year") }</th>
+							for _, d := range v.Disciplines {
+								<th>{ d }</th>
+							}
+							<th>{ p.T("standings.total") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range div.Rows {
+							<tr>
+								<td>{ row.Rank }</td>
+								<td>{ row.Bib }</td>
+								<td>{ row.Name }</td>
+								<td>{ row.Club }</td>
+								<td>{ row.BirthYear }</td>
+								for _, cell := range row.Cells {
+									<td>
+										{ cell.Mark }
+										if cell.Points != "" {
+											<small>{ " (" + cell.Points + " " + p.T("standings.points_abbr") + ")" }</small>
+										}
+									</td>
+								}
+								<td><strong>{ row.Total }</strong></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// publicResultsPage is the unauthenticated live-results page (SYS-070/071,
+// UC-017 #1/#2/#5): the #public-results section carries the SSE topic and
+// refresh URL the live-refresh island (/static/public-live.js) reads —
+// only that section swaps on a "results" event, so the page chrome never
+// flickers.
+templ publicResultsPage(p PageData, v publicResultsView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("public.results.title") }</h1>
+		<p>{ v.Venue } · { v.Dates }</p>
+		@publicNav(p, v.MeetID)
+		<section
+			id="public-results"
+			data-sse-topic={ "meet-" + v.MeetID }
+			data-sse-event="results"
+			data-sse-refresh={ "/m/" + v.MeetID + "/results/live" }
+		>
+			@publicResultsFragment(p, v)
+		</section>
+		<script src="/static/public-live.js"></script>
+	}
+}

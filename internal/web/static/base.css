@@ -93,6 +93,21 @@ main {
 }
 .offline-banner[hidden] { display: none; }
 
+/* Wide tables (timetable, start lists, results) scroll within their own
+   box rather than the page (SYS-113: legible/navigable at 360px, UC-017
+   #2) — the body itself never scrolls horizontally. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* SYS-076 unofficial-results label on public pages. */
+.unofficial-label {
+  background: #fff4e5;
+  color: #7a3d00;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+}
+
 a, button, input, select {
   font-size: 1rem;
 }

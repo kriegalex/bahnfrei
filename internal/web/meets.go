@@ -175,6 +175,9 @@ func (s *Server) handleMeetEditForm(w http.ResponseWriter, r *http.Request) {
 	form.Tier = string(d.Tier)
 	form.SchemeID = d.CategorySchemeID
 	form.SchemeFixed = true // the scheme is chosen at creation; events already depend on it
+	form.ResultsPositioning = string(d.ResultsPositioning)
+	form.OfficialSourceName = d.OfficialSourceName
+	form.OfficialSourceURL = d.OfficialSourceURL
 	for i, sess := range d.Sessions {
 		if i >= maxSessionRows {
 			break
@@ -315,6 +318,7 @@ func (s *Server) handlePublicTimetable(w http.ResponseWriter, r *http.Request) {
 	p := basePageData(r, s.cats)
 	p.Title = rec.Name
 	view := publicTimetableView{
+		MeetID:      rec.ID,
 		MeetName:    rec.Name,
 		Venue:       rec.Venue,
 		Dates:       formatDateRange(rec.StartDate, rec.EndDate),
@@ -330,12 +334,21 @@ func (s *Server) handlePublicTimetable(w http.ResponseWriter, r *http.Request) {
 // errBadInput marks unparseable form input (dates, numbers).
 var errBadInput = errors.New("bad form input")
 
+// resultsPositionings lists the SYS-076 positioning choices offered on the
+// meet form, in a stable order (federation_official first: the default).
+var resultsPositionings = []string{
+	string(domain.ResultsPositioningFederationOfficial),
+	string(domain.ResultsPositioningPrimary),
+}
+
 func (s *Server) emptyMeetForm() meetFormView {
 	return meetFormView{
-		Tiers:    []string{"A-Meeting", "B-Meeting", "C-Meeting"},
-		Schemes:  s.meets.CategorySchemes(),
-		SchemeID: domain.SchemeSwissAthletics,
-		Sessions: make([]sessionRowView, maxSessionRows),
+		Tiers:               []string{"A-Meeting", "B-Meeting", "C-Meeting"},
+		Schemes:             s.meets.CategorySchemes(),
+		SchemeID:            domain.SchemeSwissAthletics,
+		Sessions:            make([]sessionRowView, maxSessionRows),
+		ResultsPositionings: resultsPositionings,
+		ResultsPositioning:  string(domain.ResultsPositioningFederationOfficial),
 	}
 }
 
@@ -357,6 +370,11 @@ func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, 
 	if v := r.FormValue("scheme"); v != "" {
 		form.SchemeID = v
 	}
+	if v := r.FormValue("results_positioning"); v != "" {
+		form.ResultsPositioning = v
+	}
+	form.OfficialSourceName = strings.TrimSpace(r.FormValue("official_source_name"))
+	form.OfficialSourceURL = strings.TrimSpace(r.FormValue("official_source_url"))
 	for i := 0; i < maxSessionRows; i++ {
 		form.Sessions[i] = sessionRowView{
 			Day:   r.FormValue(fmt.Sprintf("session_day_%d", i)),
@@ -365,11 +383,14 @@ func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, 
 	}
 
 	req := app.MeetRequest{
-		Name:             form.Name,
-		Venue:            form.Venue,
-		HomologationRef:  form.HomologationRef,
-		Tier:             form.Tier,
-		CategorySchemeID: form.SchemeID,
+		Name:               form.Name,
+		Venue:              form.Venue,
+		HomologationRef:    form.HomologationRef,
+		Tier:               form.Tier,
+		CategorySchemeID:   form.SchemeID,
+		ResultsPositioning: form.ResultsPositioning,
+		OfficialSourceName: form.OfficialSourceName,
+		OfficialSourceURL:  form.OfficialSourceURL,
 	}
 	if req.Name == "" || form.StartDate == "" || form.EndDate == "" {
 		return form, req, errBadInput
@@ -457,6 +478,12 @@ type meetFormView struct {
 	Schemes         []string
 	SchemeFixed     bool
 	Sessions        []sessionRowView
+	// ResultsPositioning fields expose the SYS-076 organizer configuration
+	// on the create/edit meet form.
+	ResultsPositioning  string
+	ResultsPositionings []string
+	OfficialSourceName  string
+	OfficialSourceURL   string
 }
 
 type programmeRowView struct {
@@ -504,6 +531,10 @@ type meetDetailView struct {
 	Versions        []timetableVersionRowView
 	Disciplines     []disciplineOptionView
 	Categories      []string
+	// ResultsPositioningLabel is the localized SYS-076 configuration
+	// summary shown to the organizer ("Federation channel is official —
+	// source: …" / "This system is the primary publication").
+	ResultsPositioningLabel string
 }
 
 type sanctioningView struct {
@@ -522,6 +553,7 @@ type sanctioningView struct {
 }
 
 type publicTimetableView struct {
+	MeetID      string
 	MeetName    string
 	Venue       string
 	Dates       string
@@ -562,17 +594,18 @@ func (s *Server) unitRows(p PageData, entries []app.TimetableEntry) []unitRowVie
 
 func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.TimetableVersion) meetDetailView {
 	view := meetDetailView{
-		ID:              d.ID,
-		Version:         d.Version,
-		Name:            d.Name,
-		Venue:           d.Venue,
-		HomologationRef: d.HomologationRef,
-		Dates:           formatDateRange(d.StartDate, d.EndDate),
-		Tier:            string(d.Tier),
-		Status:          p.T("meet.status." + string(d.Status)),
-		Archived:        d.Status == domain.MeetArchived,
-		SchemeID:        d.CategorySchemeID,
-		Units:           s.unitRows(p, d.Units),
+		ID:                      d.ID,
+		Version:                 d.Version,
+		Name:                    d.Name,
+		Venue:                   d.Venue,
+		HomologationRef:         d.HomologationRef,
+		Dates:                   formatDateRange(d.StartDate, d.EndDate),
+		Tier:                    string(d.Tier),
+		Status:                  p.T("meet.status." + string(d.Status)),
+		Archived:                d.Status == domain.MeetArchived,
+		SchemeID:                d.CategorySchemeID,
+		Units:                   s.unitRows(p, d.Units),
+		ResultsPositioningLabel: resultsPositioningSummary(p, d.ResultsPositioning, d.OfficialSourceName),
 	}
 	for _, sess := range d.Sessions {
 		view.Sessions = append(view.Sessions, sessionRowView{
@@ -613,6 +646,35 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		}
 	}
 	return view
+}
+
+// resultsPositioningSummary renders the organizer-facing SYS-076 summary
+// line for the meet workspace: which channel is the official source, so
+// the organizer can see at a glance what their public pages will show.
+func resultsPositioningSummary(p PageData, positioning domain.ResultsPositioning, sourceName string) string {
+	if positioning == domain.ResultsPositioningPrimary {
+		return p.T("meet.results_positioning.primary")
+	}
+	name := sourceName
+	if name == "" {
+		name = p.T("meet.results_positioning.source_unconfigured")
+	}
+	return p.T("meet.results_positioning.federation_official", "source", name)
+}
+
+// localizedDisciplineName resolves a discipline code to its localized
+// display name for public surfaces (SYS-074): a per-locale
+// "discipline.<code>" catalog key if one is shipped, falling back to the
+// catalog's canonical (English) name otherwise (PoC scope — see
+// docs/requirements/open-questions-and-assumptions.md).
+func (s *Server) localizedDisciplineName(p PageData, code string) string {
+	if name := p.T("discipline." + code); !strings.HasPrefix(name, "[[") {
+		return name
+	}
+	if disc, ok := s.meets.Catalog().ByCode(code); ok {
+		return disc.Name
+	}
+	return code
 }
 
 func (s *Server) sanctioningView(p PageData, sum app.SanctioningSummary) sanctioningView {

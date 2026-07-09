@@ -95,16 +95,25 @@ func (s *MeetService) CreateMeetFromTemplate(ctx context.Context, actor Session,
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// SYS-076: templates seed the positioning default; empty defaults to
+	// federation_official at the store layer (the conservative default).
+	positioning := tpl.ResultsPositioning
+	if positioning == "" {
+		positioning = domain.ResultsPositioningFederationOfficial
+	}
 	rec, err := store.CreateMeet(ctx, tx, domain.Meet{
-		Name:             name,
-		Venue:            req.Venue,
-		StartDate:        req.Date,
-		EndDate:          req.Date,
-		Organizer:        actor.Username,
-		Tier:             domain.MeetTier(tpl.Tier),
-		CategorySchemeID: tpl.CategorySchemeID,
-		TemplateID:       tpl.ID,
-		ScoringTableID:   tpl.ScoringTableID,
+		Name:               name,
+		Venue:              req.Venue,
+		StartDate:          req.Date,
+		EndDate:            req.Date,
+		Organizer:          actor.Username,
+		Tier:               domain.MeetTier(tpl.Tier),
+		CategorySchemeID:   tpl.CategorySchemeID,
+		TemplateID:         tpl.ID,
+		ScoringTableID:     tpl.ScoringTableID,
+		ResultsPositioning: positioning,
+		OfficialSourceName: tpl.OfficialSourceName,
+		OfficialSourceURL:  tpl.OfficialSourceURL,
 	})
 	if err != nil {
 		return MeetRecord{}, err

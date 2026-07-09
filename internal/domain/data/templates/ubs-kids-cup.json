@@ -11,5 +11,8 @@
     {"disciplineCode": "60m", "attempts": 1},
     {"disciplineCode": "ZoneLJ", "attempts": 3},
     {"disciplineCode": "BallThrow200g", "attempts": 3}
-  ]
+  ],
+  "resultsPositioning": "federation_official",
+  "officialSourceName": "UBS Kids Cup",
+  "officialSourceURL": "https://www.ubs-kidscup.ch/fileadmin/ubskidscup/downloads/UBS_Kids_Cup_Reglement_DE.pdf"
 }

@@ -22,16 +22,23 @@ type TemplateEvent struct {
 // venue (UC-033 #1). Like all rule-shaped data (ADR-005 §4) templates are
 // data, not code — a new series (Visana Sprint, Mille Gruyère, … "Later"
 // per SYS-053) is a new file, not a new code path.
+// ResultsPositioning/OfficialSourceName/OfficialSourceURL seed the SYS-076
+// default a meet created from this template carries; empty
+// ResultsPositioning defaults to federation_official at creation time (the
+// conservative default — see MeetService.CreateMeetFromTemplate).
 type MeetTemplate struct {
-	ID               string          `json:"id"`
-	Version          string          `json:"version"`
-	Name             string          `json:"name"`
-	Source           string          `json:"source"`
-	CategorySchemeID string          `json:"categorySchemeID"`
-	ScoringTableID   string          `json:"scoringTableID"`
-	Tier             string          `json:"tier"`
-	Notes            string          `json:"notes"`
-	Events           []TemplateEvent `json:"events"`
+	ID                 string             `json:"id"`
+	Version            string             `json:"version"`
+	Name               string             `json:"name"`
+	Source             string             `json:"source"`
+	CategorySchemeID   string             `json:"categorySchemeID"`
+	ScoringTableID     string             `json:"scoringTableID"`
+	Tier               string             `json:"tier"`
+	Notes              string             `json:"notes"`
+	Events             []TemplateEvent    `json:"events"`
+	ResultsPositioning ResultsPositioning `json:"resultsPositioning,omitempty"`
+	OfficialSourceName string             `json:"officialSourceName,omitempty"`
+	OfficialSourceURL  string             `json:"officialSourceURL,omitempty"`
 }
 
 // ParseMeetTemplate decodes and validates a meet-template data file. The
@@ -74,6 +81,9 @@ func (t *MeetTemplate) Validate() error {
 		if ev.Attempts < 1 {
 			return fmt.Errorf("meet template %q: event %q needs at least one attempt", t.ID, ev.DisciplineCode)
 		}
+	}
+	if t.ResultsPositioning != "" && !t.ResultsPositioning.Valid() {
+		return fmt.Errorf("meet template %q: invalid resultsPositioning %q (SYS-076)", t.ID, t.ResultsPositioning)
 	}
 	return nil
 }

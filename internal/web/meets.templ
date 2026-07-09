@@ -130,6 +130,28 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 					</div>
 				}
 			</fieldset>
+			<fieldset>
+				<legend>{ p.T("meet.field.results_positioning") }</legend>
+				<p>{ p.T("meet.results_positioning.hint") }</p>
+				<label>
+					{ p.T("meet.field.results_positioning") }
+					<select name="results_positioning">
+						for _, pos := range f.ResultsPositionings {
+							<option value={ pos } selected?={ pos == f.ResultsPositioning }>
+								{ p.T("meet.results_positioning.option." + pos) }
+							</option>
+						}
+					</select>
+				</label>
+				<label>
+					{ p.T("meet.field.official_source_name") }
+					<input type="text" name="official_source_name" value={ f.OfficialSourceName }/>
+				</label>
+				<label>
+					{ p.T("meet.field.official_source_url") }
+					<input type="url" name="official_source_url" value={ f.OfficialSourceURL }/>
+				</label>
+			</fieldset>
 			<button type="submit">{ p.T("meet.form.save") }</button>
 		</form>
 	}
@@ -150,8 +172,12 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
-			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a>
+			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
+			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·
+			<a href={ templ.URL("/m/" + d.ID + "/startlists") }>{ p.T("public.nav.startlists") }</a> ·
+			<a href={ templ.URL("/m/" + d.ID + "/results") }>{ p.T("public.nav.results") }</a>
 		</p>
+		<p><small>{ d.ResultsPositioningLabel }</small></p>
 		if !d.Archived {
 			<form action={ templ.URL("/meets/" + d.ID + "/archive") } method="post" class="inline-form">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -334,28 +360,31 @@ templ publicTimetablePage(p PageData, v publicTimetableView) {
 	@layout(p) {
 		<h1>{ v.MeetName }</h1>
 		<p>{ v.Venue } · { v.Dates }</p>
+		@publicNav(p, v.MeetID)
 		<p><small>{ p.T("timetable.versions.row", "version", intToStr(int64(v.Version)), "at", v.PublishedAt) }</small></p>
-		<table>
-			<thead>
-				<tr>
-					<th>{ p.T("timetable.scheduled_at") }</th>
-					<th>{ p.T("programme.discipline") }</th>
-					<th>{ p.T("programme.categories") }</th>
-					<th>{ p.T("timetable.round") }</th>
-					<th>{ p.T("timetable.location") }</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, u := range v.Rows {
+		<div class="table-scroll">
+			<table>
+				<thead>
 					<tr>
-						<td>{ u.When }</td>
-						<td>{ u.Discipline }</td>
-						<td>{ u.Categories }</td>
-						<td>{ u.Round }</td>
-						<td>{ u.Location }</td>
+						<th>{ p.T("timetable.scheduled_at") }</th>
+						<th>{ p.T("programme.discipline") }</th>
+						<th>{ p.T("programme.categories") }</th>
+						<th>{ p.T("timetable.round") }</th>
+						<th>{ p.T("timetable.location") }</th>
 					</tr>
-				}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					for _, u := range v.Rows {
+						<tr>
+							<td>{ u.When }</td>
+							<td>{ u.Discipline }</td>
+							<td>{ u.Categories }</td>
+							<td>{ u.Round }</td>
+							<td>{ u.Location }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	}
 }

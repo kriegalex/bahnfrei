@@ -106,13 +106,13 @@ inspection/analysis procedure.
 | SYS-062 | UC-014 #6 | T | Phase B |
 | SYS-063 *(L)* | UC-032 | T | Phase B (Later) |
 | SYS-064 *(L)* | UC-031 | T | Phase B (Later) |
-| SYS-070 | UC-017 #2–#3 | T | Phase B |
-| SYS-071 | UC-017 #1 | T/A | Phase B |
+| SYS-070 | UC-017 #2–#3 | T | TASK-010 (public live results, PoC scope): `internal/web` `TestPublicPagesAnonymousAccessSYS070UC017_2` (overview/timetable/start lists/results fetch with no session cookie, 200, no login wall, viewport meta present), `TestPublicPagesArchivedMeetUC017_3` (same stable `/m/{id}/...` URLs still 200 with results after archiving) |
+| SYS-071 | UC-017 #1 | T/A | T: TASK-010: `internal/web` `TestPublicResultsLiveUpdateSYS071UC017_1` (`ResultsService.SaveResult` publishes on the meet's SSE topic synchronously with the save — asserted via a non-blocking channel receive immediately after `SaveResult` returns — and a fresh fetch of the public results live-refresh fragment shows the new mark). A (load-bearing p95 latency under concurrent load): TASK-027 (M3, SYS-122) |
 | SYS-072 | UC-018 #1–#3 | T | Phase B |
 | SYS-073 | UC-027 #1–#3 | T | Phase B |
-| SYS-074 | UC-017 #2 + UC-025 #1 | T | Phase B |
+| SYS-074 | UC-017 #2 + UC-025 #1 | T | TASK-010: `internal/web` `TestPublicResultsLocalizedDisciplineLabelsSYS074` (public results page renders discipline names from the DE/FR `discipline.<code>` catalog keys, not the catalog's canonical English name) *(PoC scope: discipline localization keys are shipped for the disciplines exercised by the built-in template and test fixtures, not the full catalog — see docs/requirements/open-questions-and-assumptions.md; category codes, e.g. "U16 W"/"M7", are treated as locale-invariant identifiers throughout the app, consistent with the existing office standings/roster pages)* |
 | SYS-075 *(L)* | UC-030 | T | Phase B (Later) |
-| SYS-076 | UC-017 #5 | T | Phase B |
+| SYS-076 | UC-017 #5 | T | TASK-010: `internal/store` `TestMeetResultsPositioningSYS076` (default federation_official on create, organizer override to primary with source name/URL round-tripping through `UpdateMeet`, invalid positioning rejected by both `CreateMeet` and `UpdateMeet`); `internal/web` `TestPublicResultsSYS076Label` (federation_official carries the "unofficial results" label with the source name/link in DE and FR; primary carries no label; organizer-configurable via the meet edit form, `internal/web/meets.templ`) |
 | SYS-077 | UC-035 #1–#3 | T | Phase B |
 | SYS-078 *(Later)* | UC-036 #1–#2 | T/D | Phase B |
 | SYS-080 *(Later — DEC-013)* | UC-019 #1, #3 | T | Phase B (venue-node gate) |

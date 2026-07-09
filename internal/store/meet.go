@@ -41,21 +41,27 @@ type UnitRecord struct {
 }
 
 // CreateMeet inserts a new meet in status draft (SYS-001) with a fresh ID.
+// ResultsPositioning defaults to federation_official (SYS-076) when unset —
+// the conservative default: a freshly created meet never silently implies
+// it is an authoritative publication.
 func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error) {
 	m.ID = NewID()
 	if m.Status == "" {
 		m.Status = domain.MeetDraft
 	}
+	if m.ResultsPositioning == "" {
+		m.ResultsPositioning = domain.ResultsPositioningFederationOfficial
+	}
 	if err := m.Validate(); err != nil {
 		return MeetRecord{}, err
 	}
 	_, err := db.ExecContext(ctx, `INSERT INTO meets
-		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, results_positioning, official_source_name, official_source_url, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 		m.ID, m.Name, m.Venue, m.HomologationRef,
 		m.StartDate.Format(dayFormat), m.EndDate.Format(dayFormat),
 		m.Organizer, string(m.Tier), string(m.Status), m.CategorySchemeID,
-		m.TemplateID, m.ScoringTableID)
+		m.TemplateID, m.ScoringTableID, string(m.ResultsPositioning), m.OfficialSourceName, m.OfficialSourceURL)
 	if err != nil {
 		return MeetRecord{}, fmt.Errorf("create meet %q: %w", m.Name, err)
 	}
@@ -65,14 +71,16 @@ func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error)
 // GetMeet looks up one meet by ID.
 func GetMeet(ctx context.Context, db DBTX, id string) (MeetRecord, error) {
 	return scanMeet(db.QueryRowContext(ctx, `SELECT id, name, venue, homologation_ref,
-		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version
+		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table,
+		results_positioning, official_source_name, official_source_url, version
 		FROM meets WHERE id = ?`, id))
 }
 
 // ListMeets returns all meets, newest first.
 func ListMeets(ctx context.Context, db DBTX) ([]MeetRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, name, venue, homologation_ref,
-		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, version
+		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table,
+		results_positioning, official_source_name, official_source_url, version
 		FROM meets ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil, err
@@ -91,11 +99,15 @@ func ListMeets(ctx context.Context, db DBTX) ([]MeetRecord, error) {
 }
 
 // UpdateMeet rewrites the organizer-editable meet attributes (SYS-001:
-// "create, edit, and archive") under optimistic concurrency.
+// "create, edit, and archive"; SYS-076 positioning) under optimistic
+// concurrency.
 func UpdateMeet(ctx context.Context, db DBTX, id string, expectedVersion int64, m domain.Meet) (int64, error) {
 	m.ID = id
 	if m.Status == "" {
 		m.Status = domain.MeetDraft // Validate needs a status; status itself is not updated here
+	}
+	if m.ResultsPositioning == "" {
+		m.ResultsPositioning = domain.ResultsPositioningFederationOfficial
 	}
 	if err := m.Validate(); err != nil {
 		return 0, err
@@ -106,7 +118,10 @@ func UpdateMeet(ctx context.Context, db DBTX, id string, expectedVersion int64, 
 		Set{Column: "homologation_ref", Value: m.HomologationRef},
 		Set{Column: "start_date", Value: m.StartDate.Format(dayFormat)},
 		Set{Column: "end_date", Value: m.EndDate.Format(dayFormat)},
-		Set{Column: "tier", Value: string(m.Tier)})
+		Set{Column: "tier", Value: string(m.Tier)},
+		Set{Column: "results_positioning", Value: string(m.ResultsPositioning)},
+		Set{Column: "official_source_name", Value: m.OfficialSourceName},
+		Set{Column: "official_source_url", Value: m.OfficialSourceURL})
 }
 
 // SetMeetStatus moves a meet through its lifecycle (draft → … → archived).
@@ -117,31 +132,31 @@ func SetMeetStatus(ctx context.Context, db DBTX, id string, expectedVersion int6
 
 func scanMeet(row *sql.Row) (MeetRecord, error) {
 	var m MeetRecord
-	var start, end, tier, status string
+	var start, end, tier, status, positioning string
 	err := row.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
 		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
-		&m.TemplateID, &m.ScoringTableID, &m.Version)
+		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL, &m.Version)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return MeetRecord{}, ErrNotFound
 	case err != nil:
 		return MeetRecord{}, err
 	}
-	return decodeMeet(m, start, end, tier, status)
+	return decodeMeet(m, start, end, tier, status, positioning)
 }
 
 func scanMeetRow(rows *sql.Rows) (MeetRecord, error) {
 	var m MeetRecord
-	var start, end, tier, status string
+	var start, end, tier, status, positioning string
 	if err := rows.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
 		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
-		&m.TemplateID, &m.ScoringTableID, &m.Version); err != nil {
+		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL, &m.Version); err != nil {
 		return MeetRecord{}, err
 	}
-	return decodeMeet(m, start, end, tier, status)
+	return decodeMeet(m, start, end, tier, status, positioning)
 }
 
-func decodeMeet(m MeetRecord, start, end, tier, status string) (MeetRecord, error) {
+func decodeMeet(m MeetRecord, start, end, tier, status, positioning string) (MeetRecord, error) {
 	var err error
 	if m.StartDate, err = time.Parse(dayFormat, start); err != nil {
 		return MeetRecord{}, fmt.Errorf("meet %s: bad start date %q: %w", m.ID, start, err)
@@ -151,6 +166,7 @@ func decodeMeet(m MeetRecord, start, end, tier, status string) (MeetRecord, erro
 	}
 	m.Tier = domain.MeetTier(tier)
 	m.Status = domain.MeetStatus(status)
+	m.ResultsPositioning = domain.ResultsPositioning(positioning)
 	return m, nil
 }
 
