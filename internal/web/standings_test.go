@@ -138,7 +138,7 @@ func TestSeriesUploadDownloadSYS077UC035_1(t *testing.T) {
 	}
 
 	dlResp := mustGet(t, client, base+loc+"/export/ukc-series")
-	defer dlResp.Body.Close()
+	defer func() { _ = dlResp.Body.Close() }()
 	if dlResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET export = %d, want 200", dlResp.StatusCode)
 	}

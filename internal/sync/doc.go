@@ -90,23 +90,19 @@
 //
 // ## Per-op status vocabulary (in the response)
 //
-//   - "applied":        the op was applied to the unit on this call.
-//   - "duplicate":      the op was already applied by an earlier batch; a
-//                       flaky reconnect re-sent it and no second write was
-//                       made (exactly-once, SYS-085).
+//   - "applied": the op was applied to the unit on this call.
+//   - "duplicate": the op was already applied by an earlier batch; a flaky
+//     reconnect re-sent it and no second write was made (exactly-once,
+//     SYS-085).
 //   - "reconciliation": the op could not be applied and was queued for the
-//                       office reconciliation view (never silently discarded,
-//                       SYS-086). "reason" is one of:
-//                         - "stale_checkout":     the batch's token is not
-//                           the live checkout's credential, its generation is
-//                           superseded, or no live checkout holds the unit
-//                           (e.g. after an office override, UC-034 #5).
-//                         - "start_list_change":  the batch's startListVersion
-//                           is behind the unit's — the office revised the
-//                           start list after checkout (UC-034 #4).
-//                         - "conflict":           applying would overwrite a
-//                           diverging attempt captured meanwhile; surfaced,
-//                           not merged.
+//     office reconciliation view (never silently discarded, SYS-086).
+//     "reason" is one of "stale_checkout" (the batch's token is not the live
+//     checkout's credential, its generation is superseded, or no live
+//     checkout holds the unit — e.g. after an office override, UC-034 #5),
+//     "start_list_change" (the batch's startListVersion is behind the
+//     unit's — the office revised the start list after checkout, UC-034 #4),
+//     or "conflict" (applying would overwrite a diverging attempt captured
+//     meanwhile; surfaced, not merged).
 //
 // ## Guarantees
 //
