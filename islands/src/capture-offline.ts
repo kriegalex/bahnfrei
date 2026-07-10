@@ -299,92 +299,109 @@
       flushAgain = true;
       return;
     }
-    if (!navigator.onLine) {
-      await refreshIndicator("offline");
-      return;
-    }
-    const ops = await allOps();
-    if (ops.length === 0) {
-      await refreshIndicator("online");
-      return;
-    }
-    const stamp = await getStamp();
-    if (!stamp) {
-      // No stamp yet (never checked out online): try to obtain one, else wait.
-      const ok = await ensureCheckout();
-      if (!ok) {
-        scheduleRetry();
+    // The reentrancy lock MUST be set here, before any await: flush() reads
+    // IndexedDB and can call ensureCheckout() before it ever touches the
+    // network, all of which yield to the event loop. Two overlapping
+    // triggers (e.g. a queued backoff-retry timer firing at the same moment
+    // the 'online' event re-invokes flush() after a rapid reconnect) would
+    // otherwise both observe flushing === false, both read the same pending
+    // op(s), and both POST them in separate requests — a chaotic-flapping
+    // bug found by the connectivity-chaos suite (e2e/tests/chaos-m1.spec.ts)
+    // that produced a duplicate reconciliation item for one captured trial
+    // despite the server's per-opId dedupe ledger being correct: the ledger
+    // only de-duplicates a single opId across requests it actually sees, it
+    // cannot undo the client having minted two requests instead of one from
+    // a single queued op. Setting the lock synchronously, before the first
+    // await, closes that window (SYS-085 exactly-once).
+    flushing = true;
+    try {
+      if (!navigator.onLine) {
+        await refreshIndicator("offline");
         return;
       }
-    }
-
-    flushing = true;
-    render("syncing", ops.length);
-    let appliedAny = false;
-    try {
-      const s = (await getStamp())!;
-      const body = {
-        token: s.token,
-        deviceLabel: DEVICE,
-        generation: s.generation,
-        startListVersion: s.startListVersion,
-        ops: ops.map((o) => ({
-          opId: o.opId,
-          athleteId: o.athleteId,
-          seq: o.seq,
-          value: o.value,
-          wind: o.wind || undefined,
-          version: o.version,
-        })),
-      };
-      const res = await fetch(SYNC_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF },
-        body: JSON.stringify(body),
-        credentials: "same-origin",
-      });
-      if (!res.ok) {
-        throw new Error("sync HTTP " + res.status);
+      const ops = await allOps();
+      if (ops.length === 0) {
+        await refreshIndicator("online");
+        return;
       }
-      const out = (await res.json()) as {
-        results: { opId: string; status: string; reason?: string }[];
-      };
-      const byId = new Map(ops.map((o) => [o.opId, o]));
-      for (const r of out.results) {
-        const op = byId.get(r.opId);
-        if (r.status === "applied") {
-          appliedAny = true;
-          if (op) {
-            bumpCellVersion(op.athleteId, op.seq);
-          }
-          await deleteOp(r.opId);
-        } else if (r.status === "duplicate") {
-          if (op) {
-            bumpCellVersion(op.athleteId, op.seq);
-          }
-          await deleteOp(r.opId);
-        } else if (r.status === "reconciliation") {
-          showReconcileNotice();
-          await deleteOp(r.opId);
+      let stamp = await getStamp();
+      if (!stamp) {
+        // No stamp yet (never checked out online): try to obtain one, else wait.
+        const ok = await ensureCheckout();
+        if (!ok) {
+          scheduleRetry();
+          return;
         }
+        stamp = await getStamp();
       }
-      backoff = 0; // success resets backoff
-    } catch {
-      scheduleRetry();
-      flushing = false;
+
+      render("syncing", ops.length);
+      let appliedAny = false;
+      try {
+        const s = stamp!;
+        const body = {
+          token: s.token,
+          deviceLabel: DEVICE,
+          generation: s.generation,
+          startListVersion: s.startListVersion,
+          ops: ops.map((o) => ({
+            opId: o.opId,
+            athleteId: o.athleteId,
+            seq: o.seq,
+            value: o.value,
+            wind: o.wind || undefined,
+            version: o.version,
+          })),
+        };
+        const res = await fetch(SYNC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF },
+          body: JSON.stringify(body),
+          credentials: "same-origin",
+        });
+        if (!res.ok) {
+          throw new Error("sync HTTP " + res.status);
+        }
+        const out = (await res.json()) as {
+          results: { opId: string; status: string; reason?: string }[];
+        };
+        const byId = new Map(ops.map((o) => [o.opId, o]));
+        for (const r of out.results) {
+          const op = byId.get(r.opId);
+          if (r.status === "applied") {
+            appliedAny = true;
+            if (op) {
+              bumpCellVersion(op.athleteId, op.seq);
+            }
+            await deleteOp(r.opId);
+          } else if (r.status === "duplicate") {
+            if (op) {
+              bumpCellVersion(op.athleteId, op.seq);
+            }
+            await deleteOp(r.opId);
+          } else if (r.status === "reconciliation") {
+            showReconcileNotice();
+            await deleteOp(r.opId);
+          }
+        }
+        backoff = 0; // success resets backoff
+      } catch {
+        scheduleRetry();
+        await refreshIndicator();
+        return;
+      }
+
+      if (appliedAny && REFRESH_URL) {
+        // Pull the authoritative standings fragment straight away rather
+        // than waiting for the SSE round-trip, which may still be
+        // reconnecting after a blip (UC-034 #2: standings update on
+        // reconnect).
+        void refreshStandings();
+      }
       await refreshIndicator();
-      return;
     } finally {
       flushing = false;
     }
-
-    if (appliedAny && REFRESH_URL) {
-      // Pull the authoritative standings fragment straight away rather than
-      // waiting for the SSE round-trip, which may still be reconnecting after
-      // a blip (UC-034 #2: standings update on reconnect).
-      void refreshStandings();
-    }
-    await refreshIndicator();
     if (flushAgain) {
       flushAgain = false;
       void flush();
