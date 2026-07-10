@@ -87,6 +87,9 @@ const (
 	CapCaptureResults   Capability = "capture_results"
 	CapSubmitEntries    Capability = "submit_entries"
 	CapViewPublicResult Capability = "view_public_results"
+	// CapManageBackup gates the one-action instance backup (SYS-084,
+	// UC-020 #3): "operator (admin)" per the use-case's actor line.
+	CapManageBackup Capability = "manage_backup"
 )
 
 // capabilityMinRole is the least-privileged role each capability requires.
@@ -97,6 +100,7 @@ var capabilityMinRole = map[Capability]Role{
 	CapCaptureResults:   RoleFieldOfficial,
 	CapSubmitEntries:    RoleEntrySubmitter,
 	CapViewPublicResult: RolePublic,
+	CapManageBackup:     RoleInstanceAdmin,
 }
 
 // ErrForbidden means the actor's role does not carry the required capability.

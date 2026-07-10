@@ -20,4 +20,7 @@ type Config struct {
 	Addr string
 	// TLS configures certificate acquisition (SYS-093).
 	TLS TLSConfig
+	// AppVersion is stamped into backup artifacts' manifests (SYS-084) for
+	// provenance; empty is fine (development builds).
+	AppVersion string
 }

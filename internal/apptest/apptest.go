@@ -42,6 +42,7 @@ type Fixture struct {
 	Sessions *app.SessionManager
 	Meets    *app.MeetService
 	Results  *app.ResultsService
+	Backup   *app.BackupService
 }
 
 // New opens a fresh SQLite store in a t.TempDir(), closing it via
@@ -84,5 +85,6 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 		Sessions: sessions,
 		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
 		Results:  results,
+		Backup:   app.NewBackupService(st),
 	}
 }

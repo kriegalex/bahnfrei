@@ -26,7 +26,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /locale", s.handleLocaleSwitch)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /events/{topic}", s.handleEvents)
-	mux.HandleFunc("GET /admin", requireRole(app.RoleInstanceAdmin, s.cats, s.handleAdminPlaceholder))
+	mux.HandleFunc("GET /admin", requireRole(app.RoleInstanceAdmin, s.cats, s.handleAdmin))
+	mux.HandleFunc("GET /admin/backup", requireRole(app.RoleInstanceAdmin, s.cats, s.handleBackupDownload))
 	mux.Handle("GET /static/", staticHandler())
 	// The capture service worker is served from a root-path URL so it can
 	// claim the /meets/…/capture/ scope (UC-034 #3); see handleServiceWorker.
@@ -213,15 +214,6 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // is a later task's job (TASK-006+ carries real content over this bus).
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	sseHandler(s.bus, func(r *http.Request) string { return r.PathValue("topic") })(w, r)
-}
-
-// handleAdminPlaceholder demonstrates the RBAC gate (SYS-090): reaching
-// this handler at all means requireRole already confirmed an
-// instance-admin session. Instance administration itself (account
-// management UI) is TASK-013's job, not this shell's.
-func (s *Server) handleAdminPlaceholder(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte("admin: instance administration is not yet implemented (see TASK-013)\n"))
 }
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {

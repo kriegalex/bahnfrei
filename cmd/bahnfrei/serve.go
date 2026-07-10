@@ -139,6 +139,7 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 	results.SetSeriesUploadTemplates(seriesUploads)
+	backup := app.NewBackupService(st)
 
 	cats, err := i18n.Load()
 	if err != nil {
@@ -160,9 +161,10 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 			CacheDir: filepath.Join(cfg.dataDir, "tls"),
 			Email:    cfg.acmeEmail,
 		},
+		AppVersion: version,
 	}
 
-	srv := web.New(webCfg, auth, sessions, meets, results, cats, bus)
+	srv := web.New(webCfg, auth, sessions, meets, results, backup, cats, bus)
 	return serveDeps{server: srv, dbase: st}, nil
 }
 

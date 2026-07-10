@@ -22,6 +22,7 @@ type testServerDeps struct {
 	sessions *app.SessionManager
 	meets    *app.MeetService
 	results  *app.ResultsService
+	backup   *app.BackupService
 	cats     i18n.Catalogs
 	bus      *Bus
 }
@@ -39,9 +40,9 @@ func newTestServer(t *testing.T, tlsCfg TLSConfig) *testServerDeps {
 	}
 	bus := NewBus()
 
-	cfg := Config{Addr: "127.0.0.1:0", TLS: tlsCfg}
-	deps := &testServerDeps{auth: fix.Auth, sessions: fix.Sessions, meets: fix.Meets, results: fix.Results, cats: cats, bus: bus}
-	deps.server = New(cfg, fix.Auth, fix.Sessions, fix.Meets, fix.Results, cats, bus)
+	cfg := Config{Addr: "127.0.0.1:0", TLS: tlsCfg, AppVersion: "test"}
+	deps := &testServerDeps{auth: fix.Auth, sessions: fix.Sessions, meets: fix.Meets, results: fix.Results, backup: fix.Backup, cats: cats, bus: bus}
+	deps.server = New(cfg, fix.Auth, fix.Sessions, fix.Meets, fix.Results, fix.Backup, cats, bus)
 	return deps
 }
 
@@ -49,5 +50,5 @@ func newTestServer(t *testing.T, tlsCfg TLSConfig) *testServerDeps {
 // (store, sessions, catalogs, bus) but a different Config — used to test
 // listener-address handling without standing up a whole new store.
 func (d *testServerDeps) withConfig(cfg Config) *Server {
-	return New(cfg, d.auth, d.sessions, d.meets, d.results, d.cats, d.bus)
+	return New(cfg, d.auth, d.sessions, d.meets, d.results, d.backup, d.cats, d.bus)
 }

@@ -1,4 +1,8 @@
 {
+  "admin.backup.description": "Erstellt ein einziges, in sich geschlossenes Backup mit allen Wettkampfdaten (Meets, Startlisten, Resultate, Konten) für den Download. Zum Wiederherstellen die Datei als bahnfrei.db in einer neuen, leeren Installation ablegen.",
+  "admin.backup.download": "Backup herunterladen",
+  "admin.backup.title": "Backup",
+  "admin.title": "Administration",
   "app.title": "Bahnfrei",
   "auth.logged_in_as": "Angemeldet als {name}",
   "auth.login.error": "Benutzername oder Passwort ungültig.",

@@ -1,4 +1,8 @@
 {
+  "admin.backup.description": "[Érstéllt éín éínzígés, ín sích géschlóssénés Báckúp mít állén Wéttkámpfdátén (Mééts, Stártlístén, Résúltáté, Kóntén) für dén Dównlóád. Zúm Wíédérhérstéllén díé Dátéí áls báhnfréí.db ín éínér néúén, léérén Ínstállátíón áblégén. ~~~]",
+  "admin.backup.download": "[Báckúp hérúntérládén ~~~]",
+  "admin.backup.title": "[Báckúp ~~~]",
+  "admin.title": "[Ádmínístrátíón ~~~]",
   "app.title": "[Báhnfréí ~~~]",
   "auth.logged_in_as": "[Ángéméldét áls {name} ~~~]",
   "auth.login.error": "[Bénútzérnámé ódér Pásswórt úngültíg. ~~~]",

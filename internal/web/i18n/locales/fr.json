@@ -1,4 +1,8 @@
 {
+  "admin.backup.description": "Crée une sauvegarde unique et autonome contenant toutes les données de la compétition (meetings, listes de départ, résultats, comptes) à télécharger. Pour restaurer, placer le fichier sous le nom bahnfrei.db dans une nouvelle installation vide.",
+  "admin.backup.download": "Télécharger la sauvegarde",
+  "admin.backup.title": "Sauvegarde",
+  "admin.title": "Administration",
   "app.title": "Bahnfrei",
   "auth.logged_in_as": "Connecté en tant que {name}",
   "auth.login.error": "Nom d'utilisateur ou mot de passe invalide.",
