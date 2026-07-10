@@ -21,6 +21,8 @@ templ captureIndexPage(p PageData, v captureIndexView) {
 					<li>
 						<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a>
 						{ " (" + p.T("family."+u.Family) + ")" }
+						{ " · " }
+						<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
 					</li>
 				}
 			</ul>
@@ -36,7 +38,11 @@ templ captureIndexPage(p PageData, v captureIndexView) {
 templ capturePage(p PageData, v captureView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { v.Discipline }</h1>
-		<p><a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("capture.back_to_units") }</a></p>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("capture.back_to_units") }</a>
+			{ " · " }
+			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
+		</p>
 		if len(v.Rows) == 0 {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else if v.IsField {

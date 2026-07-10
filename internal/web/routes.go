@@ -65,6 +65,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
 
+	// Printables (TASK-011, UC-018 subset, SYS-072, PoC scope): the UKC
+	// result list as PDF is office-level, matching the standings page it
+	// mirrors.
+	mux.HandleFunc("GET /meets/{id}/standings.pdf", office(s.handleResultListPDF))
+
 	// Field & track capture (TASK-008, UC-011/UC-010 subset): the on-venue
 	// capture surface, field-official level and above (SYS-090; per-event
 	// scoping arrives with TASK-013).
@@ -76,6 +81,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/standings", captureRole(s.handleCaptureStandings))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/attempt", captureRole(s.handleCaptureAttempt))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
+	mux.HandleFunc("GET /meets/{id}/capture/{unit}/sheet.pdf", captureRole(s.handleCaptureSheetPDF))
 
 	// Offline capture queue (TASK-009, UC-034 / SYS-085/086): the checkout
 	// and replay endpoints are this app's one JSON API (see internal/sync

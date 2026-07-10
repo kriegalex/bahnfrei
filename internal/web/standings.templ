@@ -108,7 +108,11 @@ templ rosterPage(p PageData, v rosterView) {
 templ standingsPage(p PageData, v standingsView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("standings.title") }</h1>
-		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a>
+			{ " · " }
+			<a href={ templ.URL("/meets/" + v.MeetID + "/standings.pdf") }>{ p.T("pdf.download") }</a>
+		</p>
 		if v.SeriesUploadAvailable {
 			<p><a href={ templ.URL("/meets/" + v.MeetID + "/export/ukc-series") }>{ p.T("standings.download_series_upload") }</a></p>
 		}
