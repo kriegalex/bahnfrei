@@ -5,7 +5,8 @@
 // Role selection (venue|hub) and the "serve" subcommand are added by
 // TASK-005; first-run setup is the browser /setup flow (TASK-006, SYS-131 —
 // no config file, no CLI wizard); "backup" and "restore" (SYS-084,
-// UC-020 #3) are TASK-014's.
+// UC-020 #3) are TASK-014's; "demo" seeds the M1 club-demo meet (TASK-015,
+// DEC-011).
 package main
 
 import (
@@ -40,6 +41,11 @@ func run(ctx context.Context, args []string, out io.Writer) {
 			return
 		case "restore":
 			if err := runRestore(ctx, args[1:], out); err != nil {
+				fmt.Fprintf(out, "bahnfrei: %v\n", err)
+			}
+			return
+		case "demo":
+			if err := runDemo(ctx, args[1:], out); err != nil {
 				fmt.Fprintf(out, "bahnfrei: %v\n", err)
 			}
 			return
