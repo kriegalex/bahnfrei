@@ -104,6 +104,14 @@
 //     or "conflict" (applying would overwrite a diverging attempt captured
 //     meanwhile; surfaced, not merged).
 //
+// "applied" and "duplicate" results also carry "version": the attempt's
+// authoritative stored version after the decision (omitted for
+// reconciliation). Clients MUST set their optimistic cell version to this
+// value rather than incrementing locally — a blind increment double-counts
+// when an op whose ack was lost is re-acknowledged after a page render
+// already reflected the write, and the inflated version would send the next
+// correction to reconciliation with a stale expectedVersion (SYS-085).
+//
 // ## Guarantees
 //
 //   - Exactly-once: a terminal decision per opId is recorded in a dedupe

@@ -88,9 +88,10 @@ type syncRequest struct {
 
 // syncOpResult is the per-op acknowledgement.
 type syncOpResult struct {
-	OpID   string `json:"opId"`
-	Status string `json:"status"`           // applied | duplicate | reconciliation
-	Reason string `json:"reason,omitempty"` // set when status == reconciliation
+	OpID    string `json:"opId"`
+	Status  string `json:"status"`            // applied | duplicate | reconciliation
+	Reason  string `json:"reason,omitempty"`  // set when status == reconciliation
+	Version int64  `json:"version,omitempty"` // authoritative attempt version (applied|duplicate)
 }
 
 type syncResponse struct {
@@ -135,7 +136,7 @@ func (s *Server) handleUnitSync(w http.ResponseWriter, r *http.Request) {
 	}
 	out := syncResponse{}
 	for _, o := range res.Outcomes {
-		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: string(o.Reason)})
+		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: string(o.Reason), Version: o.Version})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

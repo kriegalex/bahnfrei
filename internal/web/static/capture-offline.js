@@ -210,11 +210,11 @@
     }
     // ---- Optimistic grid update --------------------------------------------
     // Update the cell the op came from without waiting for the network: show the
-    // captured value and, once the server confirms (applied/duplicate), advance
-    // the cell's stored version so a later correction carries the right expected
-    // version. Offline, this keeps the grid live entirely from local state; when
-    // online the standings section stays the server's source of truth (it
-    // refreshes over SSE / after each flush).
+    // captured value and, once the server confirms (applied/duplicate), set the
+    // cell's stored version to the server's authoritative value so a later
+    // correction carries the right expected version. Offline, this keeps the grid
+    // live entirely from local state; when online the standings section stays the
+    // server's source of truth (it refreshes over SSE / after each flush).
     function cellFor(athleteId, seq) {
         return document.querySelector('.cell-form[data-athlete="' +
             cssEscape(athleteId) +
@@ -225,14 +225,25 @@
     function cssEscape(v) {
         return v.replace(/["\\]/g, "\\$&");
     }
-    function bumpCellVersion(athleteId, seq) {
+    // Set the cell's optimistic version from an applied/duplicate ack. The server
+    // reports the authoritative stored version, so we SET rather than blindly
+    // increment: a blind +1 double-counts when the same op is acknowledged again
+    // after a page render (reload/SSE) already reflected the write — e.g. a flaky
+    // reconnect whose ack was lost, replayed after a reload, would push the cell
+    // past the real version and make the next correction submit a stale expected
+    // version (SYS-085). A missing/zero version falls back to an increment so the
+    // grid still advances if the server omitted it.
+    function setCellVersion(athleteId, seq, version) {
         const form = cellFor(athleteId, seq);
         if (!form) {
             return;
         }
         const vInput = form.querySelector('input[name="version"]');
         if (vInput) {
-            vInput.value = String((parseInt(vInput.value, 10) || 0) + 1);
+            vInput.value =
+                typeof version === "number" && version > 0
+                    ? String(version)
+                    : String((parseInt(vInput.value, 10) || 0) + 1);
         }
     }
     // ---- Flush (auto, in-order, idempotent) ---------------------------------
@@ -323,13 +334,13 @@
                     if (r.status === "applied") {
                         appliedAny = true;
                         if (op) {
-                            bumpCellVersion(op.athleteId, op.seq);
+                            setCellVersion(op.athleteId, op.seq, r.version);
                         }
                         await deleteOp(r.opId);
                     }
                     else if (r.status === "duplicate") {
                         if (op) {
-                            bumpCellVersion(op.athleteId, op.seq);
+                            setCellVersion(op.athleteId, op.seq, r.version);
                         }
                         await deleteOp(r.opId);
                     }

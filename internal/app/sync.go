@@ -190,10 +190,16 @@ type ReplayBatch struct {
 
 // OpOutcome is the per-op result reported to the client: applied, duplicate
 // (already applied — no second write), or reconciliation (with the reason).
+// Version carries the attempt's authoritative stored version after an applied
+// or duplicate decision (0 for reconciliation), so the client SETS the cell's
+// optimistic version to the server truth rather than blindly incrementing it —
+// a blind increment double-counts when the same op is acknowledged again after
+// a page render already reflected the write (SYS-085).
 type OpOutcome struct {
-	OpID   string
-	Status domain.OpStatus
-	Reason domain.ReconcileReason
+	OpID    string
+	Status  domain.OpStatus
+	Reason  domain.ReconcileReason
+	Version int64
 }
 
 // ReplayResult carries one outcome per submitted op, in submission order.
@@ -246,7 +252,10 @@ func (s *ResultsService) replayOne(ctx context.Context, actor Session, meetID, u
 		if status == string(domain.OpReconciliation) {
 			return OpOutcome{OpID: op.OpID, Status: domain.OpReconciliation, Reason: domain.ReconcileReason(reason)}, nil
 		}
-		return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate}, nil
+		// Already applied by an earlier batch (a flaky reconnect re-sent it):
+		// report the CURRENT authoritative version so the client converges the
+		// cell to the server truth instead of over-counting it.
+		return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: s.currentAttemptVersion(ctx, unitID, op.AthleteID, op.Seq)}, nil
 	}
 
 	state := domain.CheckoutState{}
@@ -288,12 +297,12 @@ func (s *ResultsService) replayOne(ctx context.Context, actor Session, meetID, u
 // captures diverged and the op is surfaced for reconciliation (SYS-086).
 func (s *ResultsService) applyReplayOp(ctx context.Context, actor Session, meetID, unitID string, batch ReplayBatch, op ReplayOp) (OpOutcome, error) {
 	in := FieldAttemptInput{AthleteID: op.AthleteID, Seq: op.Seq, Kind: op.Kind, Mark: op.Mark, Wind: op.Wind, ExpectedVersion: op.ExpectedVersion}
-	_, err := s.SaveFieldAttempt(ctx, actor, meetID, unitID, in)
+	rec, err := s.SaveFieldAttempt(ctx, actor, meetID, unitID, in)
 	if err == nil {
 		if e := store.RecordCaptureOp(ctx, s.db, op.OpID, unitID, string(domain.OpApplied), ""); e != nil {
 			return OpOutcome{}, e
 		}
-		return OpOutcome{OpID: op.OpID, Status: domain.OpApplied}, nil
+		return OpOutcome{OpID: op.OpID, Status: domain.OpApplied, Version: rec.Version}, nil
 	}
 	var conflict *AttemptConflictError
 	if errors.As(err, &conflict) {
@@ -301,7 +310,7 @@ func (s *ResultsService) applyReplayOp(ctx context.Context, actor Session, meetI
 			if e := store.RecordCaptureOp(ctx, s.db, op.OpID, unitID, string(domain.OpApplied), ""); e != nil {
 				return OpOutcome{}, e
 			}
-			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate}, nil
+			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: conflict.Current.Version}, nil
 		}
 		return s.routeReconciliation(ctx, actor, unitID, batch, op, domain.ReasonConflict)
 	}
