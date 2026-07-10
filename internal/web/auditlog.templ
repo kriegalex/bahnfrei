@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// auditLogPage is the office/organizer-visible privileged-action audit
+// surface (TASK-013, SYS-091/UC-022 #2): who did what to which entity and
+// when, newest first — a read-only projection of the append-only audit
+// log (SYS-046).
+templ auditLogPage(p PageData, v auditLogView) {
+	@layout(p) {
+		<h1>{ p.T("audit.title") }</h1>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("audit.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("audit.col.when") }</th>
+							<th>{ p.T("audit.col.who") }</th>
+							<th>{ p.T("audit.col.action") }</th>
+							<th>{ p.T("audit.col.entity") }</th>
+							<th>{ p.T("audit.col.reason") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.When }</td>
+								<td>{ row.Who }</td>
+								<td>{ row.Action }</td>
+								<td>{ row.Entity }</td>
+								<td>{ row.Reason }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}

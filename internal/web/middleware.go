@@ -78,14 +78,22 @@ func requireRole(min app.Role, cats i18n.Catalogs, next http.HandlerFunc) http.H
 			role = s.Role
 		}
 		if !role.AtLeast(min) {
-			w.WriteHeader(http.StatusForbidden)
-			p := basePageData(r, cats)
-			p.Title = p.T("error.forbidden")
-			_ = forbiddenPage(p).Render(r.Context(), w)
+			renderForbidden(w, r, cats)
 			return
 		}
 		next(w, r)
 	}
+}
+
+// renderForbidden serves the shared localized 403 page (SYS-090 least
+// privilege): the coarse role gate above and the per-event unit-scoping
+// gate (TASK-013, UC-022 #1) both end here so a denial always looks the
+// same to the operator.
+func renderForbidden(w http.ResponseWriter, r *http.Request, cats i18n.Catalogs) {
+	w.WriteHeader(http.StatusForbidden)
+	p := basePageData(r, cats)
+	p.Title = p.T("error.forbidden")
+	_ = forbiddenPage(p).Render(r.Context(), w)
 }
 
 // localeMiddleware resolves the active locale for the request — from the
@@ -221,6 +229,8 @@ func basePageData(r *http.Request, cats i18n.Catalogs) PageData {
 		p.LoggedIn = true
 		p.Username = s.Username
 		p.CanOrganize = s.Role.AtLeast(app.RoleMeetOrganizer)
+		p.CanManageAccounts = s.Role.AtLeast(app.RoleInstanceAdmin)
+		p.CanViewAudit = s.Role.AtLeast(app.RoleCompetitionOffice)
 	}
 	return p
 }

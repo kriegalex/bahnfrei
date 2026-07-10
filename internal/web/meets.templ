@@ -171,6 +171,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·

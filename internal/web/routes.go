@@ -26,8 +26,6 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /locale", s.handleLocaleSwitch)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /events/{topic}", s.handleEvents)
-	mux.HandleFunc("GET /admin", requireRole(app.RoleInstanceAdmin, s.cats, s.handleAdmin))
-	mux.HandleFunc("GET /admin/backup", requireRole(app.RoleInstanceAdmin, s.cats, s.handleBackupDownload))
 	mux.Handle("GET /static/", staticHandler())
 	// The capture service worker is served from a root-path URL so it can
 	// claim the /meets/…/capture/ scope (UC-034 #3); see handleServiceWorker.
@@ -37,6 +35,21 @@ func (s *Server) routes() http.Handler {
 	// First-run setup (UC-001 #1): available only while no account exists.
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
 	mux.HandleFunc("POST /setup", s.handleSetupSubmit)
+
+	// Instance account administration (TASK-013, SYS-090/091, UC-022):
+	// create/disable accounts and assign instance-wide roles. Instance-
+	// admin only (CapManageAccounts).
+	admin := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleInstanceAdmin, s.cats, h)
+	}
+	mux.HandleFunc("GET /admin", admin(s.handleAccountsList))
+	// One-action backup download (TASK-014, SYS-084, UC-020 #3) lives on
+	// the same instance-admin surface.
+	mux.HandleFunc("GET /admin/backup", admin(s.handleBackupDownload))
+	mux.HandleFunc("POST /admin/accounts", admin(s.handleAccountCreate))
+	mux.HandleFunc("POST /admin/accounts/{id}/enable", admin(s.handleAccountEnable))
+	mux.HandleFunc("POST /admin/accounts/{id}/disable", admin(s.handleAccountDisable))
+	mux.HandleFunc("POST /admin/accounts/{id}/role", admin(s.handleAccountRoleChange))
 
 	// Meet setup workspace (UC-001 #2–#5), organizer-gated (SYS-090).
 	organize := func(h http.HandlerFunc) http.HandlerFunc {
@@ -71,9 +84,23 @@ func (s *Server) routes() http.Handler {
 	// mirrors.
 	mux.HandleFunc("GET /meets/{id}/standings.pdf", office(s.handleResultListPDF))
 
+	// Field-official per-event scoping (TASK-013, SYS-090 "assignable per
+	// meet"; UC-022 #1): office level and above assigns which units a
+	// field official may capture on this meet.
+	mux.HandleFunc("GET /meets/{id}/officials", office(s.handleFieldOfficials))
+	mux.HandleFunc("POST /meets/{id}/officials/assign", office(s.handleFieldOfficialAssign))
+	mux.HandleFunc("POST /meets/{id}/officials/unassign", office(s.handleFieldOfficialUnassign))
+
+	// Privileged-action audit surfacing (TASK-013, SYS-091/UC-022 #2):
+	// office level and above; instance-wide, not meet-scoped, since
+	// privileged actions (account changes, role grants) are not all
+	// meet-local.
+	mux.HandleFunc("GET /audit", office(s.handleAuditLog))
+
 	// Field & track capture (TASK-008, UC-011/UC-010 subset): the on-venue
-	// capture surface, field-official level and above (SYS-090; per-event
-	// scoping arrives with TASK-013).
+	// capture surface, field-official level and above (SYS-090). Per-event
+	// scoping (TASK-013, UC-022 #1) is enforced inside internal/app —
+	// captureRole here is only the coarse role floor.
 	captureRole := func(h http.HandlerFunc) http.HandlerFunc {
 		return requireRole(app.RoleFieldOfficial, s.cats, h)
 	}

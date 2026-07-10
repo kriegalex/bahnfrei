@@ -13,17 +13,6 @@ import (
 	"github.com/kriegalex/bahnfrei/internal/app"
 )
 
-// handleAdmin renders the instance-admin workspace. Reaching this handler
-// at all means requireRole already confirmed an instance-admin session
-// (SYS-090). Today it hosts the one-action backup download (SYS-084,
-// UC-020 #3); full instance administration (account management UI) is
-// TASK-013's job.
-func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
-	p := basePageData(r, s.cats)
-	p.Title = p.T("admin.title")
-	_ = adminPage(p).Render(r.Context(), w)
-}
-
 // handleBackupDownload performs the SYS-084 one-action backup — a single
 // click (or CLI invocation) yields one portable artifact — and streams the
 // resulting snapshot straight to the browser as a file download. The

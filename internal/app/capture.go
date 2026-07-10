@@ -88,6 +88,63 @@ func (s *ResultsService) unitContext(ctx context.Context, meetID, unitID string)
 	return unitContext{}, fmt.Errorf("unit %s: %w", unitID, store.ErrNotFound)
 }
 
+// ErrUnitNotAssigned means the acting field official is not scoped to this
+// event unit (SYS-090's "field/event official (scoped to assigned
+// events)"; UC-022 #1).
+var ErrUnitNotAssigned = errors.New("field official is not assigned to this event unit")
+
+// authorizeCaptureAccess enforces SYS-090's per-event scoping on top of the
+// coarse CapCaptureResults role check: an account with exactly
+// RoleFieldOfficial may only act on a unit explicitly assigned to it for
+// this meet (server-side, not just hidden in the UI — UC-022 #1);
+// competition office and above are not scoped by unit (they already carry
+// broader capabilities SYS-090 does not limit per event). A denied attempt
+// is itself recorded in the audit trail (UC-022 #1: "access is denied and
+// the attempt logged").
+func (s *ResultsService) authorizeCaptureAccess(ctx context.Context, actor Session, meetID, unitID string) error {
+	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+		return err
+	}
+	if actor.Role != RoleFieldOfficial {
+		return nil
+	}
+	ok, err := store.IsFieldOfficialAssigned(ctx, s.db, actor.AccountID, unitID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		s.auditDenied(ctx, actor, "capture.access_denied", "unit", unitID,
+			fmt.Sprintf("field official %s is not assigned to unit %s (meet %s)", actor.AccountID, unitID, meetID))
+		return ErrUnitNotAssigned
+	}
+	return nil
+}
+
+// CheckUnitAccess is the exported form of authorizeCaptureAccess for the web
+// layer to gate a unit's read-only capture views before rendering them
+// (UC-022 #1 covers both read and write access to an unassigned unit).
+func (s *ResultsService) CheckUnitAccess(ctx context.Context, actor Session, meetID, unitID string) error {
+	return s.authorizeCaptureAccess(ctx, actor, meetID, unitID)
+}
+
+// auditDenied best-effort records a denied privileged/scoped action
+// (UC-022 #1). It never fails the caller's deny path: the primary
+// ErrUnitNotAssigned/ErrForbidden return already communicates the denial,
+// so a failure writing this secondary log entry must not mask it.
+func (s *ResultsService) auditDenied(ctx context.Context, actor Session, action, entityType, entityID, reason string) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: action, EntityType: entityType, EntityID: entityID, Reason: reason,
+	}); err != nil {
+		return
+	}
+	_ = tx.Commit()
+}
+
 // participant returns the meet participant for athleteID — capture only
 // accepts marks for registered athletes.
 func (s *ResultsService) participant(ctx context.Context, meetID, athleteID string) (store.ParticipantRow, error) {
@@ -114,11 +171,21 @@ type CaptureUnit struct {
 
 // CaptureUnits lists a meet's capturable units — track and horizontal
 // field disciplines; vertical jumps and relays are later slices
-// (TASK-021/016).
-func (s *ResultsService) CaptureUnits(ctx context.Context, meetID string) ([]CaptureUnit, error) {
+// (TASK-021/016). For an account with exactly RoleFieldOfficial the list is
+// filtered to units it is assigned to for this meet (SYS-090 per-event
+// scoping, UC-022 #1); every other authorized role sees every capturable
+// unit, matching authorizeCaptureAccess's scoping rule.
+func (s *ResultsService) CaptureUnits(ctx context.Context, actor Session, meetID string) ([]CaptureUnit, error) {
 	units, err := store.ListMeetUnits(ctx, s.db, meetID)
 	if err != nil {
 		return nil, err
+	}
+	var assigned map[string]bool
+	if actor.Role == RoleFieldOfficial {
+		assigned, err = store.AssignedUnitIDs(ctx, s.db, actor.AccountID, meetID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var out []CaptureUnit
 	for _, u := range units {
@@ -127,6 +194,9 @@ func (s *ResultsService) CaptureUnits(ctx context.Context, meetID string) ([]Cap
 			continue
 		}
 		if disc.Family != domain.FamilyTrack && disc.Family != domain.FamilyFieldHorizontal {
+			continue
+		}
+		if actor.Role == RoleFieldOfficial && !assigned[u.UnitID] {
 			continue
 		}
 		out = append(out, CaptureUnit{
@@ -368,7 +438,7 @@ type FieldAttemptInput struct {
 // the meet scores) is recomputed from the full series in the same
 // transaction, so standings are never stale relative to attempts.
 func (s *ResultsService) SaveFieldAttempt(ctx context.Context, actor Session, meetID, unitID string, in FieldAttemptInput) (store.AttemptRecord, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return store.AttemptRecord{}, err
 	}
 	uc, err := s.unitContext(ctx, meetID, unitID)
@@ -476,7 +546,7 @@ type TrackResultInput struct {
 // statuses are restricted to the CR 25 capture vocabulary and a DQ
 // requires its rule reference (SYS-045).
 func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, meetID, unitID string, in TrackResultInput) (store.ResultRecord, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return store.ResultRecord{}, err
 	}
 	uc, err := s.unitContext(ctx, meetID, unitID)

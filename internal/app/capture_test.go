@@ -15,8 +15,15 @@ import (
 
 var fieldOfficial = Session{AccountID: "01FLD", Username: "field", Role: RoleFieldOfficial}
 
-// unitOf resolves the single unit of a meet's discipline in tests.
-func unitOf(t *testing.T, meets *MeetService, meetID, disciplineCode string) string {
+// unitOf resolves the single unit of a meet's discipline in tests, and
+// grants the shared fieldOfficial test account capture access to it
+// (TASK-013 scopes field officials to assigned units, SYS-090; these
+// fixtures predate that scoping, so granting it here keeps every existing
+// capture/sync test exercising the same "authorized field official" it
+// always has, without editing every call site). Tests that specifically
+// exercise the scoping denial path construct their own unassigned session
+// instead (see TestFieldOfficialEventScope* in accounts_test.go).
+func unitOf(t *testing.T, results *ResultsService, meets *MeetService, meetID, disciplineCode string) string {
 	t.Helper()
 	detail, err := meets.Meet(context.Background(), meetID)
 	if err != nil {
@@ -24,6 +31,9 @@ func unitOf(t *testing.T, meets *MeetService, meetID, disciplineCode string) str
 	}
 	for _, u := range detail.Units {
 		if u.DisciplineCode == disciplineCode {
+			if err := store.AssignFieldOfficialUnit(context.Background(), results.db, fieldOfficial.AccountID, meetID, u.UnitID); err != nil {
+				t.Fatalf("AssignFieldOfficialUnit: %v", err)
+			}
 			return u.UnitID
 		}
 	}
@@ -48,7 +58,7 @@ func TestUC011_FieldCaptureGridAndTieBreak(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	unitID := unitOf(t, results, meets, rec.ID, "ZoneLJ")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -111,7 +121,7 @@ func TestUC011_FieldCaptureGridAndTieBreak(t *testing.T) {
 func TestUC011_3_RetireeStillRanks(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	unitID := unitOf(t, results, meets, rec.ID, "ZoneLJ")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -153,7 +163,7 @@ func TestUC011_1_DefaultSeriesCutAndContinuation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddEvent: %v", err)
 	}
-	unitID := unitOf(t, meets, meet.ID, "LJ")
+	unitID := unitOf(t, results, meets, meet.ID, "LJ")
 
 	w := 1.2
 	var athletes []string
@@ -205,7 +215,7 @@ func TestUC010_2_HandTimeRoundUpAndProvenance(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "60m")
+	unitID := unitOf(t, results, meets, rec.ID, "60m")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -263,7 +273,7 @@ func TestUC010_3_StatusVocabulary(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "60m")
+	unitID := unitOf(t, results, meets, rec.ID, "60m")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -299,7 +309,7 @@ func TestCaptureConflictSurfaced(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	unitID := unitOf(t, results, meets, rec.ID, "ZoneLJ")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -332,8 +342,8 @@ func TestCaptureValidationAndAuthorization(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
 	rec := createUKCMeet(t, meets)
-	ljUnit := unitOf(t, meets, rec.ID, "ZoneLJ")
-	trackUnit := unitOf(t, meets, rec.ID, "60m")
+	ljUnit := unitOf(t, results, meets, rec.ID, "ZoneLJ")
+	trackUnit := unitOf(t, results, meets, rec.ID, "60m")
 	anna := register(t, results, rec.ID, ParticipantInput{
 		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
 	})
@@ -393,10 +403,10 @@ func TestOnResultsChangedHook(t *testing.T) {
 	var fired []string
 	results.OnResultsChanged(func(meetID string) { fired = append(fired, meetID) })
 
-	fieldAttempt(t, results, rec.ID, unitOf(t, meets, rec.ID, "ZoneLJ"), FieldAttemptInput{
+	fieldAttempt(t, results, rec.ID, unitOf(t, results, meets, rec.ID, "ZoneLJ"), FieldAttemptInput{
 		AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.42",
 	})
-	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitOf(t, meets, rec.ID, "60m"), TrackResultInput{
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitOf(t, results, meets, rec.ID, "60m"), TrackResultInput{
 		AthleteID: anna.AthleteID, Time: "9.32", Timing: domain.TimingManual,
 	}); err != nil {
 		t.Fatal(err)

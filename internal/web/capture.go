@@ -35,7 +35,8 @@ func (s *Server) handleCaptureIndex(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	units, err := s.results.CaptureUnits(r.Context(), meetID)
+	actor, _ := sessionFromContext(r.Context())
+	units, err := s.results.CaptureUnits(r.Context(), actor, meetID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
@@ -183,10 +184,19 @@ func markWithProvenance(mark string, timing domain.Timing) string {
 
 func (s *Server) handleCaptureUnit(w http.ResponseWriter, r *http.Request) {
 	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
-	// Opening a unit takes its capture lock for the field official (SYS-086):
-	// best-effort — a busy lock or a non-capturable unit must not block the
-	// read of the capture page (the office reconciles a contested lock).
-	if actor, ok := sessionFromContext(r.Context()); ok {
+	actor, ok := sessionFromContext(r.Context())
+	if ok {
+		// Per-event scoping (TASK-013, SYS-090/UC-022 #1): a field official
+		// may only open a unit assigned to them — checked before anything
+		// else so an unassigned unit is denied, not just checked-out-and-
+		// then-shown.
+		if err := s.results.CheckUnitAccess(r.Context(), actor, meetID, unitID); err != nil {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		// Opening a unit takes its capture lock for the field official
+		// (SYS-086): best-effort — a busy lock must not block the read of
+		// the capture page (the office reconciles a contested lock).
 		_, _ = s.results.EnsureCheckout(r.Context(), actor, meetID, unitID, deviceLabelOr(r.Header.Get("X-Device-Label")))
 	}
 	v, err := s.captureView(r, meetID, unitID)
@@ -203,7 +213,14 @@ func (s *Server) handleCaptureUnit(w http.ResponseWriter, r *http.Request) {
 // live refresh swaps in on SSE "results" events (UC-011 #4) — only the
 // standings, so a refresh never clobbers a half-typed attempt form.
 func (s *Server) handleCaptureStandings(w http.ResponseWriter, r *http.Request) {
-	v, err := s.captureView(r, r.PathValue("id"), r.PathValue("unit"))
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	if actor, ok := sessionFromContext(r.Context()); ok {
+		if err := s.results.CheckUnitAccess(r.Context(), actor, meetID, unitID); err != nil {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+	}
+	v, err := s.captureView(r, meetID, unitID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
@@ -256,6 +273,8 @@ func (s *Server) handleCaptureAttempt(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.results.SaveFieldAttempt(r.Context(), actor, meetID, unitID, in); err != nil {
 		var conflict *app.AttemptConflictError
 		switch {
+		case errors.Is(err, app.ErrUnitNotAssigned):
+			renderForbidden(w, r, s.cats)
 		case errors.As(err, &conflict):
 			s.renderCaptureError(w, r, meetID, unitID, "capture.error.conflict", conflict.Current.Display())
 		default:
@@ -281,6 +300,10 @@ func (s *Server) handleCaptureTrack(w http.ResponseWriter, r *http.Request) {
 		StatusDetail: strings.TrimSpace(r.FormValue("status_detail")),
 	}
 	if _, err := s.results.SaveTrackResult(r.Context(), actor, meetID, unitID, in); err != nil {
+		if errors.Is(err, app.ErrUnitNotAssigned) {
+			renderForbidden(w, r, s.cats)
+			return
+		}
 		s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
 		return
 	}

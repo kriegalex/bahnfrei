@@ -18,7 +18,7 @@ func syncFixture(t *testing.T) (*ResultsService, *store.Store, string, string, s
 	t.Helper()
 	meets, results, st := newTestResults(t)
 	rec := createUKCMeet(t, meets)
-	unitID := unitOf(t, meets, rec.ID, "ZoneLJ")
+	unitID := unitOf(t, results, meets, rec.ID, "ZoneLJ")
 	anna := register(t, results, rec.ID, ParticipantInput{FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101"})
 	bea := register(t, results, rec.ID, ParticipantInput{FirstName: "Bea", LastName: "Beispiel", BirthYear: 2014, Sex: domain.SexFemale, Bib: "102"})
 	co, err := results.CheckoutUnit(context.Background(), fieldOfficial, rec.ID, unitID, "tablet-A")
@@ -233,8 +233,8 @@ func TestUC034_2_OpIDReuseAcrossUnitsFails(t *testing.T) {
 	ctx := context.Background()
 	meets, results, st := newTestResults(t)
 	rec := createUKCMeet(t, meets)
-	ljUnit := unitOf(t, meets, rec.ID, "ZoneLJ")
-	ballUnit := unitOf(t, meets, rec.ID, "BallThrow200g")
+	ljUnit := unitOf(t, results, meets, rec.ID, "ZoneLJ")
+	ballUnit := unitOf(t, results, meets, rec.ID, "BallThrow200g")
 	anna := register(t, results, rec.ID, ParticipantInput{FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101"})
 
 	ljCo, err := results.CheckoutUnit(ctx, fieldOfficial, rec.ID, ljUnit, "tablet-A")
@@ -335,7 +335,13 @@ func TestUC034_CheckoutByAnotherRequiresOverride(t *testing.T) {
 	ctx := context.Background()
 	results, _, meetID, unitID, _, _, _ := syncFixture(t)
 
+	// Also assigned to the unit: this test targets the checkout-lock rule,
+	// not per-event scoping (TASK-013), so the second official must be
+	// authorized to reach that check.
 	other := Session{AccountID: "01OTHER", Username: "other", Role: RoleFieldOfficial}
+	if err := store.AssignFieldOfficialUnit(ctx, results.db, other.AccountID, meetID, unitID); err != nil {
+		t.Fatalf("AssignFieldOfficialUnit: %v", err)
+	}
 	_, err := results.CheckoutUnit(ctx, other, meetID, unitID, "tablet-C")
 	if err != ErrCheckedOutByAnother {
 		t.Fatalf("second checkout err = %v, want ErrCheckedOutByAnother", err)

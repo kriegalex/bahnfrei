@@ -20,19 +20,26 @@ type Account struct {
 	DisplayName  string
 	PasswordHash string
 	Role         string
-	Version      int64
+	// Enabled gates login (SYS-091: an office/admin action can disable an
+	// account without deleting its audit history, TASK-013). Always true
+	// for a freshly created account; CreateAccount ignores any caller-set
+	// value on this field for that reason.
+	Enabled bool
+	Version int64
 }
 
 // ErrDuplicateUsername means the username is already taken.
 var ErrDuplicateUsername = errors.New("username already exists")
 
-// CreateAccount inserts a new account with a fresh ID and version 1.
+// CreateAccount inserts a new account with a fresh ID and version 1. New
+// accounts always start enabled.
 func CreateAccount(ctx context.Context, db DBTX, a Account) (Account, error) {
 	a.ID = NewID()
 	a.Version = 1
+	a.Enabled = true
 	_, err := db.ExecContext(ctx, `INSERT INTO accounts
-		(id, username, display_name, password_hash, role, version)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		(id, username, display_name, password_hash, role, enabled, version)
+		VALUES (?, ?, ?, ?, ?, 1, ?)`,
 		a.ID, a.Username, a.DisplayName, a.PasswordHash, a.Role, a.Version)
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -46,24 +53,49 @@ func CreateAccount(ctx context.Context, db DBTX, a Account) (Account, error) {
 // GetAccountByUsername looks up an account by its unique username.
 func GetAccountByUsername(ctx context.Context, db DBTX, username string) (Account, error) {
 	return scanAccount(db.QueryRowContext(ctx, `SELECT id, username, display_name,
-		password_hash, role, version FROM accounts WHERE username = ?`, username))
+		password_hash, role, enabled, version FROM accounts WHERE username = ?`, username))
 }
 
 // GetAccountByID looks up an account by its primary key.
 func GetAccountByID(ctx context.Context, db DBTX, id string) (Account, error) {
 	return scanAccount(db.QueryRowContext(ctx, `SELECT id, username, display_name,
-		password_hash, role, version FROM accounts WHERE id = ?`, id))
+		password_hash, role, enabled, version FROM accounts WHERE id = ?`, id))
+}
+
+// ListAccounts returns every account ordered by username (TASK-013 account
+// administration view, SYS-090).
+func ListAccounts(ctx context.Context, db DBTX) ([]Account, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, username, display_name,
+		password_hash, role, enabled, version FROM accounts ORDER BY username`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Account
+	for rows.Next() {
+		var a Account
+		var enabled int
+		if err := rows.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &a.Version); err != nil {
+			return nil, err
+		}
+		a.Enabled = enabled != 0
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 func scanAccount(row *sql.Row) (Account, error) {
 	var a Account
-	err := row.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &a.Version)
+	var enabled int
+	err := row.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &a.Version)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Account{}, ErrNotFound
 	case err != nil:
 		return Account{}, err
 	}
+	a.Enabled = enabled != 0
 	return a, nil
 }
 
@@ -73,6 +105,24 @@ func scanAccount(row *sql.Row) (Account, error) {
 func UpdateAccountPasswordHash(ctx context.Context, db DBTX, id string, expectedVersion int64, newHash string) (int64, error) {
 	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
 		Set{Column: "password_hash", Value: newHash})
+}
+
+// SetAccountEnabled flips an account's enabled flag (TASK-013 disable/enable
+// flow, SYS-091) using optimistic concurrency.
+func SetAccountEnabled(ctx context.Context, db DBTX, id string, enabled bool, expectedVersion int64) (int64, error) {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
+		Set{Column: "enabled", Value: v})
+}
+
+// SetAccountRole rewrites an account's instance-wide role (TASK-013 role
+// assignment, SYS-090) using optimistic concurrency.
+func SetAccountRole(ctx context.Context, db DBTX, id, role string, expectedVersion int64) (int64, error) {
+	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
+		Set{Column: "role", Value: role})
 }
 
 // CountAccounts returns the number of provisioned accounts (used to decide

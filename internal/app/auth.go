@@ -18,6 +18,21 @@ import (
 // (standard authentication-enumeration mitigation).
 var ErrInvalidCredentials = errors.New("invalid username or password")
 
+// ErrAccountDisabled means the credentials were correct but the account has
+// been disabled (TASK-013, SYS-091). Distinguishing it from
+// ErrInvalidCredentials is safe here because it only ever surfaces after a
+// successful password check, so it discloses nothing to a guesser.
+var ErrAccountDisabled = errors.New("account is disabled")
+
+// ErrLastEnabledAdmin means the requested change would leave the instance
+// with no enabled instance-admin account (a self-lockout guard on top of
+// SYS-090's least-privilege model).
+var ErrLastEnabledAdmin = errors.New("refused: this would leave no enabled instance-admin account")
+
+// ErrDuplicateUsername aliases the store sentinel for web handlers
+// (architecture.md §3: web never imports internal/store directly).
+var ErrDuplicateUsername = store.ErrDuplicateUsername
+
 // AuthService is the use-case service the web layer calls through for
 // authentication and account management (architecture.md §3: web never
 // touches store directly). It owns password verification/upgrade
@@ -60,6 +75,9 @@ func (a *AuthService) Login(ctx context.Context, username, password string) (Ses
 	}
 	if err := VerifyPassword(password, acct.PasswordHash); err != nil {
 		return Session{}, ErrInvalidCredentials
+	}
+	if !acct.Enabled {
+		return Session{}, ErrAccountDisabled
 	}
 
 	role, err := ParseRole(acct.Role)
@@ -216,4 +234,130 @@ func (a *AuthService) Bootstrap(ctx context.Context, username, displayName, pass
 		return store.Account{}, fmt.Errorf("bootstrap: %w", err)
 	}
 	return acct, nil
+}
+
+// ListAccounts returns every provisioned account (TASK-013 account
+// administration view, SYS-090), instance-admin only.
+func (a *AuthService) ListAccounts(ctx context.Context, actor Session) ([]store.Account, error) {
+	if err := Authorize(actor.Role, CapManageAccounts); err != nil {
+		return nil, err
+	}
+	return store.ListAccounts(ctx, a.db)
+}
+
+// otherEnabledAdminsExist reports whether an enabled instance-admin account
+// other than excludeID exists, guarding SetAccountEnabled/ChangeAccountRole
+// against locking the instance out of its own administration.
+func otherEnabledAdminsExist(ctx context.Context, db *sql.DB, excludeID string) (bool, error) {
+	accounts, err := store.ListAccounts(ctx, db)
+	if err != nil {
+		return false, err
+	}
+	for _, acc := range accounts {
+		if acc.ID != excludeID && acc.Enabled && acc.Role == string(RoleInstanceAdmin) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// SetAccountEnabled enables or disables an account (TASK-013, SYS-091):
+// disabling revokes its live sessions immediately, so a session issued
+// before the change stops working right away, not merely at next login.
+// Disabling the last enabled instance-admin account is refused
+// (ErrLastEnabledAdmin) so the instance never loses all administration.
+// The action is written to the audit trail (SYS-046).
+func (a *AuthService) SetAccountEnabled(ctx context.Context, actor Session, accountID string, enabled bool, reason string) (store.Account, error) {
+	if err := Authorize(actor.Role, CapManageAccounts); err != nil {
+		return store.Account{}, err
+	}
+	acct, err := store.GetAccountByID(ctx, a.db, accountID)
+	if err != nil {
+		return store.Account{}, err
+	}
+	if !enabled && acct.Role == string(RoleInstanceAdmin) {
+		ok, err := otherEnabledAdminsExist(ctx, a.db, accountID)
+		if err != nil {
+			return store.Account{}, err
+		}
+		if !ok {
+			return store.Account{}, ErrLastEnabledAdmin
+		}
+	}
+
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("set account enabled: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.SetAccountEnabled(ctx, tx, accountID, enabled, acct.Version); err != nil {
+		return store.Account{}, err
+	}
+	action := "account.disable"
+	if enabled {
+		action = "account.enable"
+	}
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: action,
+		EntityType: "account", EntityID: accountID, Reason: reason,
+	}); err != nil {
+		return store.Account{}, fmt.Errorf("audit %s: %w", action, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.Account{}, fmt.Errorf("set account enabled: %w", err)
+	}
+	if !enabled {
+		a.sessions.RevokeAccount(accountID)
+	}
+	return store.GetAccountByID(ctx, a.db, accountID)
+}
+
+// ChangeAccountRole reassigns an account's instance-wide role (TASK-013,
+// SYS-090). Demoting the last enabled instance-admin account away from
+// RoleInstanceAdmin is refused (ErrLastEnabledAdmin). The action is written
+// to the audit trail with the before/after role (SYS-046).
+func (a *AuthService) ChangeAccountRole(ctx context.Context, actor Session, accountID string, newRole Role, reason string) (store.Account, error) {
+	if err := Authorize(actor.Role, CapManageAccounts); err != nil {
+		return store.Account{}, err
+	}
+	if !newRole.Valid() {
+		return store.Account{}, ErrInvalidRole{Value: string(newRole)}
+	}
+	acct, err := store.GetAccountByID(ctx, a.db, accountID)
+	if err != nil {
+		return store.Account{}, err
+	}
+	if acct.Role == string(RoleInstanceAdmin) && newRole != RoleInstanceAdmin {
+		ok, err := otherEnabledAdminsExist(ctx, a.db, accountID)
+		if err != nil {
+			return store.Account{}, err
+		}
+		if !ok {
+			return store.Account{}, ErrLastEnabledAdmin
+		}
+	}
+
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("change account role: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.SetAccountRole(ctx, tx, accountID, string(newRole), acct.Version); err != nil {
+		return store.Account{}, err
+	}
+	before, _ := json.Marshal(map[string]string{"role": acct.Role})
+	after, _ := json.Marshal(map[string]string{"role": string(newRole)})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "account.role_change",
+		EntityType: "account", EntityID: accountID,
+		Before: string(before), After: string(after), Reason: reason,
+	}); err != nil {
+		return store.Account{}, fmt.Errorf("audit account.role_change: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.Account{}, fmt.Errorf("change account role: %w", err)
+	}
+	return store.GetAccountByID(ctx, a.db, accountID)
 }

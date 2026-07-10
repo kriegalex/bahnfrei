@@ -33,24 +33,6 @@ templ loginPage(p PageData) {
 	}
 }
 
-// adminPage renders the instance-admin workspace: today, the one-action
-// backup download (SYS-084, UC-020 #3). A GET link is deliberate here —
-// the action is a read-only export from the operator's point of view (it
-// takes a snapshot and streams it back; it never mutates meet data), so a
-// plain link/button that triggers a normal browser download is the
-// simplest one-action affordance. Full instance administration (account
-// management UI) is TASK-013's job.
-templ adminPage(p PageData) {
-	@layout(p) {
-		<h1>{ p.T("admin.title") }</h1>
-		<section>
-			<h2>{ p.T("admin.backup.title") }</h2>
-			<p>{ p.T("admin.backup.description") }</p>
-			<a href="/admin/backup" class="button">{ p.T("admin.backup.download") }</a>
-		</section>
-	}
-}
-
 // forbiddenPage renders a localized 403 (SYS-090 authorization failures).
 templ forbiddenPage(p PageData) {
 	@layout(p) {

@@ -47,6 +47,36 @@ func AppendAudit(ctx context.Context, tx *sql.Tx, e AuditEntry) (int64, error) {
 	return res.LastInsertId()
 }
 
+// ListAudit returns the most recent audit entries across every entity, newest
+// first, capped at limit rows (TASK-013 privileged-action surfacing,
+// SYS-091). Filtering to the privileged subset is the app layer's job
+// (internal/app knows which action names are privileged); this is a flat,
+// unfiltered read of the append-only trail.
+func ListAudit(ctx context.Context, db DBTX, limit int) ([]AuditEntry, error) {
+	rows, err := db.QueryContext(ctx, `SELECT seq, ts, actor, action, entity_type, entity_id,
+		coalesce(before_json,''), coalesce(after_json,''), coalesce(reason,'')
+		FROM audit_log ORDER BY seq DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		var ts string
+		if err := rows.Scan(&e.Seq, &ts, &e.Actor, &e.Action, &e.EntityType, &e.EntityID,
+			&e.Before, &e.After, &e.Reason); err != nil {
+			return nil, err
+		}
+		if e.TS, err = time.Parse(time.RFC3339Nano, ts); err != nil {
+			return nil, fmt.Errorf("audit seq %d: bad timestamp %q: %w", e.Seq, ts, err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // AuditTrail returns the entries for one entity in sequence order.
 func AuditTrail(ctx context.Context, db DBTX, entityType, entityID string) ([]AuditEntry, error) {
 	rows, err := db.QueryContext(ctx, `SELECT seq, ts, actor, action, entity_type, entity_id,

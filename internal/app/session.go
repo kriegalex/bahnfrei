@@ -106,6 +106,19 @@ func (m *SessionManager) Revoke(token string) {
 	m.mu.Unlock()
 }
 
+// RevokeAccount deletes every live session for accountID: a disabled
+// account (TASK-013, SYS-091) must not keep working through a session
+// issued before it was disabled.
+func (m *SessionManager) RevokeAccount(accountID string) {
+	m.mu.Lock()
+	for tok, s := range m.sessions {
+		if s.AccountID == accountID {
+			delete(m.sessions, tok)
+		}
+	}
+	m.mu.Unlock()
+}
+
 // Sweep evicts every expired session and returns how many were removed.
 // Intended to be called periodically (e.g. from a ticker in the server
 // lifecycle) so long-idle memory does not grow unbounded.

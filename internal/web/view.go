@@ -24,7 +24,13 @@ type PageData struct {
 	// CanOrganize gates the operator navigation (SYS-090: the meets
 	// workspace is for meet-organizer roles and above).
 	CanOrganize bool
-	CSRFToken   string
+	// CanManageAccounts gates the account-administration nav link
+	// (TASK-013, SYS-090: instance-admin only).
+	CanManageAccounts bool
+	// CanViewAudit gates the privileged-action audit log nav link
+	// (TASK-013, SYS-091/UC-022 #2: office level and above).
+	CanViewAudit bool
+	CSRFToken    string
 	// FlashError, when non-empty, renders as a one-shot alert (e.g. a
 	// failed login attempt); it is never persisted.
 	FlashError string

@@ -30,7 +30,7 @@ var ErrCheckedOutByAnother = errors.New("unit is checked out by another device")
 // capture flow calls when a field official opens a unit — populating the
 // checkout model without churning the generation on every page load.
 func (s *ResultsService) EnsureCheckout(ctx context.Context, actor Session, meetID, unitID, deviceLabel string) (Checkout, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return Checkout{}, err
 	}
 	if _, err := s.unitContext(ctx, meetID, unitID); err != nil {
@@ -49,7 +49,7 @@ func (s *ResultsService) EnsureCheckout(ctx context.Context, actor Session, meet
 // re-taking a released lock bumps the generation; a lock actively held by
 // another device requires an office override (ErrCheckedOutByAnother).
 func (s *ResultsService) CheckoutUnit(ctx context.Context, actor Session, meetID, unitID, deviceLabel string) (Checkout, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return Checkout{}, err
 	}
 	if _, err := s.unitContext(ctx, meetID, unitID); err != nil {
@@ -151,7 +151,7 @@ func (s *ResultsService) ReviseStartList(ctx context.Context, actor Session, mee
 
 // ReleaseCheckout releases a unit's lock on completion (SYS-086).
 func (s *ResultsService) ReleaseCheckout(ctx context.Context, actor Session, meetID, unitID string) (Checkout, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return Checkout{}, err
 	}
 	if _, err := s.unitContext(ctx, meetID, unitID); err != nil {
@@ -208,7 +208,7 @@ type ReplayResult struct {
 // the same TASK-008 capture path (validation, standings recompute, SSE
 // notify): there is no second write path.
 func (s *ResultsService) ReplayCaptureBatch(ctx context.Context, actor Session, meetID, unitID string, batch ReplayBatch) (ReplayResult, error) {
-	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+	if err := s.authorizeCaptureAccess(ctx, actor, meetID, unitID); err != nil {
 		return ReplayResult{}, err
 	}
 	uc, err := s.unitContext(ctx, meetID, unitID)

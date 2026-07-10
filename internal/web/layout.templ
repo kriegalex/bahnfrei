@@ -28,6 +28,12 @@ templ layout(p PageData) {
 					if p.CanOrganize {
 						<a href="/meets">{ p.T("nav.meets") }</a>
 					}
+					if p.CanViewAudit {
+						<a href="/audit">{ p.T("nav.audit") }</a>
+					}
+					if p.CanManageAccounts {
+						<a href="/admin">{ p.T("nav.accounts") }</a>
+					}
 					if p.LoggedIn {
 						<span class="who">{ p.T("auth.logged_in_as", "name", p.Username) }</span>
 						<form action="/logout" method="post" class="inline-form">

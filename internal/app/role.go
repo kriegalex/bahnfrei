@@ -90,6 +90,14 @@ const (
 	// CapManageBackup gates the one-action instance backup (SYS-084,
 	// UC-020 #3): "operator (admin)" per the use-case's actor line.
 	CapManageBackup Capability = "manage_backup"
+	// CapAssignUnits grants/revokes a field official's per-event scoping
+	// (TASK-013, SYS-090 "assignable per meet"): office level and above,
+	// since this is a day-of-competition operational action, not instance
+	// administration.
+	CapAssignUnits Capability = "assign_units"
+	// CapViewAudit gates the privileged-action audit surfacing view
+	// (TASK-013, SYS-091/UC-022 #2): office level and above.
+	CapViewAudit Capability = "view_audit"
 )
 
 // capabilityMinRole is the least-privileged role each capability requires.
@@ -101,6 +109,8 @@ var capabilityMinRole = map[Capability]Role{
 	CapSubmitEntries:    RoleEntrySubmitter,
 	CapViewPublicResult: RolePublic,
 	CapManageBackup:     RoleInstanceAdmin,
+	CapAssignUnits:      RoleCompetitionOffice,
+	CapViewAudit:        RoleCompetitionOffice,
 }
 
 // ErrForbidden means the actor's role does not carry the required capability.

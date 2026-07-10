@@ -52,11 +52,14 @@ func (s *Server) handleUnitCheckout(w http.ResponseWriter, r *http.Request) {
 
 	co, err := s.results.CheckoutUnit(r.Context(), actor, meetID, unitID, deviceLabelOr(req.DeviceLabel))
 	if err != nil {
-		if errors.Is(err, app.ErrCheckedOutByAnother) {
+		switch {
+		case errors.Is(err, app.ErrCheckedOutByAnother):
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "checked_out_by_another"})
-			return
+		case errors.Is(err, app.ErrUnitNotAssigned):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "unit_not_assigned"})
+		default:
+			http.Error(w, "checkout failed", http.StatusBadRequest)
 		}
-		http.Error(w, "checkout failed", http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, checkoutResponse{Token: co.Token, Generation: co.Generation, StartListVersion: co.StartListVersion})
@@ -123,6 +126,10 @@ func (s *Server) handleUnitSync(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.results.ReplayCaptureBatch(r.Context(), actor, meetID, unitID, batch)
 	if err != nil {
+		if errors.Is(err, app.ErrUnitNotAssigned) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "unit_not_assigned"})
+			return
+		}
 		http.Error(w, "replay failed", http.StatusBadRequest)
 		return
 	}
