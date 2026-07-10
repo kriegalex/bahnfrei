@@ -166,6 +166,7 @@
   "setup.username": "Benutzername",
   "sex.female": "Mädchen / weiblich",
   "sex.male": "Knaben / männlich",
+  "standings.download_series_upload": "Serien-Upload-Datei herunterladen (UBS Kids Cup)",
   "standings.empty": "Noch keine Rangliste — es sind keine Teilnehmenden erfasst.",
   "standings.gap_legend": "– = Disziplin (noch) ohne Resultat; Statuscodes (DNS, NM, DQ) zählen keine Punkte.",
   "standings.points_abbr": "Pkt.",

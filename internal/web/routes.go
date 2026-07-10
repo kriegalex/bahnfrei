@@ -63,6 +63,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/roster", office(s.handleRoster))
 	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
+	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
 
 	// Field & track capture (TASK-008, UC-011/UC-010 subset): the on-venue
 	// capture surface, field-official level and above (SYS-090; per-event

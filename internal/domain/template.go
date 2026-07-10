@@ -26,19 +26,24 @@ type TemplateEvent struct {
 // default a meet created from this template carries; empty
 // ResultsPositioning defaults to federation_official at creation time (the
 // conservative default — see MeetService.CreateMeetFromTemplate).
+// SeriesUploadTemplateID names the SYS-077 series-upload template (a
+// separate versioned data file, BuiltinSeriesUploadTemplate) this
+// template's meets can export to; empty means no series-upload export is
+// offered for this template.
 type MeetTemplate struct {
-	ID                 string             `json:"id"`
-	Version            string             `json:"version"`
-	Name               string             `json:"name"`
-	Source             string             `json:"source"`
-	CategorySchemeID   string             `json:"categorySchemeID"`
-	ScoringTableID     string             `json:"scoringTableID"`
-	Tier               string             `json:"tier"`
-	Notes              string             `json:"notes"`
-	Events             []TemplateEvent    `json:"events"`
-	ResultsPositioning ResultsPositioning `json:"resultsPositioning,omitempty"`
-	OfficialSourceName string             `json:"officialSourceName,omitempty"`
-	OfficialSourceURL  string             `json:"officialSourceURL,omitempty"`
+	ID                     string             `json:"id"`
+	Version                string             `json:"version"`
+	Name                   string             `json:"name"`
+	Source                 string             `json:"source"`
+	CategorySchemeID       string             `json:"categorySchemeID"`
+	ScoringTableID         string             `json:"scoringTableID"`
+	Tier                   string             `json:"tier"`
+	Notes                  string             `json:"notes"`
+	Events                 []TemplateEvent    `json:"events"`
+	ResultsPositioning     ResultsPositioning `json:"resultsPositioning,omitempty"`
+	OfficialSourceName     string             `json:"officialSourceName,omitempty"`
+	OfficialSourceURL      string             `json:"officialSourceURL,omitempty"`
+	SeriesUploadTemplateID string             `json:"seriesUploadTemplateID,omitempty"`
 }
 
 // ParseMeetTemplate decodes and validates a meet-template data file. The

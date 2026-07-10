@@ -116,6 +116,51 @@ func TestRosterAndStandingsRequireOfficeRole(t *testing.T) {
 	}
 }
 
+// TestSeriesUploadDownloadSYS077UC035_1 covers the office-UI half of UC-035
+// #1 (SYS-077): the standings page offers a download link for a meet whose
+// template has a series-upload template, and the export route serves a
+// real XLSX workbook (magic bytes + content type) gated at office level
+// like roster/standings (SYS-090).
+func TestSeriesUploadDownloadSYS077UC035_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	resp := postForm(t, client, base+"/meets/from-template", base+"/meets/from-template", url.Values{
+		"template": {"ubs-kids-cup"}, "date": {"2026-08-15"}, "venue": {"Le Mouret"},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+
+	body := bodyString(t, mustGet(t, client, base+loc+"/standings"))
+	if !strings.Contains(body, "/export/ukc-series") {
+		t.Errorf("standings page misses the series-upload download link: %s", body)
+	}
+
+	dlResp := mustGet(t, client, base+loc+"/export/ukc-series")
+	defer dlResp.Body.Close()
+	if dlResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET export = %d, want 200", dlResp.StatusCode)
+	}
+	wantType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	if got := dlResp.Header.Get("Content-Type"); got != wantType {
+		t.Errorf("Content-Type = %q, want %q", got, wantType)
+	}
+	if !strings.Contains(dlResp.Header.Get("Content-Disposition"), "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", dlResp.Header.Get("Content-Disposition"))
+	}
+	data := bodyString(t, dlResp)
+	if !strings.HasPrefix(data, "PK") { // XLSX is a zip archive
+		t.Errorf("downloaded body does not look like an XLSX (zip) file")
+	}
+
+	anon := mustGet(t, &http.Client{}, base+loc+"/export/ukc-series")
+	_ = anon.Body.Close()
+	if anon.StatusCode != http.StatusForbidden {
+		t.Errorf("anonymous export GET = %d, want 403 (SYS-090)", anon.StatusCode)
+	}
+}
+
 // TestTemplateMeetFormRejectsBadInput: a bad date or venue re-renders the
 // form with 422 rather than creating anything.
 func TestTemplateMeetFormRejectsBadInput(t *testing.T) {

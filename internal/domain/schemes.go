@@ -15,7 +15,7 @@ import (
 // (UC-002 #4) — embedding is purely a distribution mechanism, not a special
 // code path.
 //
-//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json
+//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json
 var builtinData embed.FS
 
 // Built-in category-scheme identifiers (SYS-005).
@@ -116,6 +116,43 @@ func BuiltinMeetTemplates() (map[string]*MeetTemplate, error) {
 	out := make(map[string]*MeetTemplate, len(builtinTemplateFiles))
 	for id := range builtinTemplateFiles {
 		t, err := BuiltinMeetTemplate(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, nil
+}
+
+// Built-in series-upload template identifier (SYS-077).
+const SeriesUploadUBSKidsCup = "ubs-kids-cup"
+
+var builtinSeriesUploadFiles = map[string]string{
+	SeriesUploadUBSKidsCup: "data/series-uploads/ubs-kids-cup.json",
+}
+
+// BuiltinSeriesUploadTemplate loads and parses one of the shipped series
+// results-upload templates by ID (SYS-077, UC-035): the organizer-portal
+// upload-file layout, shipped as data so a season's template revision is a
+// data-file swap (UC-035 #3).
+func BuiltinSeriesUploadTemplate(id string) (*SeriesUploadTemplate, error) {
+	path, ok := builtinSeriesUploadFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in series upload template %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in series upload template %q: %w", id, err)
+	}
+	return ParseSeriesUploadTemplate(data)
+}
+
+// BuiltinSeriesUploadTemplates loads every shipped series upload template,
+// keyed by ID.
+func BuiltinSeriesUploadTemplates() (map[string]*SeriesUploadTemplate, error) {
+	out := make(map[string]*SeriesUploadTemplate, len(builtinSeriesUploadFiles))
+	for id := range builtinSeriesUploadFiles {
+		t, err := BuiltinSeriesUploadTemplate(id)
 		if err != nil {
 			return nil, err
 		}

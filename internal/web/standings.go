@@ -195,10 +195,11 @@ type divisionView struct {
 }
 
 type standingsView struct {
-	MeetID      string
-	MeetName    string
-	Disciplines []string
-	Divisions   []divisionView
+	MeetID                string
+	MeetName              string
+	Disciplines           []string
+	Divisions             []divisionView
+	SeriesUploadAvailable bool
 }
 
 func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +214,11 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	v := standingsView{MeetID: detail.ID, MeetName: detail.Name}
+	v := standingsView{
+		MeetID:                detail.ID,
+		MeetName:              detail.Name,
+		SeriesUploadAvailable: s.results.SeriesUploadAvailable(r.Context(), meetID),
+	}
 	for _, code := range standings.Disciplines {
 		name := code
 		if disc, ok := s.meets.Catalog().ByCode(code); ok {
@@ -246,6 +251,27 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("standings.title")
 	_ = standingsPage(p, v).Render(r.Context(), w)
+}
+
+// handleSeriesUploadExport serves the SYS-077 series results-upload
+// workbook (UC-035 #1–#3) as an XLSX download. A meet whose template names
+// no series-upload template (or an unconfigured service) renders the
+// standings-page 404, matching the roster/standings not-found handling.
+func (s *Server) handleSeriesUploadExport(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	data, filename, err := s.results.SeriesUploadExport(r.Context(), meetID)
+	if err != nil {
+		if errors.Is(err, app.ErrNoSeriesUploadTemplate) {
+			s.handleNotFound(w, r)
+			return
+		}
+		s.renderMeetError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	_, _ = w.Write(data)
 }
 
 // markOrGap renders a performance cell: the mark, the status code (DNS,

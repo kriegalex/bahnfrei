@@ -21,12 +21,13 @@ var ErrDuplicateParticipant = store.ErrDuplicateParticipant
 // standings (UC-033 #2–#4; SYS-053/052), plus the attempt-level field and
 // track capture flows on top (TASK-008, UC-010/UC-011).
 type ResultsService struct {
-	db        *sql.DB
-	catalog   *domain.DisciplineCatalog
-	schemes   map[string]*domain.CategoryScheme
-	tables    map[string]*domain.ScoringTable
-	templates map[string]*domain.MeetTemplate
-	onChange  func(meetID string)
+	db            *sql.DB
+	catalog       *domain.DisciplineCatalog
+	schemes       map[string]*domain.CategoryScheme
+	tables        map[string]*domain.ScoringTable
+	templates     map[string]*domain.MeetTemplate
+	seriesUploads map[string]*domain.SeriesUploadTemplate
+	onChange      func(meetID string)
 }
 
 // NewResultsService wires a ResultsService; catalog, schemes, tables and
@@ -250,6 +251,7 @@ type StandingRow struct {
 	LastName  string
 	ClubName  string
 	BirthYear int
+	Sex       domain.Sex
 	Marks     []domain.CombinedPerformance // aligned with DivisionStandings.Disciplines
 	Total     int
 	Complete  bool
@@ -358,6 +360,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 			LastName:  p.Athlete.LastName,
 			ClubName:  club,
 			BirthYear: p.Athlete.BirthYear,
+			Sex:       p.Athlete.Sex,
 			Marks:     perAthlete[p.AthleteID],
 		})
 	}

@@ -71,12 +71,18 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 	if err != nil {
 		tb.Fatalf("apptest: load meet templates: %v", err)
 	}
+	seriesUploads, err := domain.BuiltinSeriesUploadTemplates()
+	if err != nil {
+		tb.Fatalf("apptest: load series upload templates: %v", err)
+	}
 
 	sessions := app.NewSessionManager(sessionTTL)
+	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
+	results.SetSeriesUploadTemplates(seriesUploads)
 	return Fixture{
 		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
 		Sessions: sessions,
 		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
-		Results:  app.NewResultsService(st.DB(), catalog, schemes, tables, templates),
+		Results:  results,
 	}
 }

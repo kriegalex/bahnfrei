@@ -36,7 +36,13 @@ func newTestResults(t *testing.T) (*MeetService, *ResultsService, *store.Store) 
 	if err != nil {
 		t.Fatalf("BuiltinMeetTemplates: %v", err)
 	}
-	return meets, NewResultsService(st.DB(), catalog, schemes, tables, templates), st
+	results := NewResultsService(st.DB(), catalog, schemes, tables, templates)
+	seriesUploads, err := domain.BuiltinSeriesUploadTemplates()
+	if err != nil {
+		t.Fatalf("BuiltinSeriesUploadTemplates: %v", err)
+	}
+	results.SetSeriesUploadTemplates(seriesUploads)
+	return meets, results, st
 }
 
 func ukcDay() time.Time { return time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC) }

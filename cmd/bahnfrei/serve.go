@@ -131,8 +131,14 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		_ = st.Close()
 		return serveDeps{}, fmt.Errorf("load meet templates: %w", err)
 	}
+	seriesUploads, err := domain.BuiltinSeriesUploadTemplates()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load series upload templates: %w", err)
+	}
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
+	results.SetSeriesUploadTemplates(seriesUploads)
 
 	cats, err := i18n.Load()
 	if err != nil {
