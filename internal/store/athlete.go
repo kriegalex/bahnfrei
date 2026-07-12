@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
@@ -141,6 +142,86 @@ func decodeAthlete(a AthleteRecord, birthDate sql.NullString, sex, clubs, ext st
 		return AthleteRecord{}, fmt.Errorf("athlete %s: bad external ids: %w", a.ID, err)
 	}
 	return a, nil
+}
+
+// FindAthleteByExternalID looks up an athlete by one of their namespaced
+// external identifiers (ADR-005 §6) — e.g. a Swiss Athletics licence number
+// (domain.NamespaceSwissAthleticsLicence). Used by the CSV/Alabus import
+// path (SYS-013) to match a re-imported row to its existing athlete instead
+// of creating a duplicate (UC-004 #2 idempotency). Returns ErrNotFound if no
+// athlete carries that (namespace, id) pair.
+func FindAthleteByExternalID(ctx context.Context, db DBTX, namespace, id string) (AthleteRecord, error) {
+	var a AthleteRecord
+	var birthDate sql.NullString
+	var sex, clubs, ext string
+	err := db.QueryRowContext(ctx, `SELECT id, first_name, last_name, birth_date,
+		birth_year, sex, nationality, club_ids, external_ids, version
+		FROM athletes WHERE json_extract(external_ids, '$.' || ?) = ? LIMIT 1`,
+		jsonKeyPath(namespace), id).Scan(&a.ID, &a.FirstName, &a.LastName,
+		&birthDate, &a.BirthYear, &sex, &a.Nationality, &clubs, &ext, &a.Version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return AthleteRecord{}, ErrNotFound
+	case err != nil:
+		return AthleteRecord{}, err
+	}
+	return decodeAthlete(a, birthDate, sex, clubs, ext)
+}
+
+// jsonKeyPath quotes namespace as a SQLite JSON path object-key segment
+// (json_extract(doc, '$."namespace:with:colons"')) — external-ID namespaces
+// contain colons (e.g. "swiss-athletics:licence"), which are not valid bare
+// path tokens.
+func jsonKeyPath(namespace string) string {
+	return `"` + strings.ReplaceAll(namespace, `"`, `\"`) + `"`
+}
+
+// FindAthleteByNaturalKey looks up an athlete by (first name, last name,
+// birth year, sex), case-insensitively on the names — the fallback
+// idempotency match for import rows that carry no licence number (UC-004
+// #2). Returns ErrNotFound if no athlete matches, or the first match if the
+// natural key is ambiguous (rare at PoC scale; a licence number
+// disambiguates when present).
+func FindAthleteByNaturalKey(ctx context.Context, db DBTX, firstName, lastName string, birthYear int, sex domain.Sex) (AthleteRecord, error) {
+	var a AthleteRecord
+	var birthDate sql.NullString
+	var sexCol, clubs, ext string
+	err := db.QueryRowContext(ctx, `SELECT id, first_name, last_name, birth_date,
+		birth_year, sex, nationality, club_ids, external_ids, version
+		FROM athletes
+		WHERE lower(first_name) = lower(?) AND lower(last_name) = lower(?)
+		  AND birth_year = ? AND sex = ?
+		LIMIT 1`, firstName, lastName, birthYear, string(sex)).Scan(&a.ID, &a.FirstName, &a.LastName,
+		&birthDate, &a.BirthYear, &sexCol, &a.Nationality, &clubs, &ext, &a.Version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return AthleteRecord{}, ErrNotFound
+	case err != nil:
+		return AthleteRecord{}, err
+	}
+	return decodeAthlete(a, birthDate, sexCol, clubs, ext)
+}
+
+// SetAthleteExternalID adds/overwrites one namespaced external identifier on
+// an existing athlete (e.g. attaching a licence number discovered on
+// re-import, UC-004 #2) without disturbing any other field, under
+// optimistic concurrency.
+func SetAthleteExternalID(ctx context.Context, db DBTX, athleteID string, expectedVersion int64, namespace, id string) (int64, error) {
+	rec, err := GetAthlete(ctx, db, athleteID)
+	if err != nil {
+		return 0, err
+	}
+	ext := orEmptyMap(rec.ExternalIDs)
+	if ext[namespace] == id {
+		return rec.Version, nil // already set — idempotent no-op
+	}
+	ext.Set(namespace, id)
+	data, err := json.Marshal(ext)
+	if err != nil {
+		return 0, fmt.Errorf("set athlete external id: %w", err)
+	}
+	return OptimisticUpdate(ctx, db, "athletes", athleteID, expectedVersion,
+		Set{Column: "external_ids", Value: string(data)})
 }
 
 func orEmptyMap(m domain.ExternalIDs) domain.ExternalIDs {

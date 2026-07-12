@@ -6,6 +6,8 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 )
 
 // DisciplineFamily is the discipline grouping vocabulary fixed by SyRS §2.
@@ -131,4 +133,28 @@ func (c *DisciplineCatalog) ByCode(code string) (Discipline, bool) {
 		}
 	}
 	return Discipline{}, false
+}
+
+// trackDistancePattern matches a leading run of digits followed by "m" in a
+// track/relay discipline code (e.g. "800m", "3000mSC", "300mH") — the D4.3
+// youth-protection distance rules (SYS-014, UC-005 #2/#3) key off this
+// numeric distance, not a separate catalog field, since the code already
+// carries it for every stadium track/hurdles/steeplechase discipline.
+var trackDistancePattern = regexp.MustCompile(`^(\d+)m`)
+
+// TrackDistanceMeters extracts the race distance in metres encoded in a
+// track/relay discipline code's leading digits (e.g. "800m" -> 800,
+// "3000mSC" -> 3000, "300mH" -> 300). Returns false for codes with no
+// leading-digit distance (field disciplines, "60m" hurdles-style codes
+// without digits, etc. still parse fine as long as they start with digits).
+func TrackDistanceMeters(code string) (int, bool) {
+	m := trackDistancePattern.FindStringSubmatch(code)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }

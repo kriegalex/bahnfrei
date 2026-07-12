@@ -62,5 +62,26 @@
       "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W"],
       "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U10/U12/U14 athletes may not enter steeplechase."
     }
+  ],
+  "youthProtectionRulesNote": "D4.3 (docs/research/domain-athletics.md, 'Maximum race distances by category and venue type'): stadium/hall max distances of 1000m (U10), 2000m (U12) and 3000m (U14); U16/U18 carry no stadium-distance cap (only the off-stadium/road caps in the same table, out of scope for this stadium-discipline catalog). U10/U12/U14 athletes may run at most one race of 600m or longer per competition day (TASK-017, SYS-014, UC-005 #2/#3).",
+  "youthProtectionRules": [
+    {
+      "categoryCodes": ["U10 M", "U10 W"],
+      "maxStadiumDistanceM": 1000,
+      "maxOneRaceAtOrAboveM": 600,
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U10 stadium/hall max race distance 1000m; at most one race ≥600m per competition day."
+    },
+    {
+      "categoryCodes": ["U12 M", "U12 W"],
+      "maxStadiumDistanceM": 2000,
+      "maxOneRaceAtOrAboveM": 600,
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U12 stadium/hall max race distance 2000m; at most one race ≥600m per competition day."
+    },
+    {
+      "categoryCodes": ["U14 M", "U14 W"],
+      "maxStadiumDistanceM": 3000,
+      "maxOneRaceAtOrAboveM": 600,
+      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U14 stadium/hall max race distance 3000m; at most one race ≥600m per competition day."
+    }
   ]
 }

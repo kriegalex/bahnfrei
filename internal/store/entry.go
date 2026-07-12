@@ -70,6 +70,17 @@ func ListEntriesByEvent(ctx context.Context, db DBTX, eventID string) ([]EntryRe
 	return queryEntries(ctx, db, `SELECT `+entryColumns+` FROM entries WHERE event_id = ? ORDER BY id`, eventID)
 }
 
+// GetEntryByEventAthlete looks up the (at most one, per the event/athlete
+// unique index) entry for one athlete at one event — the CSV/Alabus import
+// path's idempotency lookup (SYS-013, UC-004 #2): re-importing the same row
+// finds the entry a prior import already created instead of colliding on
+// ErrDuplicateEntry with no way back to that entry's ID. Returns ErrNotFound
+// if the athlete has no entry at eventID.
+func GetEntryByEventAthlete(ctx context.Context, db DBTX, eventID, athleteID string) (EntryRecord, error) {
+	return scanEntry(db.QueryRowContext(ctx, `SELECT `+entryColumns+`
+		FROM entries WHERE event_id = ? AND athlete_id = ?`, eventID, athleteID))
+}
+
 // ListEntriesByMeet returns every entry across a meet's programme (UC-006
 // exception report and fee summary).
 func ListEntriesByMeet(ctx context.Context, db DBTX, meetID string) ([]EntryRecord, error) {

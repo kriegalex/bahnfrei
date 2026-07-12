@@ -1,0 +1,18 @@
+{
+  "id": "alabus",
+  "version": "assumption-1.0",
+  "name": "Swiss Athletics / Alabus entries export (assumption)",
+  "source": "SYS-013(b): a mapping profile for Swiss Athletics/Alabus entry exports once a sample is available (A-011/OQ-011). No sample export could be obtained (OQ-011, OQ-030): the Alabus marketing site blocks automated access and the documented TAF3↔Alabus flow is described only from the Seltec/TAF3 side (docs/research/competitive-analysis.md). This profile is a clearly-marked ASSUMPTION, modelled on (1) the German-language column vocabulary a Swiss Athletics/TAF3-family export uses elsewhere in this repo's verified sources (Rang/StNr/Name/Jg/Verein, docs/research/competitive-analysis.md; the real UBS Kids Cup TAF3 result-list export cited by OQ-023) and (2) WO 2026 §5.3b, which makes the licence number (Lizenznummer) the mandatory athlete-identity join key for any Swiss Athletics-sourced entry data. Swap this file for the verified Alabus export layout once obtained (OQ-030) — no code change required, per ADR-005 §4.",
+  "eventCodeFormat": "<disciplineCode>/<categoryCode>, e.g. \"100m/U16 M\" — same project convention as the system-native profile (Alabus's own event/discipline export vocabulary is unverified per OQ-030, so this ships against the documented internal join key, not a guessed Alabus-native code).",
+  "columns": [
+    {"field": "firstName", "header": "Vorname"},
+    {"field": "lastName", "header": "Name"},
+    {"field": "birthYear", "header": "Jahrgang"},
+    {"field": "sex", "header": "Geschlecht"},
+    {"field": "club", "header": "Verein"},
+    {"field": "licenceNo", "header": "Lizenznummer"},
+    {"field": "eventCode", "header": "Disziplin"},
+    {"field": "categoryCode", "header": "Kategorie"},
+    {"field": "seedPerformance", "header": "Meldeleistung"}
+  ]
+}

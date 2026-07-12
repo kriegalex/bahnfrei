@@ -42,6 +42,11 @@ func newTestResults(t *testing.T) (*MeetService, *ResultsService, *store.Store) 
 		t.Fatalf("BuiltinSeriesUploadTemplates: %v", err)
 	}
 	results.SetSeriesUploadTemplates(seriesUploads)
+	importProfiles, err := domain.BuiltinImportMappingProfiles()
+	if err != nil {
+		t.Fatalf("BuiltinImportMappingProfiles: %v", err)
+	}
+	results.SetImportMappingProfiles(importProfiles)
 	return meets, results, st
 }
 

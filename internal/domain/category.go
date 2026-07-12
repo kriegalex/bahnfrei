@@ -63,6 +63,25 @@ type DisciplineRestriction struct {
 	Citation            string   `json:"citation"`
 }
 
+// YouthProtectionRule is one D4.3 youth-protection band: the maximum
+// stadium race distance and the "at most one race at/above a threshold
+// distance per competition day" cap that apply to a set of category codes
+// (SYS-014, UC-005 #2/#3). Rule-shaped data, not code, per ADR-005 §4 — like
+// DisciplineRestriction above.
+type YouthProtectionRule struct {
+	// CategoryCodes names every category this rule applies to (typically a
+	// tier's M/W pair, e.g. "U12 M"/"U12 W").
+	CategoryCodes []string `json:"categoryCodes"`
+	// MaxStadiumDistanceM caps the longest stadium-venue race distance this
+	// category may enter, in metres; zero means no cap.
+	MaxStadiumDistanceM int `json:"maxStadiumDistanceM"`
+	// MaxOneRaceAtOrAboveM: at most one race at/above this distance (metres)
+	// per competition day; zero means the cap does not apply to this
+	// category.
+	MaxOneRaceAtOrAboveM int    `json:"maxOneRaceAtOrAboveM"`
+	Citation             string `json:"citation"`
+}
+
 // CategoryScheme is the SyRS §2 CategoryScheme entity: a versioned,
 // data-defined set of Category rows plus discipline restrictions (SYS-005).
 // It is interpreted generically by the resolver functions below — a new
@@ -77,6 +96,10 @@ type CategoryScheme struct {
 	Notes                  string                  `json:"notes"`
 	Categories             []Category              `json:"categories"`
 	DisciplineRestrictions []DisciplineRestriction `json:"disciplineRestrictions"`
+	// YouthProtectionRules ships the D4.3 max-distance / one-race-per-day
+	// bands (SYS-014); a scheme with none (e.g. UBS Kids Cup, which has its
+	// own distance-free format) simply has an empty slice.
+	YouthProtectionRules []YouthProtectionRule `json:"youthProtectionRules"`
 }
 
 // ParseCategoryScheme decodes and validates a category-scheme data file
@@ -128,7 +151,30 @@ func (s *CategoryScheme) Validate() error {
 			}
 		}
 	}
+	for _, r := range s.YouthProtectionRules {
+		if len(r.CategoryCodes) == 0 {
+			return fmt.Errorf("scheme %q: youth protection rule has no category codes", s.ID)
+		}
+		for _, code := range r.CategoryCodes {
+			if !seen[code] {
+				return fmt.Errorf("scheme %q: youth protection rule references unknown category %q", s.ID, code)
+			}
+		}
+	}
 	return nil
+}
+
+// YouthProtectionFor returns the youth-protection rule that applies to
+// categoryCode, if any (SYS-014, UC-005 #2/#3).
+func (s *CategoryScheme) YouthProtectionFor(categoryCode string) (YouthProtectionRule, bool) {
+	for _, r := range s.YouthProtectionRules {
+		for _, code := range r.CategoryCodes {
+			if code == categoryCode {
+				return r, true
+			}
+		}
+	}
+	return YouthProtectionRule{}, false
 }
 
 // CategoryByCode returns the category with the given code, if present.

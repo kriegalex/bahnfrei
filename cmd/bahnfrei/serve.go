@@ -136,9 +136,15 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		_ = st.Close()
 		return serveDeps{}, fmt.Errorf("load series upload templates: %w", err)
 	}
+	importProfiles, err := domain.BuiltinImportMappingProfiles()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load import mapping profiles: %w", err)
+	}
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 	results.SetSeriesUploadTemplates(seriesUploads)
+	results.SetImportMappingProfiles(importProfiles)
 	backup := app.NewBackupService(st)
 
 	cats, err := i18n.Load()

@@ -152,6 +152,7 @@ templ entriesPage(p PageData, v entriesView) {
 							<th>{ p.T("entries.seed") }</th>
 							<th>{ p.T("entries.status") }</th>
 							<th>{ p.T("entries.fee") }</th>
+							<th>{ p.T("eligibility.title") }</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -173,10 +174,19 @@ templ entriesPage(p PageData, v entriesView) {
 									}
 								</td>
 								<td>{ row.FeeCHF }</td>
+								<td>
+									if row.EligibilityOutcome != "" {
+										{ row.EligibilityOutcome }
+										if len(row.EligibilityFlags) > 0 {
+											<br/>
+											<small>{ joinStrings(row.EligibilityFlags) }</small>
+										}
+									}
+								</td>
 							</tr>
 							if row.IsRelay && row.CanEditRelay {
 								<tr>
-									<td colspan="5">
+									<td colspan="6">
 										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/relay-composition") } method="post" class="inline-form">
 											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 											<input type="hidden" name="relay_version" value={ row.RelayVersion }/>

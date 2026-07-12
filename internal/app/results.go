@@ -27,7 +27,18 @@ type ResultsService struct {
 	tables        map[string]*domain.ScoringTable
 	templates     map[string]*domain.MeetTemplate
 	seriesUploads map[string]*domain.SeriesUploadTemplate
-	onChange      func(meetID string)
+	// importProfiles are the SYS-013 entry-import mapping profiles
+	// (TASK-017), wired via SetImportMappingProfiles — normally the built-in
+	// system-native/alabus profiles (see internal/domain/schemes.go).
+	importProfiles map[string]*domain.ImportMappingProfile
+	onChange       func(meetID string)
+}
+
+// SetImportMappingProfiles wires the SYS-013 entry-import mapping profiles
+// (TASK-017), mirroring SetSeriesUploadTemplates' precedent — normally the
+// built-in profiles from domain.BuiltinImportMappingProfiles.
+func (s *ResultsService) SetImportMappingProfiles(profiles map[string]*domain.ImportMappingProfile) {
+	s.importProfiles = profiles
 }
 
 // NewResultsService wires a ResultsService; catalog, schemes, tables and

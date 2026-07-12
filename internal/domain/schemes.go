@@ -15,7 +15,7 @@ import (
 // (UC-002 #4) — embedding is purely a distribution mechanism, not a special
 // code path.
 //
-//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json
+//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json data/import-profiles/*.json
 var builtinData embed.FS
 
 // Built-in category-scheme identifiers (SYS-005).
@@ -172,4 +172,45 @@ func BuiltinDisciplineCatalog() (*DisciplineCatalog, error) {
 		return nil, fmt.Errorf("read built-in discipline catalog: %w", err)
 	}
 	return ParseDisciplineCatalog(data)
+}
+
+// Built-in entry-import mapping-profile identifiers (SYS-013, TASK-017).
+const (
+	ImportProfileSystemNative = "system-native"
+	ImportProfileAlabus       = "alabus"
+)
+
+var builtinImportMappingProfileFiles = map[string]string{
+	ImportProfileSystemNative: "data/import-profiles/system-native.json",
+	ImportProfileAlabus:       "data/import-profiles/alabus.json",
+}
+
+// BuiltinImportMappingProfile loads and parses one of the shipped entry
+// import mapping profiles by ID (SYS-013: system-native CSV, or the Alabus
+// assumption profile — see its data file's "source" note and OQ-030 for the
+// unverified-format caveat).
+func BuiltinImportMappingProfile(id string) (*ImportMappingProfile, error) {
+	path, ok := builtinImportMappingProfileFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in import mapping profile %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in import mapping profile %q: %w", id, err)
+	}
+	return ParseImportMappingProfile(data)
+}
+
+// BuiltinImportMappingProfiles loads every shipped import mapping profile,
+// keyed by ID.
+func BuiltinImportMappingProfiles() (map[string]*ImportMappingProfile, error) {
+	out := make(map[string]*ImportMappingProfile, len(builtinImportMappingProfileFiles))
+	for id := range builtinImportMappingProfileFiles {
+		p, err := BuiltinImportMappingProfile(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = p
+	}
+	return out, nil
 }

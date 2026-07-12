@@ -61,6 +61,11 @@ type EntryDetail struct {
 	// per-relay fee, SYS-017) at read time — not stored on the entry itself,
 	// so a later fee-schedule change is reflected immediately.
 	FeeCents int64
+	// Eligibility is the entry's most recent SYS-014 evaluation (TASK-017,
+	// UC-005); a zero value (Outcome "") reads as eligible/no-flags — see
+	// EligibilityView.EffectiveOutcome. Relay entries are not evaluated
+	// (OQ-032): always zero-value.
+	Eligibility EligibilityView
 }
 
 // RelayTeamDetail is a relay team enriched with its athletes' display names,
@@ -302,6 +307,10 @@ func (s *ResultsService) SubmitIndividualEntry(ctx context.Context, actor Sessio
 	if err != nil {
 		return EntryDetail{}, err
 	}
+	eligResult, err := s.evaluateAndStoreEligibility(ctx, tx, meet, event, athlete, rec.ID)
+	if err != nil {
+		return EntryDetail{}, err
+	}
 
 	if err := auditEntrySubmit(ctx, tx, actor, rec.ID, athlete.FirstName+" "+athlete.LastName, "entry.submit"); err != nil {
 		return EntryDetail{}, err
@@ -312,6 +321,7 @@ func (s *ResultsService) SubmitIndividualEntry(ctx context.Context, actor Sessio
 	return EntryDetail{
 		EntryRecord: rec, Event: event, AthleteName: athlete.FirstName + " " + athlete.LastName,
 		ClubName: club.Name, FeeCents: meet.EntryFeeCents,
+		Eligibility: EligibilityView{Outcome: eligResult.Outcome, Flags: eligResult.Flags, Version: 1},
 	}, nil
 }
 
@@ -374,9 +384,14 @@ func (s *ResultsService) SubmitClubBulkEntries(ctx context.Context, actor Sessio
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
+		eligResult, err := s.evaluateAndStoreEligibility(ctx, tx, meet, event, athlete, rec.ID)
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %w", i+1, err)
+		}
 		out = append(out, EntryDetail{
 			EntryRecord: rec, Event: event, AthleteName: athlete.FirstName + " " + athlete.LastName,
 			ClubName: club.Name, FeeCents: meet.EntryFeeCents,
+			Eligibility: EligibilityView{Outcome: eligResult.Outcome, Flags: eligResult.Flags, Version: 1},
 		})
 	}
 
@@ -639,6 +654,9 @@ func (s *ResultsService) enrichEntries(ctx context.Context, recs []store.EntryRe
 				}
 			}
 			detail.FeeCents = meet.EntryFeeCents
+			if eligRec, err := store.GetEntryEligibility(ctx, s.db, rec.ID); err == nil {
+				detail.Eligibility = eligibilityViewFrom(eligRec)
+			}
 		case rec.RelayTeamID != "":
 			team, err := store.GetRelayTeam(ctx, s.db, rec.RelayTeamID)
 			if err != nil {

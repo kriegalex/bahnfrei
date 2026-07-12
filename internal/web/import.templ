@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// entriesImportPage is the competition office's CSV entry import workspace
+// (TASK-017, UC-004, SYS-013): pick a mapping profile, upload a file, and
+// either preview (nothing persisted) or commit — the report below the form
+// shows the same per-row accepted/updated/rejected/eligibility detail
+// either way.
+templ entriesImportPage(p PageData, v entriesImportView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("import.title") }</h1>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID + "/entries") }>{ p.T("entries.title") }</a> ·
+			<a href={ templ.URL("/meets/" + v.MeetID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a>
+		</p>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/entries/import") } method="post" enctype="multipart/form-data">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>
+				{ p.T("import.profile") }
+				<select name="profile">
+					for _, prof := range v.Profiles {
+						<option value={ prof.ID }>{ prof.Name }</option>
+					}
+				</select>
+			</label>
+			<label>{ p.T("import.file") } <input type="file" name="file" accept=".csv,text/csv" required?={ true }/></label>
+			<button type="submit" name="action" value="preview">{ p.T("import.preview") }</button>
+			<button type="submit" name="action" value="commit">{ p.T("import.commit") }</button>
+		</form>
+		if v.Report != nil {
+			<h2>
+				if v.Report.Committed {
+					{ p.T("import.report.committed") }
+				} else {
+					{ p.T("import.report.preview") }
+				}
+			</h2>
+			<p>
+				{ p.T("import.report.accepted") }: { intToStr(int64(v.Report.Accepted)) } ·
+				{ p.T("import.report.updated") }: { intToStr(int64(v.Report.Updated)) } ·
+				{ p.T("import.report.rejected") }: { intToStr(int64(v.Report.Rejected)) }
+			</p>
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("import.row") }</th>
+							<th>{ p.T("import.report.status") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("entries.event") }</th>
+							<th>{ p.T("eligibility.title") }</th>
+							<th>{ p.T("import.report.reason") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Report.Rows {
+							<tr>
+								<td>{ intToStr(int64(row.RowNumber)) }</td>
+								<td>{ row.Status }</td>
+								<td>{ row.Who }</td>
+								<td>{ row.EventCode }</td>
+								<td>
+									if row.EligibilityOutcome != "" {
+										{ row.EligibilityOutcome }
+										if len(row.EligibilityFlags) > 0 {
+											<br/>
+											<small>{ joinStrings(row.EligibilityFlags) }</small>
+										}
+									}
+								</td>
+								<td>{ row.Reason }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// eligibilityExceptionsPage is the office's UC-005 worklist: every entry
+// currently flagged (warning or blocked, SYS-014), with the override action
+// (UC-005 #4) inline per row.
+templ eligibilityExceptionsPage(p PageData, v eligibilityView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("eligibility.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("eligibility.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("entries.event") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("eligibility.outcome") }</th>
+							<th>{ p.T("eligibility.flags") }</th>
+							<th>{ p.T("eligibility.override") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.EventLabel }</td>
+								<td>{ row.Who }</td>
+								<td>{ row.Outcome }</td>
+								<td>{ joinStrings(row.Flags) }</td>
+								<td>
+									if row.Overridden {
+										<span>{ p.T("eligibility.overridden_by") }: { row.OverriddenBy }</span>
+										<br/>
+										<small>{ row.OverrideReason }</small>
+									} else {
+										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/eligibility/override") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="version" value={ row.Version }/>
+											<input type="text" name="reason" placeholder={ p.T("eligibility.override_reason") } required?={ true }/>
+											<button type="submit">{ p.T("eligibility.override") }</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}

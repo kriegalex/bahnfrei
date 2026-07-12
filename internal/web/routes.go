@@ -103,6 +103,14 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
 
+	// CSV entry import & eligibility exceptions (TASK-017, UC-004/UC-005,
+	// SYS-013/014/010): competition-office level (CapOfficeActions,
+	// SYS-090) — same tier as check-in/day-of-competition operations.
+	mux.HandleFunc("GET /meets/{id}/entries/import", office(s.handleEntriesImportForm))
+	mux.HandleFunc("POST /meets/{id}/entries/import", office(s.handleEntriesImportSubmit))
+	mux.HandleFunc("GET /meets/{id}/entries/eligibility", office(s.handleEligibilityList))
+	mux.HandleFunc("POST /meets/{id}/entries/{entry}/eligibility/override", office(s.handleEligibilityOverride))
+
 	// Printables (TASK-011, UC-018 subset, SYS-072, PoC scope): the UKC
 	// result list as PDF is office-level, matching the standings page it
 	// mirrors.

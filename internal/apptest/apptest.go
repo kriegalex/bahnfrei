@@ -76,10 +76,15 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 	if err != nil {
 		tb.Fatalf("apptest: load series upload templates: %v", err)
 	}
+	importProfiles, err := domain.BuiltinImportMappingProfiles()
+	if err != nil {
+		tb.Fatalf("apptest: load import mapping profiles: %v", err)
+	}
 
 	sessions := app.NewSessionManager(sessionTTL)
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 	results.SetSeriesUploadTemplates(seriesUploads)
+	results.SetImportMappingProfiles(importProfiles)
 	return Fixture{
 		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
 		Sessions: sessions,

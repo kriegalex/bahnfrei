@@ -1,0 +1,18 @@
+{
+  "id": "system-native",
+  "version": "1.0",
+  "name": "Bahnfrei system-native CSV",
+  "source": "docs/requirements/system-requirements.md SYS-013(a): a documented system-native CSV/JSON format",
+  "eventCodeFormat": "<disciplineCode>/<categoryCode>, e.g. \"100m/U16 M\" — the discipline catalog code and one of the target event's category-scheme codes, joined with a slash; this identifies which programme event the row targets. The separate category_code column only needs a value when it differs from the eventCode's own category (a combined-category event, e.g. a mixed U16/U18 field) — it then names the athlete's actual entry category within that event; leave it blank otherwise.",
+  "columns": [
+    {"field": "firstName", "header": "first_name"},
+    {"field": "lastName", "header": "last_name"},
+    {"field": "birthYear", "header": "birth_year"},
+    {"field": "sex", "header": "sex"},
+    {"field": "club", "header": "club"},
+    {"field": "licenceNo", "header": "licence_no"},
+    {"field": "eventCode", "header": "event_code"},
+    {"field": "categoryCode", "header": "category_code"},
+    {"field": "seedPerformance", "header": "seed_performance"}
+  ]
+}

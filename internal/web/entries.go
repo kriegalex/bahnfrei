@@ -54,6 +54,11 @@ type entryRowView struct {
 	Composition   []string
 	Reserves      []string
 	CanEditRelay  bool
+	// EligibilityOutcome is the entry's SYS-014 evaluation (TASK-017,
+	// UC-005), blank when there is none to show (relay entries, or an
+	// individual entry with no flags at all).
+	EligibilityOutcome string
+	EligibilityFlags   []string
 }
 
 type entriesView struct {
@@ -196,6 +201,12 @@ func (s *Server) entryRowsFrom(p PageData, details []app.EntryDetail) []entryRow
 			row.Who = d.AthleteName
 			if d.ClubName != "" {
 				row.Who += " (" + d.ClubName + ")"
+			}
+			if d.Eligibility.Outcome != "" {
+				row.EligibilityOutcome = p.T("eligibility.outcome." + string(d.Eligibility.Outcome))
+				for _, fl := range d.Eligibility.Flags {
+					row.EligibilityFlags = append(row.EligibilityFlags, p.T("eligibility.flag."+fl.Code))
+				}
 			}
 		}
 		rows = append(rows, row)
