@@ -6,6 +6,7 @@ package web
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
@@ -136,7 +137,13 @@ func (s *Server) handleResultListPDF(w http.ResponseWriter, r *http.Request) {
 // standings: discipline column headers are localized the same way the
 // public results page localizes them (UC-018 #3, SYS-074's mechanism), and
 // a missing discipline renders the same explicit gap the standings page
-// shows (UC-033 #3) via markOrGap.
+// shows (UC-033 #3) via markOrGap. A printed result list is a
+// "publication-intended export" per SYS-100's own wording (it is meant to
+// be posted at the venue) — so it goes through the same SYS-103 consent
+// minimization as the public web pages (domain.PublicDisplayNameFor/
+// PublicDisplayClubFor), unlike the office-only standings page
+// (handleStandings) or the series-upload federation export (which UC-023
+// #2 explicitly keeps un-minimized: "exportable to the federation").
 func (s *Server) resultListDocument(p PageData, meetName string, standings app.MeetStandings) pdf.Document {
 	header := pdf.Header{
 		DocTitle:         p.T("standings.title"),
@@ -166,9 +173,11 @@ func (s *Server) resultListDocument(p PageData, meetName string, standings app.M
 
 		rows := make([][]string, 0, len(div.Rows))
 		for _, row := range div.Rows {
+			first, last := domain.PublicDisplayNameFor(row.Consent, row.FirstName, row.LastName)
+			club := domain.PublicDisplayClubFor(row.Consent, row.ClubName)
 			cells := []string{
-				strconv.Itoa(row.Rank), row.Bib, row.FirstName + " " + row.LastName,
-				row.ClubName, strconv.Itoa(row.BirthYear),
+				strconv.Itoa(row.Rank), row.Bib, strings.TrimSpace(first + " " + last),
+				club, strconv.Itoa(row.BirthYear),
 			}
 			for _, m := range row.Marks {
 				cell := markOrGap(m)

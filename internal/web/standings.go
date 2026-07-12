@@ -150,6 +150,11 @@ func (s *Server) handleRosterAdd(w http.ResponseWriter, r *http.Request) {
 		Sex:       domain.Sex(r.FormValue("sex")),
 		Club:      strings.TrimSpace(r.FormValue("club")),
 		Bib:       strings.TrimSpace(r.FormValue("bib")),
+		// SYS-103/UC-023: the entry flow collects the publication-consent
+		// choice up front — an unchecked box (the default) means results
+		// are publicly listed as usual; checking it withdraws consent from
+		// the start (see domain.PublicationConsent for the opt-out shape).
+		PublicationWithdrawn: r.FormValue("publication_withdrawn") == "true",
 	}
 	if _, err := s.results.RegisterParticipant(r.Context(), actor, meetID, in); err != nil {
 		v, verr := s.rosterView(r, meetID)

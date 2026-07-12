@@ -92,13 +92,16 @@ func UpdateParticipantBib(ctx context.Context, db DBTX, id string, expectedVersi
 	return v, err
 }
 
-// ListParticipants returns a meet's participants with their athlete data,
-// ordered by bib then name for stable start lists.
+// ListParticipants returns a meet's participants with their athlete data
+// including SYS-103 consent flags, ordered by bib then name for stable
+// start lists.
 func ListParticipants(ctx context.Context, db DBTX, meetID string) ([]ParticipantRow, error) {
 	rows, err := db.QueryContext(ctx, `SELECT
 		p.id, p.meet_id, p.athlete_id, p.bib, p.version,
 		a.id, a.first_name, a.last_name, a.birth_date, a.birth_year, a.sex,
-		a.nationality, a.club_ids, a.external_ids, a.version
+		a.nationality, a.club_ids, a.external_ids,
+		a.results_publication_withdrawn, a.photo_consent_given, a.extended_data_consent_given,
+		a.consent_recorded_at, a.consent_recorded_by, a.anonymized, a.anonymized_at, a.version
 		FROM participants p JOIN athletes a ON a.id = p.athlete_id
 		WHERE p.meet_id = ?
 		ORDER BY CAST(p.bib AS INTEGER), p.bib, a.last_name, a.first_name, a.id`, meetID)
@@ -111,14 +114,16 @@ func ListParticipants(ctx context.Context, db DBTX, meetID string) ([]Participan
 	for rows.Next() {
 		var r ParticipantRow
 		var a AthleteRecord
-		var birthDate sql.NullString
+		var birthDate, consentRecordedAt, anonymizedAt sql.NullString
 		var sex, clubs, ext string
 		if err := rows.Scan(&r.ID, &r.MeetID, &r.AthleteID, &r.Bib, &r.Version,
 			&a.ID, &a.FirstName, &a.LastName, &birthDate, &a.BirthYear, &sex,
-			&a.Nationality, &clubs, &ext, &a.Version); err != nil {
+			&a.Nationality, &clubs, &ext,
+			&a.Consent.ResultsPublicationWithdrawn, &a.Consent.PhotoConsentGiven, &a.Consent.ExtendedDataConsentGiven,
+			&consentRecordedAt, &a.Consent.RecordedBy, &a.Anonymized, &anonymizedAt, &a.Version); err != nil {
 			return nil, err
 		}
-		dec, err := decodeAthlete(a, birthDate, sex, clubs, ext)
+		dec, err := decodeAthlete(a, birthDate, sex, clubs, ext, consentRecordedAt, anonymizedAt)
 		if err != nil {
 			return nil, err
 		}

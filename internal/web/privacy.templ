@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// privacyPage is the office data-subject-rights worklist for one meet
+// (TASK-023, SYS-101/SYS-103, UC-023 #2/#3, UC-024 #1/#2): every
+// participant with their consent status and the export/consent-toggle/
+// erase actions.
+templ privacyPage(p PageData, v privacyView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("privacy.title") }</h1>
+		<p>{ p.T("privacy.hint") }</p>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("privacy.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("roster.bib") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("privacy.col.status") }</th>
+							<th>{ p.T("privacy.col.actions") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.Bib }</td>
+								<td>
+									{ row.Name }
+									if row.Minor {
+										<span class="badge">{ p.T("privacy.minor_badge") }</span>
+									}
+								</td>
+								<td>
+									if row.Anonymized {
+										{ p.T("privacy.status.anonymized") }
+									} else if row.Withdrawn {
+										{ p.T("privacy.status.withdrawn") }
+									} else {
+										{ p.T("privacy.status.public") }
+									}
+								</td>
+								<td>
+									if !row.Anonymized {
+										<a href={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/export") }>{ p.T("privacy.action.export") }</a>
+										if row.Withdrawn {
+											<form action={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/consent") } method="post" class="inline-form">
+												<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+												<input type="hidden" name="withdrawn" value="false"/>
+												<button type="submit">{ p.T("privacy.action.restore") }</button>
+											</form>
+										} else {
+											<form action={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/consent") } method="post" class="inline-form">
+												<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+												<input type="hidden" name="withdrawn" value="true"/>
+												<button type="submit">{ p.T("privacy.action.withdraw") }</button>
+											</form>
+										}
+										<form action={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/erase") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="reason" value={ p.T("privacy.erase.default_reason") }/>
+											<button type="submit">{ p.T("privacy.action.erase") }</button>
+										</form>
+									} else {
+										{ p.T("privacy.status.anonymized") }
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// retentionPurgePage is the instance-admin SYS-102 retention-purge trigger
+// (UC-024 #3), alongside the one-action backup surface.
+templ retentionPurgePage(p PageData, v retentionPurgeView) {
+	@layout(p) {
+		<h1>{ p.T("privacy.retention.title") }</h1>
+		<p>{ p.T("privacy.retention.hint", "days", intToStr(int64(v.RetentionDays))) }</p>
+		if v.HasRun {
+			<p>{ p.T("privacy.retention.result", "athletes", intToStr(int64(v.LastRunAthletes)), "audit", intToStr(int64(v.LastRunAuditRows))) }</p>
+		}
+		<form action="/admin/privacy/purge" method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<button type="submit">{ p.T("privacy.retention.action") }</button>
+		</form>
+	}
+}

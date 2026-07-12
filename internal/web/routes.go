@@ -46,6 +46,11 @@ func (s *Server) routes() http.Handler {
 	// One-action backup download (TASK-014, SYS-084, UC-020 #3) lives on
 	// the same instance-admin surface.
 	mux.HandleFunc("GET /admin/backup", admin(s.handleBackupDownload))
+	// SYS-102 retention-purge manual trigger (TASK-023, UC-024 #3):
+	// instance-admin, the same tier as backup — a whole-instance,
+	// irreversible action.
+	mux.HandleFunc("GET /admin/privacy", admin(s.handleRetentionPurgeForm))
+	mux.HandleFunc("POST /admin/privacy/purge", admin(s.handleRetentionPurge))
 	mux.HandleFunc("POST /admin/accounts", admin(s.handleAccountCreate))
 	mux.HandleFunc("POST /admin/accounts/{id}/enable", admin(s.handleAccountEnable))
 	mux.HandleFunc("POST /admin/accounts/{id}/disable", admin(s.handleAccountDisable))
@@ -102,6 +107,14 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
+
+	// Data-subject rights (TASK-023, SYS-101/SYS-103, UC-023 #2/#3,
+	// UC-024 #1/#2): office level and above, per-meet entry point onto an
+	// athlete's (instance-global) data.
+	mux.HandleFunc("GET /meets/{id}/privacy", office(s.handlePrivacyList))
+	mux.HandleFunc("POST /meets/{id}/privacy/{athlete}/consent", office(s.handlePrivacyConsentToggle))
+	mux.HandleFunc("GET /meets/{id}/privacy/{athlete}/export", office(s.handlePrivacyExport))
+	mux.HandleFunc("POST /meets/{id}/privacy/{athlete}/erase", office(s.handlePrivacyErase))
 
 	// CSV entry import & eligibility exceptions (TASK-017, UC-004/UC-005,
 	// SYS-013/014/010): competition-office level (CapOfficeActions,

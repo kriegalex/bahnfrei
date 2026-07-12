@@ -35,9 +35,21 @@ type Server struct {
 	meets   *app.MeetService
 	results *app.ResultsService
 	backup  *app.BackupService
+	privacy *app.PrivacyService
 	cats    i18n.Catalogs
 	bus     *Bus
 	httpSrv *http.Server
+}
+
+// SetPrivacy wires the TASK-023 data-subject-rights/retention service
+// (SYS-101/SYS-102, UC-024). Additive, post-construction (mirrors
+// ResultsService.SetSeriesUploadTemplates) rather than a New() parameter,
+// so it never breaks New's existing call sites/tests. Privacy routes 404
+// if never wired (see handlePrivacyList et al. in privacy.go), matching
+// how an unconfigured series-upload template renders "not available".
+func (s *Server) SetPrivacy(p *app.PrivacyService) *Server {
+	s.privacy = p
+	return s
 }
 
 // New builds a Server. cats is normally the result of i18n.Load(); bus is

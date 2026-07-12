@@ -43,6 +43,9 @@ type Fixture struct {
 	Meets    *app.MeetService
 	Results  *app.ResultsService
 	Backup   *app.BackupService
+	// Privacy wires TASK-023's data-subject-rights/retention service
+	// (SYS-101/SYS-102, UC-024).
+	Privacy *app.PrivacyService
 }
 
 // New opens a fresh SQLite store in a t.TempDir(), closing it via
@@ -91,5 +94,6 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
 		Results:  results,
 		Backup:   app.NewBackupService(st),
+		Privacy:  app.NewPrivacyService(st.DB()),
 	}
 }

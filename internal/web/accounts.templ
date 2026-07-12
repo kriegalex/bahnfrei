@@ -97,5 +97,11 @@ templ accountsPage(p PageData, v accountsView) {
 			<p>{ p.T("admin.backup.description") }</p>
 			<a href="/admin/backup" class="button">{ p.T("admin.backup.download") }</a>
 		</section>
+		// SYS-102 retention-purge manual trigger (TASK-023, UC-024 #3)
+		// shares the instance-admin surface, alongside backup.
+		<section>
+			<h2>{ p.T("privacy.retention.title") }</h2>
+			<a href="/admin/privacy" class="button">{ p.T("privacy.retention.title") }</a>
+		</section>
 	}
 }

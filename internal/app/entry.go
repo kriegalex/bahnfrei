@@ -86,25 +86,34 @@ type EntryEventOption struct {
 }
 
 // IndividualEntryInput is one athlete's online entry (UC-003 #1).
+// PublicationWithdrawn collects the SYS-103 publication-consent choice at
+// entry-submission time (TASK-023, UC-023) — false (the default, an
+// unchecked form checkbox) means results are publicly listed as usual;
+// true suppresses the athlete's identity on public surfaces from the
+// start (see internal/domain/privacy.go for the opt-out rationale and
+// enforcement).
 type IndividualEntryInput struct {
-	EventID         string
-	FirstName       string
-	LastName        string
-	BirthYear       int
-	Sex             domain.Sex
-	Club            string
-	SeedPerformance string
+	EventID              string
+	FirstName            string
+	LastName             string
+	BirthYear            int
+	Sex                  domain.Sex
+	Club                 string
+	SeedPerformance      string
+	PublicationWithdrawn bool
 }
 
 // BulkEntryLine is one line of a club submitter's bulk entry operation
-// (UC-003 #2).
+// (UC-003 #2). PublicationWithdrawn is per line — consent is per person
+// (SYS-103), never per submission batch.
 type BulkEntryLine struct {
-	FirstName       string
-	LastName        string
-	BirthYear       int
-	Sex             domain.Sex
-	EventID         string
-	SeedPerformance string
+	FirstName            string
+	LastName             string
+	BirthYear            int
+	Sex                  domain.Sex
+	EventID              string
+	SeedPerformance      string
+	PublicationWithdrawn bool
 }
 
 // BulkEntryInput is a club submitter's bulk entry operation: every line
@@ -116,11 +125,16 @@ type BulkEntryInput struct {
 }
 
 // RelayLegInput is one relay team member: a leg athlete or a reserve.
+// PublicationWithdrawn is per leg athlete — a relay's public display name
+// is the club/team, but each leg member is a natural person whose own
+// SYS-103 consent must be captured at creation time (TASK-023, UC-023),
+// not defaulted silently.
 type RelayLegInput struct {
-	FirstName string
-	LastName  string
-	BirthYear int
-	Sex       domain.Sex
+	FirstName            string
+	LastName             string
+	BirthYear            int
+	Sex                  domain.Sex
+	PublicationWithdrawn bool
 }
 
 // RelayEntryInput is a club's relay-team entry (UC-003 #4): an ordered leg
@@ -223,8 +237,10 @@ func ensureClub(ctx context.Context, db store.DBTX, clubName string) (store.Club
 }
 
 // createAthlete validates and persists one athlete's person data (SYS-010),
-// affiliated with clubID if given.
-func createAthlete(ctx context.Context, db store.DBTX, clubID, firstName, lastName string, birthYear int, sex domain.Sex) (store.AthleteRecord, error) {
+// affiliated with clubID if given, with their SYS-103 publication-consent
+// state as collected by the submitting flow (TASK-023, UC-023 — every
+// athlete-creating entry path records consent explicitly, never silently).
+func createAthlete(ctx context.Context, db store.DBTX, clubID, firstName, lastName string, birthYear int, sex domain.Sex, consent domain.PublicationConsent) (store.AthleteRecord, error) {
 	if strings.TrimSpace(firstName) == "" || strings.TrimSpace(lastName) == "" {
 		return store.AthleteRecord{}, errors.New("entry: athlete first and last name are required")
 	}
@@ -240,7 +256,19 @@ func createAthlete(ctx context.Context, db store.DBTX, clubID, firstName, lastNa
 	}
 	return store.CreateAthlete(ctx, db, domain.Athlete{
 		FirstName: firstName, LastName: lastName, BirthYear: birthYear, Sex: sex, ClubIDs: clubIDs,
+		Consent: consent,
 	})
+}
+
+// entryConsent builds the PublicationConsent an entry flow records for a
+// newly created athlete: the submitter's withdrawal choice plus the
+// who/when audit context (SYS-103).
+func (s *ResultsService) entryConsent(actor Session, withdrawn bool) domain.PublicationConsent {
+	return domain.PublicationConsent{
+		ResultsPublicationWithdrawn: withdrawn,
+		RecordedAt:                  s.now(),
+		RecordedBy:                  actor.AccountID,
+	}
 }
 
 // evaluateStandard checks a seed performance against event's entry standard
@@ -292,7 +320,8 @@ func (s *ResultsService) SubmitIndividualEntry(ctx context.Context, actor Sessio
 			return EntryDetail{}, err
 		}
 	}
-	athlete, err := createAthlete(ctx, tx, club.ID, in.FirstName, in.LastName, in.BirthYear, in.Sex)
+	athlete, err := createAthlete(ctx, tx, club.ID, in.FirstName, in.LastName, in.BirthYear, in.Sex,
+		s.entryConsent(actor, in.PublicationWithdrawn))
 	if err != nil {
 		return EntryDetail{}, err
 	}
@@ -370,7 +399,8 @@ func (s *ResultsService) SubmitClubBulkEntries(ctx context.Context, actor Sessio
 		if err := checkEntryLimit(ctx, tx, event); err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		athlete, err := createAthlete(ctx, tx, club.ID, line.FirstName, line.LastName, line.BirthYear, line.Sex)
+		athlete, err := createAthlete(ctx, tx, club.ID, line.FirstName, line.LastName, line.BirthYear, line.Sex,
+			s.entryConsent(actor, line.PublicationWithdrawn))
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
@@ -409,12 +439,15 @@ func (s *ResultsService) SubmitClubBulkEntries(ctx context.Context, actor Sessio
 }
 
 // legAthletes creates one athlete per relay leg input, affiliated with
-// clubID, ensuring each holds a meet-wide participant slot.
-func legAthletes(ctx context.Context, tx store.DBTX, meetID, clubID string, legs []RelayLegInput) ([]string, []string, error) {
+// clubID, ensuring each holds a meet-wide participant slot. Each leg's
+// SYS-103 consent choice is recorded per person (TASK-023, UC-023) with
+// the submitting actor as the recorder.
+func (s *ResultsService) legAthletes(ctx context.Context, tx store.DBTX, actor Session, meetID, clubID string, legs []RelayLegInput) ([]string, []string, error) {
 	ids := make([]string, 0, len(legs))
 	names := make([]string, 0, len(legs))
 	for i, leg := range legs {
-		athlete, err := createAthlete(ctx, tx, clubID, leg.FirstName, leg.LastName, leg.BirthYear, leg.Sex)
+		athlete, err := createAthlete(ctx, tx, clubID, leg.FirstName, leg.LastName, leg.BirthYear, leg.Sex,
+			s.entryConsent(actor, leg.PublicationWithdrawn))
 		if err != nil {
 			return nil, nil, fmt.Errorf("leg %d: %w", i+1, err)
 		}
@@ -463,11 +496,11 @@ func (s *ResultsService) SubmitRelayEntry(ctx context.Context, actor Session, me
 	if err != nil {
 		return EntryDetail{}, err
 	}
-	composition, compNames, err := legAthletes(ctx, tx, meetID, club.ID, in.Composition)
+	composition, compNames, err := s.legAthletes(ctx, tx, actor, meetID, club.ID, in.Composition)
 	if err != nil {
 		return EntryDetail{}, err
 	}
-	reserves, resNames, err := legAthletes(ctx, tx, meetID, club.ID, in.Reserves)
+	reserves, resNames, err := s.legAthletes(ctx, tx, actor, meetID, club.ID, in.Reserves)
 	if err != nil {
 		return EntryDetail{}, err
 	}
@@ -533,11 +566,11 @@ func (s *ResultsService) UpdateRelayComposition(ctx context.Context, actor Sessi
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	compIDs, compNames, err := legAthletes(ctx, tx, meetID, team.ClubID, composition)
+	compIDs, compNames, err := s.legAthletes(ctx, tx, actor, meetID, team.ClubID, composition)
 	if err != nil {
 		return EntryDetail{}, err
 	}
-	resIDs, resNames, err := legAthletes(ctx, tx, meetID, team.ClubID, reserves)
+	resIDs, resNames, err := s.legAthletes(ctx, tx, actor, meetID, team.ClubID, reserves)
 	if err != nil {
 		return EntryDetail{}, err
 	}

@@ -98,6 +98,17 @@ const (
 	// CapViewAudit gates the privileged-action audit surfacing view
 	// (TASK-013, SYS-091/UC-022 #2): office level and above.
 	CapViewAudit Capability = "view_audit"
+	// CapPrivacyActions gates SYS-101/SYS-103 data-subject-rights actions on
+	// a specific athlete (consent changes, subject-access export, erasure —
+	// TASK-023, UC-023/UC-024): office level and above, the same tier as
+	// the roster/standings surfaces those actions sit alongside — UC-024's
+	// actor line is "operator (admin) acting on a request".
+	CapPrivacyActions Capability = "privacy_actions"
+	// CapManageRetention gates the instance-wide SYS-102 retention purge
+	// trigger (TASK-023, UC-024 #3): instance-admin, the same tier as
+	// CapManageBackup since it is also a whole-instance, irreversible
+	// operation, not a single meet's business.
+	CapManageRetention Capability = "manage_retention"
 )
 
 // capabilityMinRole is the least-privileged role each capability requires.
@@ -111,6 +122,8 @@ var capabilityMinRole = map[Capability]Role{
 	CapManageBackup:     RoleInstanceAdmin,
 	CapAssignUnits:      RoleCompetitionOffice,
 	CapViewAudit:        RoleCompetitionOffice,
+	CapPrivacyActions:   RoleCompetitionOffice,
+	CapManageRetention:  RoleInstanceAdmin,
 }
 
 // ErrForbidden means the actor's role does not carry the required capability.

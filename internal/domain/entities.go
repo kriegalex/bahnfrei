@@ -62,25 +62,86 @@ const (
 // Athlete is the SyRS §2 Athlete entity: person data, birth date/year, sex,
 // nationality, club affiliation(s), licence number(s) (as ExternalIDs), para
 // sport class(es), and publication-consent flags (SYS-010).
+// Anonymized/AnonymizedAt record a completed SYS-101 erasure request
+// (internal/domain/privacy.go AnonymizePersonalData) — see that file for
+// which fields an erasure clears and which it deliberately preserves to
+// keep official results valid.
 type Athlete struct {
-	ID          string
-	FirstName   string
-	LastName    string
-	BirthDate   *time.Time // full date, if known (SYS-010)
-	BirthYear   int        // always required; derived from BirthDate when present
-	Sex         Sex
-	Nationality string
-	ClubIDs     []string
-	ExternalIDs ExternalIDs
-	ParaClasses []string // e.g. "T38" (Later, DEC-007)
-	Consent     PublicationConsent
+	ID           string
+	FirstName    string
+	LastName     string
+	BirthDate    *time.Time // full date, if known (SYS-010)
+	BirthYear    int        // always required; derived from BirthDate when present
+	Sex          Sex
+	Nationality  string
+	ClubIDs      []string
+	ExternalIDs  ExternalIDs
+	ParaClasses  []string // e.g. "T38" (Later, DEC-007)
+	Consent      PublicationConsent
+	Anonymized   bool
+	AnonymizedAt *time.Time
 }
 
-// PublicationConsent records whether an athlete's results/name may appear on
-// public surfaces (SYS-100/103).
+// PublicationConsent records an athlete's SYS-103 publication-consent
+// flags. See internal/domain/privacy.go for the rationale behind the
+// opt-out (ResultsPublicationWithdrawn) vs. opt-in (PhotoConsentGiven,
+// ExtendedDataConsentGiven) shape and how these flags are enforced.
 type PublicationConsent struct {
-	PublicResultsAllowed bool
-	RecordedAt           time.Time
+	// ResultsPublicationWithdrawn suppresses this athlete's name/club from
+	// public surfaces and publication-intended exports when true (SYS-103,
+	// UC-023 #2) — an opt-out flag: zero value (false) means "not
+	// withdrawn", i.e. publicly listed, matching this system's pre-consent-
+	// tracking behaviour and standard federation practice of publishing
+	// competition results as the sporting record. Applies uniformly to any
+	// athlete once recorded, not only minors — see OQ-041.
+	ResultsPublicationWithdrawn bool
+	// PhotoConsentGiven is an opt-in flag (zero value = not given) required
+	// before any photo of this athlete could be published. No photo
+	// publication surface exists yet in this system; the flag is recorded
+	// now so consent can be captured at entry time (UC-023) ahead of that
+	// feature — see OQ-042.
+	PhotoConsentGiven bool
+	// ExtendedDataConsentGiven is an opt-in flag (zero value = not given)
+	// reserved for any future public field beyond the SYS-100 minimal set.
+	// Not currently enforced anywhere: SYS-100 already caps what public
+	// surfaces show regardless of this flag — see OQ-042.
+	ExtendedDataConsentGiven bool
+	// RecordedAt/RecordedBy are the audit context of the last consent
+	// change (who, when) — RecordedBy is purged by the SYS-102 retention
+	// job once it is no longer operationally needed (internal/app/privacy.go
+	// PurgeExpired); RecordedAt and the flags themselves are retained since
+	// resetting them could silently re-publish a withdrawn athlete.
+	RecordedAt time.Time
+	RecordedBy string
+}
+
+// MinorAgeThreshold is the age (in full years) below which an athlete is
+// treated as a minor for SYS-103 consent purposes (Swiss age of majority,
+// ZGB Art. 14) — see OQ-040 for confirmation that this is the correct
+// threshold for publication-consent purposes specifically (as opposed to
+// general legal capacity).
+const MinorAgeThreshold = 18
+
+// IsMinor reports whether the athlete is under MinorAgeThreshold as of the
+// given date, using the full birth date when known and otherwise the
+// conservative approximation of "born on 31 December of BirthYear" (the
+// latest possible birthday for that year, so an athlete is never
+// misclassified as an adult when only the birth year is on file).
+func (a Athlete) IsMinor(asOf time.Time) bool {
+	birth := a.BirthDate
+	if birth == nil {
+		d := time.Date(a.BirthYear, time.December, 31, 0, 0, 0, 0, time.UTC)
+		birth = &d
+	}
+	age := asOf.Year() - birth.Year()
+	// Compare month/day, not YearDay: YearDay is not comparable across a
+	// leap/non-leap year pair (the same calendar month/day can fall on a
+	// different day-of-year), which would misjudge a birthday by one day
+	// around 29 February in some year pairs.
+	if asOf.Month() < birth.Month() || (asOf.Month() == birth.Month() && asOf.Day() < birth.Day()) {
+		age--
+	}
+	return age < MinorAgeThreshold
 }
 
 // Validate checks the invariants SYS-010 requires: birth year is always

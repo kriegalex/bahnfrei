@@ -466,6 +466,14 @@ func resolveImportAthlete(ctx context.Context, db store.DBTX, licenceNo, firstNa
 			FirstName: firstName, LastName: lastName, BirthYear: birthYear, Sex: sex,
 		}}, false, nil
 	}
+	// SYS-103 consent on import (TASK-023): an import file carries no
+	// consent artifact, so a newly created athlete gets the zero-value
+	// PublicationConsent — "not withdrawn" per the documented baseline
+	// (domain.PublicationConsent), with no RecordedAt/RecordedBy claiming
+	// a consent interaction that never happened. A matched EXISTING
+	// athlete's consent state is deliberately never touched by import
+	// (this function only ever adds a licence external ID to a match) —
+	// re-importing a withdrawn athlete must not silently re-publish them.
 	a := domain.Athlete{FirstName: firstName, LastName: lastName, BirthYear: birthYear, Sex: sex}
 	if licenceNo != "" {
 		a.ExternalIDs = domain.ExternalIDs{domain.NamespaceSwissAthleticsLicence: licenceNo}

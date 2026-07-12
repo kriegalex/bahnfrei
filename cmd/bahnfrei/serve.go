@@ -26,13 +26,14 @@ import (
 // (architecture.md §2: "role selected at startup (venue default, hub)")
 // plus the shell's network/TLS/session settings (SYS-091, SYS-093).
 type serveConfig struct {
-	role       string
-	addr       string
-	dataDir    string
-	tlsMode    string
-	acmeDomain string
-	acmeEmail  string
-	sessionTTL time.Duration
+	role          string
+	addr          string
+	dataDir       string
+	tlsMode       string
+	acmeDomain    string
+	acmeEmail     string
+	sessionTTL    time.Duration
+	retentionDays int
 }
 
 const (
@@ -54,6 +55,7 @@ func parseServeFlags(args []string, out io.Writer) (serveConfig, error) {
 	acmeDomain := fs.String("acme-domain", "", "comma-separated domain(s) to obtain an ACME certificate for (hub/acme mode)")
 	acmeEmail := fs.String("acme-email", "", "ACME account contact email (hub/acme mode)")
 	sessionTTL := fs.Duration("session-ttl", web.SessionTTLDefault, "how long a login session stays valid (SYS-091)")
+	retentionDays := fs.Int("retention-days", app.DefaultRetentionDays, "SYS-102 retention: days post-meet before personal data (full birth dates, consent-recorder identity, audit PII) becomes purgeable")
 
 	if err := fs.Parse(args); err != nil {
 		return serveConfig{}, err
@@ -76,23 +78,30 @@ func parseServeFlags(args []string, out io.Writer) (serveConfig, error) {
 	if mode == string(web.TLSModeACME) && *acmeDomain == "" {
 		return serveConfig{}, fmt.Errorf("--tls-mode=acme requires --acme-domain")
 	}
+	if *retentionDays <= 0 {
+		return serveConfig{}, fmt.Errorf("--retention-days must be positive, got %d", *retentionDays)
+	}
 
 	return serveConfig{
-		role:       *role,
-		addr:       *addr,
-		dataDir:    *dataDir,
-		tlsMode:    mode,
-		acmeDomain: *acmeDomain,
-		acmeEmail:  *acmeEmail,
-		sessionTTL: *sessionTTL,
+		role:          *role,
+		addr:          *addr,
+		dataDir:       *dataDir,
+		tlsMode:       mode,
+		acmeDomain:    *acmeDomain,
+		acmeEmail:     *acmeEmail,
+		sessionTTL:    *sessionTTL,
+		retentionDays: *retentionDays,
 	}, nil
 }
 
 // serveDeps bundles everything runServe needs to shut down cleanly
-// alongside the web.Server it returns.
+// alongside the web.Server it returns. privacy is exposed separately so
+// runServe can trigger the SYS-102 startup retention sweep without
+// web.Server needing to expose its internal app-layer wiring.
 type serveDeps struct {
-	server *web.Server
-	dbase  *store.Store
+	server  *web.Server
+	dbase   *store.Store
+	privacy *app.PrivacyService
 }
 
 // buildServer wires storage, the app-layer services (session manager,
@@ -146,6 +155,7 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 	results.SetSeriesUploadTemplates(seriesUploads)
 	results.SetImportMappingProfiles(importProfiles)
 	backup := app.NewBackupService(st)
+	privacy := app.NewPrivacyService(st.DB())
 
 	cats, err := i18n.Load()
 	if err != nil {
@@ -170,8 +180,8 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		AppVersion: version,
 	}
 
-	srv := web.New(webCfg, auth, sessions, meets, results, backup, cats, bus)
-	return serveDeps{server: srv, dbase: st}, nil
+	srv := web.New(webCfg, auth, sessions, meets, results, backup, cats, bus).SetPrivacy(privacy)
+	return serveDeps{server: srv, dbase: st, privacy: privacy}, nil
 }
 
 // runServe parses flags, wires the server, and blocks serving until ctx is
@@ -189,6 +199,25 @@ func runServe(ctx context.Context, args []string, out io.Writer) error {
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// SYS-102: retention purge SHALL be "automatically purgeable" — a
+	// manual-only trigger (the /admin/privacy route, UC-024 #3) would not
+	// satisfy that, so every process start also runs one sweep,
+	// synchronously and before the listener opens: this system's storage
+	// is a single-writer local SQLite database at PoC/club-meet scale
+	// (ADR-004 §2), so one sweep is a bounded, fast, one-shot cost, and
+	// running it synchronously — rather than in a background goroutine —
+	// avoids a startup-vs-shutdown race with no correctness benefit here.
+	// A purge failure is logged, never fatal: retention hygiene must never
+	// block a venue from serving a meet.
+	report, err := deps.privacy.PurgeExpiredAtStartup(ctx, cfg.retentionDays)
+	switch {
+	case err != nil:
+		fmt.Fprintf(out, "bahnfrei: startup retention purge (SYS-102) failed: %v\n", err)
+	case report.AthletesPurged > 0 || report.AuditRowsRedacted > 0:
+		fmt.Fprintf(out, "bahnfrei: startup retention purge (SYS-102): %d athlete(s), %d audit row(s) redacted\n",
+			report.AthletesPurged, report.AuditRowsRedacted)
+	}
 
 	fmt.Fprintf(out, "bahnfrei: listening on %s (role=%s, tls=%s)\n", cfg.addr, cfg.role, cfg.tlsMode)
 	return deps.server.ListenAndServe(ctx)

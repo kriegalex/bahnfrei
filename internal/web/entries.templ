@@ -39,6 +39,10 @@ templ entriesPage(p PageData, v entriesView) {
 				</label>
 				<label>{ p.T("roster.club") } <input type="text" name="club"/></label>
 				<label>{ p.T("entries.seed") } <input type="text" name="seed" required?={ true }/></label>
+				<label>
+					<input type="checkbox" name="publication_withdrawn" value="true"/>
+					{ p.T("roster.publication_withdrawn") }
+				</label>
 				<button type="submit">{ p.T("entries.individual.submit") }</button>
 			</form>
 
@@ -57,6 +61,7 @@ templ entriesPage(p PageData, v entriesView) {
 								<th>{ p.T("roster.sex") }</th>
 								<th>{ p.T("entries.event") }</th>
 								<th>{ p.T("entries.seed") }</th>
+								<th>{ p.T("privacy.withdrawn_col") }</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -79,6 +84,7 @@ templ entriesPage(p PageData, v entriesView) {
 										</select>
 									</td>
 									<td><input type="text" name={ "bulk_seed_" + intToStr(int64(i)) }/></td>
+									<td><input type="checkbox" name={ "bulk_publication_withdrawn_" + intToStr(int64(i)) } value="true" aria-label={ p.T("roster.publication_withdrawn") }/></td>
 								</tr>
 							}
 						</tbody>
@@ -115,6 +121,10 @@ templ entriesPage(p PageData, v entriesView) {
 									<option value="M">M</option>
 								</select>
 							</label>
+							<label>
+								<input type="checkbox" name={ "leg_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
+								{ p.T("privacy.withdrawn_col") }
+							</label>
 						</div>
 					}
 				</fieldset>
@@ -131,6 +141,10 @@ templ entriesPage(p PageData, v entriesView) {
 									<option value="W">W</option>
 									<option value="M">M</option>
 								</select>
+							</label>
+							<label>
+								<input type="checkbox" name={ "reserve_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
+								{ p.T("privacy.withdrawn_col") }
 							</label>
 						</div>
 					}
@@ -201,6 +215,10 @@ templ entriesPage(p PageData, v entriesView) {
 															<option value="W">W</option>
 															<option value="M">M</option>
 														</select>
+														<label>
+															<input type="checkbox" name={ "edit_leg_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
+															{ p.T("privacy.withdrawn_col") }
+														</label>
 													</div>
 												}
 												for _, i := range v.RelayReserveRow {
@@ -212,6 +230,10 @@ templ entriesPage(p PageData, v entriesView) {
 															<option value="W">W</option>
 															<option value="M">M</option>
 														</select>
+														<label>
+															<input type="checkbox" name={ "edit_reserve_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
+															{ p.T("privacy.withdrawn_col") }
+														</label>
 													</div>
 												}
 												<button type="submit">{ p.T("entries.relay.update") }</button>

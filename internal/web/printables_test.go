@@ -195,3 +195,49 @@ func TestResultListPDFSYS072UC018_2(t *testing.T) {
 		}
 	}
 }
+
+// TestResultListPDFMinimizationSYS103UC023_2 covers UC-023 #1/#2 for the
+// printed result list specifically: SYS-100 treats a "publication-
+// intended export" the same as a public web page (a result list is meant
+// to be posted at the venue), so an athlete whose consent was withdrawn is
+// suppressed here too — deny path — while a co-athlete in the same
+// division still shows their real name — allow path — exactly mirroring
+// TestPublicResultsConsentSuppressionSYS103UC023_2's web-page assertions.
+// This is deliberately distinct from the office-only on-screen standings
+// page (TestResultListPDFSYS072UC018_2's sibling, handleStandings), which
+// stays unminimized since it is not a public/publication-intended surface.
+func TestResultListPDFMinimizationSYS103UC023_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+
+	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
+	i := strings.Index(privacyBody, "101")
+	if i < 0 {
+		t.Fatalf("privacy worklist missing bib 101: %s", privacyBody)
+	}
+	athleteID := athleteIDFromPrivacyPage(t, privacyBody[i:])
+	resp := postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/consent", url.Values{"withdrawn": {"true"}})
+	_ = resp.Body.Close()
+
+	body := bodyString(t, mustGet(t, client, ljURL))
+	athletes := athleteIDsFrom(t, body)
+	resp = postForm(t, client, ljURL, ljURL+"/attempt", url.Values{
+		"athlete": {athletes["101"]}, "seq": {"1"}, "value": {"4.12"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+
+	text := extractPDFText(t, client, base+"/meets/"+meetID+"/standings.pdf")
+	if strings.Contains(text, "Anna Muster") {
+		t.Errorf("deny: printed result list leaked the withdrawn athlete's name\n--- full text ---\n%s", text)
+	}
+	if !strings.Contains(text, "Bea Beispiel") {
+		t.Errorf("allow: printed result list missing the non-withdrawn athlete's name\n--- full text ---\n%s", text)
+	}
+	if !strings.Contains(text, "4.12") || !strings.Contains(text, "101") {
+		t.Errorf("the mark and bib must still render (only identity is suppressed)\n--- full text ---\n%s", text)
+	}
+}

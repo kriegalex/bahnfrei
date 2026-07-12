@@ -30,7 +30,14 @@ var ErrRoundNotFound = errors.New("round not found for this event")
 
 // HeatSheetRow is one entry's line in a generated/regenerated heat sheet
 // (UC-008): identity, seed rank/mark, drawn lane, and qualification code
-// once progression has run (UC-009).
+// once progression has run (UC-009). Consent carries the athlete's
+// SYS-103 publication-consent flags so the public start-list renderer can
+// route this row's identity through the central minimization functions
+// (domain.PublicDisplayNameFor/PublicDisplayClubFor, TASK-023) — the same
+// pattern StandingRow uses; office surfaces render the row unminimized.
+// A relay entry's Consent stays zero-valued (not withdrawn): its display
+// name is the club/team name, not a natural person's (SYS-100 allows
+// club/team on public surfaces).
 type HeatSheetRow struct {
 	EntryID string
 	// Version is the unit-assignment row's optimistic-concurrency version —
@@ -43,6 +50,7 @@ type HeatSheetRow struct {
 	Lane           int
 	Qualification  domain.QualificationStatus
 	ManualOverride bool
+	Consent        domain.PublicationConsent
 }
 
 // HeatSheetUnit is one heat/flight of a round's seeding.
@@ -477,10 +485,22 @@ func (s *ResultsService) buildHeatSheet(ctx context.Context, round domain.Round,
 					clubName = names[clubID]
 				}
 			}
+			// SYS-103 (TASK-023): carry the individual athlete's consent
+			// flags so the public start-list page can suppress this row's
+			// identity; relay entries keep the zero value (see HeatSheetRow).
+			var consent domain.PublicationConsent
+			if entry.AthleteID != "" {
+				athlete, err := store.GetAthlete(ctx, s.db, entry.AthleteID)
+				if err != nil {
+					return HeatSheet{}, err
+				}
+				consent = athlete.Consent
+			}
 			u.Rows = append(u.Rows, HeatSheetRow{
 				EntryID: a.EntryID, Version: a.Version, AthleteName: name, ClubName: clubName,
 				SeedRank: a.SeedRank, SeedMark: entry.SeedPerformance, Lane: a.Lane,
 				Qualification: a.Qualification, ManualOverride: a.ManualOverride,
+				Consent: consent,
 			})
 		}
 		sheet.Units = append(sheet.Units, u)

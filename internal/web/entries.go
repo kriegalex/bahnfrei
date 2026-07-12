@@ -299,6 +299,9 @@ func (s *Server) handleEntryIndividualSubmit(w http.ResponseWriter, r *http.Requ
 		Sex:             domain.Sex(r.FormValue("sex")),
 		Club:            strings.TrimSpace(r.FormValue("club")),
 		SeedPerformance: strings.TrimSpace(r.FormValue("seed")),
+		// SYS-103/UC-023 (TASK-023): the entry flow collects the
+		// publication-consent choice up front, mirroring the roster form.
+		PublicationWithdrawn: r.FormValue("publication_withdrawn") == "true",
 	}
 	if _, err := s.results.SubmitIndividualEntry(r.Context(), actor, meetID, in); err != nil {
 		redirectEntriesError(w, r, meetID, err)
@@ -328,6 +331,9 @@ func (s *Server) handleEntryBulkSubmit(w http.ResponseWriter, r *http.Request) {
 			Sex:             domain.Sex(r.FormValue("bulk_sex" + suffix)),
 			EventID:         r.FormValue("bulk_event" + suffix),
 			SeedPerformance: strings.TrimSpace(r.FormValue("bulk_seed" + suffix)),
+			// SYS-103/UC-023 (TASK-023): per-line consent — per person,
+			// never per batch.
+			PublicationWithdrawn: r.FormValue("bulk_publication_withdrawn"+suffix) == "true",
 		})
 	}
 	if _, err := s.results.SubmitClubBulkEntries(r.Context(), actor, meetID, in); err != nil {
@@ -352,6 +358,9 @@ func relayLegsFromForm(r *http.Request, prefix string, n int) []app.RelayLegInpu
 		out = append(out, app.RelayLegInput{
 			FirstName: first, LastName: last, BirthYear: birthYear,
 			Sex: domain.Sex(r.FormValue(prefix + "_sex" + suffix)),
+			// SYS-103/UC-023 (TASK-023): per-leg consent — each relay
+			// member is a natural person with their own choice.
+			PublicationWithdrawn: r.FormValue(prefix+"_publication_withdrawn"+suffix) == "true",
 		})
 	}
 	return out

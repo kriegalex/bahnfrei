@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -304,6 +305,159 @@ func TestPublicResultsLocalizedDisciplineLabelsSYS074(t *testing.T) {
 		}
 		if strings.Contains(body, tc.notWant) {
 			t.Errorf("[%s] results page leaked the unlocalized catalog name %q", tc.loc, tc.notWant)
+		}
+	}
+}
+
+// isoDateRE matches a full YYYY-MM-DD date — the shape SYS-100 forbids on
+// public surfaces for anything but the meet's own start/end dates (an
+// athlete's full birth date, "beyond category-implied birth year", must
+// never appear).
+var isoDateRE = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+
+// TestPublicPageMinimizationSYS100UC023_1 is the automated PII scanner
+// UC-023 #1 requires: every public page type is crawled and asserted to
+// expose at most the SYS-100 allowed fields. Concretely: the birth YEAR
+// (category-implied) appears, but the only full ISO dates rendered
+// anywhere on the page are the meet's own start/end dates — never a
+// participant's full birth date (this system's roster and online-entry
+// forms do not even collect one today; this test is the regression guard
+// for when a richer person-data field lands) — and no licence-number-
+// shaped token (the "SA-" Swiss Athletics licence prefix, ExternalIDs'
+// namespace) ever appears, matching the central
+// domain.PublicDisplayNameFor/PublicDisplayClubFor choke point every
+// renderer here goes through. The fixture is a seeded meet (online
+// entries confirmed through check-in, heats generated — TASK-016/018) so
+// the start-list page's heat/lane sections are present and swept too, not
+// just the flat roster.
+func TestPublicPageMinimizationSYS100UC023_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 3)
+	registerRosterParticipant(t, client, base, meetID, nil)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{"max_heat_size": {"8"}, "track_lanes": {"8"}})
+	_ = genResp.Body.Close()
+
+	anon, _ := newTestClient(t, deps)
+	allowedDates := map[string]bool{"2027-06-12": true, "2027-06-13": true} // the meet's own start/end dates
+	pagesWithParticipantRows := map[string]bool{"/m/" + meetID + "/startlists": true, "/m/" + meetID + "/results": true}
+	for _, path := range []string{"/m/" + meetID, "/m/" + meetID + "/startlists", "/m/" + meetID + "/results", "/m/" + meetID + "/results/live"} {
+		body := bodyString(t, mustGet(t, anon, base+path))
+		if pagesWithParticipantRows[path] && !strings.Contains(body, "2011") {
+			t.Errorf("%s missing the SYS-100-allowed birth year", path)
+		}
+		for _, m := range isoDateRE.FindAllString(body, -1) {
+			if !allowedDates[m] {
+				t.Errorf("%s exposes a full date %q beyond the meet's own dates (SYS-100 forbids a birth date beyond the year)", path, m)
+			}
+		}
+		if strings.Contains(body, "SA-") {
+			t.Errorf("%s exposes a licence-number-shaped token (SYS-100 forbids licence numbers on public surfaces)", path)
+		}
+	}
+
+	// The heat sections must actually be on the swept start-list page —
+	// otherwise the scan silently proved nothing about them.
+	startlists := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/startlists"))
+	if !strings.Contains(startlists, "Athlete") {
+		t.Fatalf("fixture error: start-list page has no seeded heat rows to scan: %s", startlists)
+	}
+}
+
+// TestPublicHeatSheetConsentSuppressionSYS103UC023_2 covers SYS-103 for
+// the TASK-018 heat/lane sections of the public start-list page: a
+// withdrawn athlete's identity is suppressed in the heat rows (deny) while
+// a non-withdrawn athlete in the same heat still shows (allow) — and the
+// office seeding page keeps the real name (it is not a public surface;
+// the office must be able to identify who they are seeding).
+func TestPublicHeatSheetConsentSuppressionSYS103UC023_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 2)
+
+	// One more confirmed entry, publication withdrawn at submission time
+	// (UC-023: the entry flow collects consent).
+	ctx := context.Background()
+	detail, err := deps.results.SubmitIndividualEntry(ctx, webSubmitter, meetID, app.IndividualEntryInput{
+		EventID: eventID, FirstName: "Wanda", LastName: "Withdrawn",
+		BirthYear: 2009, Sex: domain.SexFemale, SeedPerformance: "13.10",
+		PublicationWithdrawn: true,
+	})
+	if err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+	if err := deps.results.ConfirmCheckIn(ctx, webOffice, meetID, detail.ID, detail.Version); err != nil {
+		t.Fatalf("ConfirmCheckIn: %v", err)
+	}
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{"max_heat_size": {"8"}, "track_lanes": {"8"}})
+	_ = genResp.Body.Close()
+
+	anon, _ := newTestClient(t, deps)
+	body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/startlists"))
+	if strings.Contains(body, "Wanda Withdrawn") {
+		t.Errorf("deny: public heat sheet leaked the withdrawn athlete's name: %s", body)
+	}
+	if !strings.Contains(body, "Athlete A") {
+		t.Errorf("allow: public heat sheet missing the non-withdrawn athlete: %s", body)
+	}
+	if !strings.Contains(body, "—") {
+		t.Errorf("public heat sheet missing the suppression marker: %s", body)
+	}
+
+	// The office seeding page is not a public surface: real name intact.
+	officeBody := bodyString(t, mustGet(t, client, seedingPage))
+	if !strings.Contains(officeBody, "Wanda Withdrawn") {
+		t.Errorf("office seeding page must keep the real name (not a public surface): %s", officeBody)
+	}
+}
+
+// TestPublicResultsConsentSuppressionSYS103UC023_2 covers SYS-103's allow
+// and deny paths side by side on the same page: an athlete whose
+// publication consent was withdrawn at entry is suppressed (deny) while
+// another, ordinary athlete in the same division still shows their real
+// name (allow) — proving suppression is per-athlete, not an
+// accidental page-wide effect.
+func TestPublicResultsConsentSuppressionSYS103UC023_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+
+	// Withdraw consent for bib 101 (Anna Muster) via the office privacy
+	// worklist.
+	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
+	i := strings.Index(privacyBody, "101")
+	if i < 0 {
+		t.Fatalf("privacy worklist missing bib 101: %s", privacyBody)
+	}
+	athleteID := athleteIDFromPrivacyPage(t, privacyBody[i:])
+	resp := postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/consent", url.Values{"withdrawn": {"true"}})
+	_ = resp.Body.Close()
+
+	captureBody := bodyString(t, mustGet(t, client, ljURL))
+	athletes := athleteIDsFrom(t, captureBody)
+	resp = postForm(t, client, ljURL, ljURL+"/attempt", url.Values{
+		"athlete": {athletes["101"]}, "seq": {"1"}, "value": {"4.12"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+
+	anon, _ := newTestClient(t, deps)
+	for _, path := range []string{"/m/" + meetID + "/startlists", "/m/" + meetID + "/results"} {
+		body := bodyString(t, mustGet(t, anon, base+path))
+		if strings.Contains(body, "Anna Muster") {
+			t.Errorf("deny: %s leaked the withdrawn athlete's name", path)
+		}
+		if !strings.Contains(body, "Bea Beispiel") {
+			t.Errorf("allow: %s missing the non-withdrawn athlete's name", path)
+		}
+		if !strings.Contains(body, "101") {
+			t.Errorf("%s: bib 101 must still render (only identity is suppressed, not the row)", path)
 		}
 	}
 }

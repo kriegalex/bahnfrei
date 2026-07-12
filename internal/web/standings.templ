@@ -96,6 +96,10 @@ templ rosterPage(p PageData, v rosterView) {
 				{ p.T("roster.bib") }
 				<input type="text" name="bib"/>
 			</label>
+			<label>
+				<input type="checkbox" name="publication_withdrawn" value="true"/>
+				{ p.T("roster.publication_withdrawn") }
+			</label>
 			<button type="submit">{ p.T("roster.submit") }</button>
 		</form>
 	}

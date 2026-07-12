@@ -117,9 +117,17 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 		if len(part.Athlete.ClubIDs) > 0 {
 			club = clubs[part.Athlete.ClubIDs[0]]
 		}
+		// SYS-100/SYS-103 (UC-023 #1/#2): the central minimization/consent
+		// functions are the single choke point every public renderer must
+		// call before showing an athlete's identity — never per-page ad-hoc
+		// logic. This start-list row already carries no birth date (only
+		// BirthYear), no licence number, no contact data (SYS-100); the
+		// name/club may still need SYS-103 consent suppression.
+		first, last := domain.PublicDisplayNameFor(part.Athlete.Consent, part.Athlete.FirstName, part.Athlete.LastName)
+		club = domain.PublicDisplayClubFor(part.Athlete.Consent, club)
 		view.Rows = append(view.Rows, publicStartListRowView{
 			Bib:       part.Bib,
-			Name:      part.Athlete.FirstName + " " + part.Athlete.LastName,
+			Name:      strings.TrimSpace(first + " " + last),
 			BirthYear: strconv.Itoa(part.Athlete.BirthYear),
 			Club:      club,
 		})
@@ -145,8 +153,15 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 					if row.Lane != 0 {
 						lane = strconv.Itoa(row.Lane)
 					}
+					// SYS-100/SYS-103 (TASK-023, UC-023 #1/#2): heat/lane rows
+					// are public athlete identity too — same central consent
+					// choke point as the flat roster rows above. AthleteName is
+					// already a joined display string, so it rides in the
+					// first-name position with an empty last name.
+					name, _ := domain.PublicDisplayNameFor(row.Consent, row.AthleteName, "")
+					club := domain.PublicDisplayClubFor(row.Consent, row.ClubName)
 					hu.Rows = append(hu.Rows, publicHeatRowView{
-						Name: row.AthleteName, Club: row.ClubName, Lane: lane, Qualification: string(row.Qualification),
+						Name: name, Club: club, Lane: lane, Qualification: string(row.Qualification),
 					})
 				}
 				hr.Units = append(hr.Units, hu)
@@ -211,11 +226,20 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 	for _, div := range standings.Divisions {
 		dv := divisionView{Code: div.CategoryCode}
 		for _, row := range div.Rows {
+			// SYS-100/SYS-103, UC-023 #1/#2: the same central minimization/
+			// consent functions handlePublicStartLists calls — a fresh
+			// fetch of this same code path from the SSE-refreshed live
+			// fragment (handlePublicResultsLive) can never diverge from the
+			// full page, and a mid-meet consent change (UC-023 #3) is
+			// picked up on the very next request since nothing here caches
+			// consent state.
+			first, last := domain.PublicDisplayNameFor(row.Consent, row.FirstName, row.LastName)
+			club := domain.PublicDisplayClubFor(row.Consent, row.ClubName)
 			rv := standingRowView{
 				Rank:      strconv.Itoa(row.Rank),
 				Bib:       row.Bib,
-				Name:      row.FirstName + " " + row.LastName,
-				Club:      row.ClubName,
+				Name:      strings.TrimSpace(first + " " + last),
+				Club:      club,
 				BirthYear: strconv.Itoa(row.BirthYear),
 				Total:     strconv.Itoa(row.Total),
 			}

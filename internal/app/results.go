@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/store"
@@ -32,6 +33,7 @@ type ResultsService struct {
 	// system-native/alabus profiles (see internal/domain/schemes.go).
 	importProfiles map[string]*domain.ImportMappingProfile
 	onChange       func(meetID string)
+	now            Clock
 }
 
 // SetImportMappingProfiles wires the SYS-013 entry-import mapping profiles
@@ -45,7 +47,15 @@ func (s *ResultsService) SetImportMappingProfiles(profiles map[string]*domain.Im
 // templates are normally the built-in data.
 func NewResultsService(db *sql.DB, catalog *domain.DisciplineCatalog, schemes map[string]*domain.CategoryScheme,
 	tables map[string]*domain.ScoringTable, templates map[string]*domain.MeetTemplate) *ResultsService {
-	return &ResultsService{db: db, catalog: catalog, schemes: schemes, tables: tables, templates: templates}
+	return &ResultsService{db: db, catalog: catalog, schemes: schemes, tables: tables, templates: templates, now: time.Now}
+}
+
+// WithClock overrides the time source (tests only) — used by the SYS-103
+// consent-timestamp and TestConsent* tests for deterministic assertions,
+// mirroring SessionManager.WithClock.
+func (s *ResultsService) WithClock(now Clock) *ResultsService {
+	s.now = now
+	return s
 }
 
 // OnResultsChanged registers the live-update hook: fn runs after every
@@ -61,14 +71,20 @@ func (s *ResultsService) notifyChanged(meetID string) {
 }
 
 // ParticipantInput is one athlete registration: person data (SYS-010)
-// plus their start number at this meet.
+// plus their start number at this meet. PublicationWithdrawn collects the
+// SYS-103 publication-consent choice at entry time (UC-023: "entry flows
+// collect consent where the use-cases say so") — false (the default, an
+// unchecked form checkbox) means the athlete's results are publicly listed
+// as usual; true suppresses their identity on public surfaces from the
+// start (see internal/domain/privacy.go for the enforcement).
 type ParticipantInput struct {
-	FirstName string
-	LastName  string
-	BirthYear int
-	Sex       domain.Sex
-	Club      string
-	Bib       string
+	FirstName            string
+	LastName             string
+	BirthYear            int
+	Sex                  domain.Sex
+	Club                 string
+	Bib                  string
+	PublicationWithdrawn bool
 }
 
 // RegisterParticipant registers an athlete for a meet, creating the
@@ -105,6 +121,11 @@ func (s *ResultsService) RegisterParticipant(ctx context.Context, actor Session,
 		BirthYear: in.BirthYear,
 		Sex:       in.Sex,
 		ClubIDs:   clubIDs,
+		Consent: domain.PublicationConsent{
+			ResultsPublicationWithdrawn: in.PublicationWithdrawn,
+			RecordedAt:                  s.now(),
+			RecordedBy:                  actor.AccountID,
+		},
 	})
 	if err != nil {
 		return store.ParticipantRow{}, err
@@ -132,6 +153,55 @@ func (s *ResultsService) RegisterParticipant(ctx context.Context, actor Session,
 // Participants lists a meet's registered athletes.
 func (s *ResultsService) Participants(ctx context.Context, meetID string) ([]store.ParticipantRow, error) {
 	return store.ListParticipants(ctx, s.db, meetID)
+}
+
+// SetConsent updates an athlete's SYS-103 publication-consent flags
+// (UC-023 #3: "consent flags changed mid-meet" must reach public surfaces
+// within one publication cycle — every public read recomputes standings
+// live, so the very next request already reflects this write). Office
+// level and above (CapPrivacyActions); audited with the new flag values
+// only, never the athlete's name (the audit row already carries the
+// athlete's ID as EntityID, which is enough to look the change up without
+// duplicating identity into the log body).
+func (s *ResultsService) SetConsent(ctx context.Context, actor Session, athleteID string, withdrawn bool) error {
+	if err := Authorize(actor.Role, CapPrivacyActions); err != nil {
+		return err
+	}
+	athlete, err := store.GetAthlete(ctx, s.db, athleteID)
+	if err != nil {
+		return err
+	}
+	if athlete.Anonymized {
+		return ErrAthleteAnonymized
+	}
+	consent := domain.PublicationConsent{
+		ResultsPublicationWithdrawn: withdrawn,
+		PhotoConsentGiven:           athlete.Consent.PhotoConsentGiven,
+		ExtendedDataConsentGiven:    athlete.Consent.ExtendedDataConsentGiven,
+		RecordedAt:                  s.now(),
+		RecordedBy:                  actor.AccountID,
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set consent: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.UpdateAthleteConsent(ctx, tx, athleteID, athlete.Version, consent); err != nil {
+		return err
+	}
+	after, _ := json.Marshal(map[string]bool{"results_publication_withdrawn": withdrawn})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "athlete.consent.update",
+		EntityType: "athlete", EntityID: athleteID, After: string(after),
+	}); err != nil {
+		return fmt.Errorf("audit consent update: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("set consent: %w", err)
+	}
+	return nil
 }
 
 // ClubNamesFor resolves the club names of the given participants' club
@@ -253,7 +323,12 @@ func (s *ResultsService) disciplineUnit(ctx context.Context, meetID, disciplineC
 // the observed federation presentation (UC-033 #4, C7.3): rank, bib,
 // name, club, birth year, per-discipline marks and points, total. A
 // missing discipline appears as a Performance without points — the
-// explicit gap UC-033 #3 requires.
+// explicit gap UC-033 #3 requires. Consent carries the athlete's SYS-103
+// publication-consent flags through to every renderer built on
+// StandingRow (public results, printed result lists, series upload,
+// office standings) so minimization/suppression (internal/domain/privacy.go
+// PublicDisplayNameFor/PublicDisplayClubFor) has one shared source instead
+// of a second athlete lookup per page.
 type StandingRow struct {
 	Rank      int
 	Bib       string
@@ -266,6 +341,7 @@ type StandingRow struct {
 	Marks     []domain.CombinedPerformance // aligned with DivisionStandings.Disciplines
 	Total     int
 	Complete  bool
+	Consent   domain.PublicationConsent
 }
 
 // DivisionStanding is one division's ranked list.
@@ -373,6 +449,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 			BirthYear: p.Athlete.BirthYear,
 			Sex:       p.Athlete.Sex,
 			Marks:     perAthlete[p.AthleteID],
+			Consent:   p.Athlete.Consent,
 		})
 	}
 
