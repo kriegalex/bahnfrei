@@ -43,6 +43,7 @@ templ capturePage(p PageData, v captureView) {
 			{ " · " }
 			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
 		</p>
+		@protestBanner(p, v)
 		if len(v.Rows) == 0 {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else if v.IsField {
@@ -63,6 +64,29 @@ templ capturePage(p PageData, v captureView) {
 		if v.IsField {
 			<script src="/static/capture-offline.js"></script>
 		}
+	}
+}
+
+// protestBanner renders the unit's SYS-047 protest-clock state (UC-015
+// #1/#4): not-yet-announced units offer the office an "announce" action;
+// announced units show provisional (with the countdown) or official.
+templ protestBanner(p PageData, v captureView) {
+	if v.Protest.Announced {
+		<p class="protest-banner" role="status">
+			if v.Protest.Official {
+				{ p.T("capture.protest.official") }
+			} else {
+				{ p.T("capture.protest.provisional", "n", v.Protest.RemainingMin) }
+			}
+		</p>
+	} else if v.CanOffice {
+		<form
+			action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/announce") }
+			method="post"
+		>
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<button type="submit">{ p.T("capture.protest.announce") }</button>
+		</form>
 	}
 }
 
@@ -164,13 +188,19 @@ templ fieldGrid(p PageData, v captureView) {
 // the UKC 60 m): time + timing method, or a CR 25 status — a DQ demands
 // its rule reference (SYS-045).
 templ trackForm(p PageData, v captureView) {
+	if v.WindRelevant {
+		@windForm(p, v)
+	}
+	if v.Protest.CorrectionMode {
+		<p class="capture-correction-notice">{ p.T("capture.correct.notice") }</p>
+	}
 	// One form element per athlete outside the table; the row's inputs
 	// associate via the HTML form attribute (a form must not span table
 	// cells as a descendant of <tr>).
 	for _, row := range v.Rows {
 		<form
 			id={ "track-" + row.AthleteID }
-			action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/track") }
+			action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/" + v.TrackFormAction) }
 			method="post"
 		>
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -187,6 +217,10 @@ templ trackForm(p PageData, v captureView) {
 				<th>{ p.T("capture.timing") }</th>
 				<th>{ p.T("capture.status") }</th>
 				<th>{ p.T("capture.dq_rule") }</th>
+				if v.Protest.CorrectionMode {
+					<th>{ p.T("capture.correct.reason") }</th>
+					<th>{ p.T("capture.correct.escalation") }</th>
+				}
 				<th></th>
 				<th>{ p.T("capture.result") }</th>
 				<th>{ p.T("standings.points_abbr") }</th>
@@ -217,6 +251,10 @@ templ trackForm(p PageData, v captureView) {
 						</select>
 					</td>
 					<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+					if v.Protest.CorrectionMode {
+						<td><input type="text" name="reason" size="14" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.correct.reason") + " " + row.Name }/></td>
+						<td><input type="text" name="escalation" size="12" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.correct.escalation") + " " + row.Name }/></td>
+					}
 					<td><button type="submit" form={ "track-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
 					<td>{ row.Result }</td>
 					<td>{ row.Points }</td>
@@ -224,6 +262,24 @@ templ trackForm(p PageData, v captureView) {
 			}
 		</tbody>
 	</table>
+}
+
+// windForm captures the unit's single per-race wind reading (SYS-040,
+// UC-010 #4): one field, applied uniformly to every mark in the race, never
+// per athlete.
+templ windForm(p PageData, v captureView) {
+	<form
+		action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/wind") }
+		method="post"
+		class="capture-wind-form"
+	>
+		<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+		<label>
+			{ p.T("capture.wind") }
+			<input type="text" name="wind" size="4" value={ v.CurrentWind } aria-label={ p.T("capture.wind") }/>
+		</label>
+		<button type="submit">{ p.T("capture.wind.save") }</button>
+	</form>
 }
 
 // captureStandings is the live-refreshing unit ranking (UC-011 #4): rank

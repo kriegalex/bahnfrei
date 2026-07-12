@@ -159,6 +159,15 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/sheet.pdf", captureRole(s.handleCaptureSheetPDF))
 
+	// Full track capture & corrections (TASK-019, UC-010/UC-015,
+	// SYS-040/046/047): wind is entered at the same capture-role floor as
+	// ordinary results (a field official records the race's wind reading);
+	// announcing a result list and correcting it once announced are office
+	// actions (UC-015's "operator (competition office)" actor).
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/wind", captureRole(s.handleCaptureWind))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/announce", office(s.handleCaptureAnnounce))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/correct", office(s.handleCaptureCorrect))
+
 	// Offline capture queue (TASK-009, UC-034 / SYS-085/086): the checkout
 	// and replay endpoints are this app's one JSON API (see internal/sync
 	// doc.go and internal/web/sync.go for why). Field-official level and above.

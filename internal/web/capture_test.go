@@ -193,6 +193,163 @@ func TestUC010_TrackCaptureFlow(t *testing.T) {
 	}
 }
 
+// TestCaptureWindAppliesUniformlySYS040UC010_4Web drives the per-race wind
+// form: the reading applies to the whole race, not per athlete, and the
+// input re-renders pre-filled with the stored value.
+func TestCaptureWindAppliesUniformlySYS040UC010_4Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+
+	resp := postForm(t, client, unitURL, unitURL+"/wind", url.Values{"wind": {"1.4"}})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("save wind = %d, want 303", resp.StatusCode)
+	}
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, `name="wind" size="4" value="1.4"`) {
+		t.Error("wind form does not re-render the stored per-race reading (SYS-040)")
+	}
+
+	// An unparseable wind value re-renders with a localized error (422).
+	resp = postForm(t, client, unitURL, unitURL+"/wind", url.Values{"wind": {"gusty"}})
+	invalid := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("unparseable wind = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(invalid, "ungültig") {
+		t.Error("invalid wind value must show the localized capture error")
+	}
+
+	// An unknown unit under a valid, authorized meet surfaces the generic
+	// not-found path rather than a crash.
+	badURL := base + "/meets/" + meetID + "/capture/01NOUNIT"
+	resp = postForm(t, client, unitURL, badURL+"/wind", url.Values{"wind": {"1.0"}})
+	_ = bodyString(t, resp)
+	if resp.StatusCode < 400 {
+		t.Errorf("wind on an unknown unit = %d, want an error status", resp.StatusCode)
+	}
+}
+
+// TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web drives UC-015
+// end to end from the browser: announcing opens the protest banner, plain
+// capture is rejected afterwards, and a reasoned correction succeeds and
+// re-announces (opening a fresh appeal window).
+func TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+	resp := postForm(t, client, unitURL, unitURL+"/track", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.32"}, "timing": {"manual"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("initial capture = %d, want 303", resp.StatusCode)
+	}
+
+	// Before announcement, no protest banner and no announce button... the
+	// office session on this page does see the announce button.
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "capture.protest.announce") && !strings.Contains(body, "Resultate publizieren") {
+		t.Error("office session must see the announce action before the unit is announced")
+	}
+
+	resp = postForm(t, client, unitURL, unitURL+"/announce", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("announce = %d, want 303", resp.StatusCode)
+	}
+
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "Provisorisch") {
+		t.Error("page must show the provisional protest-clock banner after announcing (UC-015 #1)")
+	}
+
+	// Plain capture is rejected once announced (UC-015 #2 boundary).
+	resp = postForm(t, client, unitURL, unitURL+"/track", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.20"}, "timing": {"manual"},
+	})
+	blocked := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("post-announcement /track = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(blocked, "bereits publiziert") {
+		t.Error("blocked capture must explain a correction is required")
+	}
+
+	// A correction without a reason is rejected.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.20"}, "timing": {"manual"},
+	})
+	noReason := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("correction without reason = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(noReason, "erfordert einen Grund") {
+		t.Error("correction-without-reason error must be shown")
+	}
+
+	// A reasoned correction succeeds and re-announces.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.20"}, "timing": {"manual"}, "reason": {"re-timed from video"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("reasoned correction = %d, want 303", resp.StatusCode)
+	}
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "9.2 h") {
+		t.Errorf("corrected hand time not shown on the page: %q missing", "9.2 h")
+	}
+
+	// An invalid correction payload (no timing method) falls through to the
+	// generic invalid-input flash rather than a 500.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.20"}, "reason": {"typo"},
+	})
+	badPayload := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("correction without a timing method = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(badPayload, "ungültig") {
+		t.Error("invalid correction payload must show the generic capture error")
+	}
+
+	// Re-announcing an unknown unit surfaces an error, not a crash.
+	resp = postForm(t, client, unitURL, base+"/meets/"+meetID+"/capture/01NOUNIT/announce", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode < 400 {
+		t.Errorf("announce on an unknown unit = %d, want an error status", resp.StatusCode)
+	}
+}
+
+// TestCaptureAnnounceAndCorrectRequireOfficeRoleSYS090UC015Web: an
+// unauthenticated caller cannot announce or correct — office-only actions
+// (UC-015's actor line), same as every other capture-role floor.
+func TestCaptureAnnounceAndCorrectRequireOfficeRoleSYS090UC015Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+
+	for _, path := range []string{"/meets/some-id/capture/u1/announce", "/meets/some-id/capture/u1/correct"} {
+		resp, err := client.PostForm(base+path, url.Values{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = bodyString(t, resp)
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("anonymous POST %s = %d, want 403 (SYS-090)", path, resp.StatusCode)
+		}
+	}
+}
+
 // athleteIDsFrom maps bib → athlete ID from the capture page's hidden
 // athlete inputs (each cell form names its row's athlete).
 func athleteIDsFrom(t *testing.T, body string) map[string]string {

@@ -500,6 +500,11 @@ func (s *ResultsService) SaveFieldAttempt(ctx context.Context, actor Session, me
 	if attempt.Seq > cfg.Attempts {
 		return store.AttemptRecord{}, fmt.Errorf("trial %d exceeds the %d-trial series (SYS-042)", attempt.Seq, cfg.Attempts)
 	}
+	// Once the unit's results are announced (SYS-047), further edits are
+	// corrections (UC-015 #2/#3), not plain capture — see CorrectResult.
+	if err := s.requireNotAnnounced(ctx, unitID); err != nil {
+		return store.AttemptRecord{}, err
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -600,12 +605,31 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 	if err != nil {
 		return store.ResultRecord{}, err
 	}
+	// Once the unit's results are announced (SYS-047), further edits are
+	// corrections (UC-015 #2/#3), not plain capture — see CorrectResult.
+	if err := s.requireNotAnnounced(ctx, unitID); err != nil {
+		return store.ResultRecord{}, err
+	}
 
 	result := domain.Result{
 		UnitID:       unitID,
 		AthleteID:    in.AthleteID,
 		Status:       in.Status,
 		StatusDetail: in.StatusDetail,
+	}
+	// Wind is a per-race reading (SYS-040), never entered per athlete: every
+	// mark captured on a wind-relevant unit carries the unit's current
+	// reading (UC-010 #4), set via SetUnitWind — nil until the office/field
+	// official records it.
+	if uc.disc.WindRelevant {
+		if result.Wind, err = store.GetUnitWind(ctx, s.db, unitID); err != nil {
+			return store.ResultRecord{}, err
+		}
+	}
+	if lanes, err := s.laneByAthlete(ctx, unitID); err != nil {
+		return store.ResultRecord{}, err
+	} else if lane, ok := lanes[in.AthleteID]; ok {
+		result.Lane = lane
 	}
 	timing := domain.TimingNone
 	if in.Status != domain.StatusNone {

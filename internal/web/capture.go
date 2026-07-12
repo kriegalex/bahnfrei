@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
 	"github.com/kriegalex/bahnfrei/internal/domain"
@@ -100,6 +101,41 @@ type captureView struct {
 	// Track form state (UC-010 subset).
 	TrackTimings  []string
 	TrackStatuses []string
+	// CurrentWind is the unit's stored per-race wind reading (SYS-040,
+	// UC-010 #4), "" when unset; only meaningful when WindRelevant.
+	CurrentWind string
+	// Protest is the unit's SYS-047 protest-clock state (UC-015 #1/#4).
+	Protest protestView
+	// CanOffice gates the office-only announce/correction controls
+	// (UC-015's "operator (competition office)" actor) — read-only display
+	// context, the server enforces the real authorization on submit.
+	CanOffice bool
+	// TrackFormAction is the track row forms' POST target: "track" (plain
+	// capture) before announcement, "correct" (reason/escalation required,
+	// office-only) once the unit's results are announced (UC-015 #2).
+	TrackFormAction string
+}
+
+// protestView is the capture page's SYS-047 protest-clock display: whether
+// the unit's results have been announced, and if so whether the 30-minute
+// window is still open (provisional) or has elapsed (official, UC-015 #4).
+type protestView struct {
+	Announced      bool
+	Official       bool
+	RemainingMin   string
+	CorrectionMode bool // Announced && !Official-agnostic: any edit past announcement is a correction
+}
+
+func buildProtestView(state domain.ProtestState) protestView {
+	pv := protestView{Announced: state.Announced, Official: state.Official, CorrectionMode: state.Announced}
+	if state.Announced && !state.Official {
+		mins := int(state.Remaining / time.Minute)
+		if state.Remaining%time.Minute != 0 {
+			mins++ // round up so "0 min left" never shows while still open
+		}
+		pv.RemainingMin = strconv.Itoa(mins)
+	}
+	return pv
 }
 
 func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureView, error) {
@@ -107,17 +143,37 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 	if err != nil {
 		return captureView{}, err
 	}
+	protestState, err := s.results.UnitProtestState(r.Context(), meetID, unitID)
+	if err != nil {
+		return captureView{}, err
+	}
+	trackAction := "track"
+	if protestState.Announced {
+		trackAction = "correct"
+	}
 	v := captureView{
-		MeetID:        uc.Meet.ID,
-		MeetName:      uc.Meet.Name,
-		UnitID:        unitID,
-		Discipline:    uc.DisciplineName,
-		IsField:       uc.Family == domain.FamilyFieldHorizontal,
-		WindRelevant:  uc.WindRelevant,
-		Attempts:      uc.Config.Attempts,
-		CutTo:         uc.Config.CutTo,
-		TrackTimings:  []string{string(domain.TimingManual), string(domain.TimingElectronic)},
-		TrackStatuses: []string{string(domain.StatusDNS), string(domain.StatusDNF), string(domain.StatusDQ)},
+		MeetID:          uc.Meet.ID,
+		MeetName:        uc.Meet.Name,
+		Protest:         buildProtestView(protestState),
+		UnitID:          unitID,
+		Discipline:      uc.DisciplineName,
+		IsField:         uc.Family == domain.FamilyFieldHorizontal,
+		WindRelevant:    uc.WindRelevant,
+		Attempts:        uc.Config.Attempts,
+		CutTo:           uc.Config.CutTo,
+		TrackTimings:    []string{string(domain.TimingManual), string(domain.TimingElectronic)},
+		TrackStatuses:   []string{string(domain.StatusDNS), string(domain.StatusDNF), string(domain.StatusDQ)},
+		TrackFormAction: trackAction,
+	}
+	if actor, ok := sessionFromContext(r.Context()); ok {
+		v.CanOffice = actor.Role.AtLeast(app.RoleCompetitionOffice)
+	}
+	if v.WindRelevant {
+		if wind, err := s.results.UnitWind(r.Context(), meetID, unitID); err != nil {
+			return captureView{}, err
+		} else if wind != nil {
+			v.CurrentWind = strconv.FormatFloat(*wind, 'f', 1, 64)
+		}
 	}
 
 	names := map[string]string{}
@@ -306,11 +362,99 @@ func (s *Server) handleCaptureTrack(w http.ResponseWriter, r *http.Request) {
 		StatusDetail: strings.TrimSpace(r.FormValue("status_detail")),
 	}
 	if _, err := s.results.SaveTrackResult(r.Context(), actor, meetID, unitID, in); err != nil {
-		if errors.Is(err, app.ErrUnitNotAssigned) {
+		switch {
+		case errors.Is(err, app.ErrUnitNotAssigned):
+			renderForbidden(w, r, s.cats)
+		case errors.Is(err, app.ErrCorrectionRequired):
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.correction_required", "")
+		default:
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		}
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// handleCaptureCorrect amends a settled result on an already-announced unit
+// (UC-015 #2/#3): office-only (routed under the office role floor), a
+// reason is mandatory (SYS-046) and an escalation reference is additionally
+// required once the protest window has elapsed (SYS-047).
+func (s *Server) handleCaptureCorrect(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	in := app.CorrectionInput{
+		Mark:         strings.TrimSpace(r.FormValue("time")),
+		Timing:       domain.Timing(r.FormValue("timing")),
+		Status:       domain.QualificationStatus(r.FormValue("status")),
+		StatusDetail: strings.TrimSpace(r.FormValue("status_detail")),
+		Reason:       strings.TrimSpace(r.FormValue("reason")),
+		Escalation:   strings.TrimSpace(r.FormValue("escalation")),
+	}
+	if _, err := s.results.CorrectResult(r.Context(), actor, meetID, unitID, r.FormValue("athlete"), in); err != nil {
+		switch {
+		case errors.Is(err, app.ErrCorrectionReasonRequired):
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.reason_required", "")
+		case errors.Is(err, app.ErrEscalationRequired):
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.escalation_required", "")
+		default:
+			if _, forbidden := err.(app.ErrForbidden); forbidden {
+				renderForbidden(w, r, s.cats)
+				return
+			}
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		}
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// handleCaptureAnnounce posts a unit's current result list (UC-015 #1):
+// office-only, starts the 30-minute protest window (SYS-047).
+func (s *Server) handleCaptureAnnounce(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	if _, err := s.results.AnnounceUnitResults(r.Context(), actor, meetID, unitID); err != nil {
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
 			renderForbidden(w, r, s.cats)
 			return
 		}
 		s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// handleCaptureWind records the unit's single per-race wind reading
+// (SYS-040, UC-010 #4): field-official capture-scoped, same as ordinary
+// track/field capture — a non-wind-relevant discipline is rejected.
+func (s *Server) handleCaptureWind(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	windStr := strings.ReplaceAll(strings.TrimSpace(r.FormValue("wind")), ",", ".")
+	wind, err := strconv.ParseFloat(windStr, 64)
+	if err != nil {
+		s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		return
+	}
+	if err := s.results.SetUnitWind(r.Context(), actor, meetID, unitID, wind); err != nil {
+		switch {
+		case errors.Is(err, app.ErrUnitNotAssigned):
+			renderForbidden(w, r, s.cats)
+		default:
+			if _, forbidden := err.(app.ErrForbidden); forbidden {
+				renderForbidden(w, r, s.cats)
+				return
+			}
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		}
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
