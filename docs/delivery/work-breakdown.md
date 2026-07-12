@@ -58,6 +58,7 @@ is still merged slice-by-slice (one PR per UC where practical).
 | TASK-023 | Privacy: public data minimization, consent enforcement, data-subject rights, retention purge jobs | UC-023, UC-024; SYS-100–103 | TASK-016 | Sonnet + **Opus privacy review** (CLAUDE.md guardrail; nFADP/GDPR gate) | M |
 | TASK-024 | i18n completion & accessibility: full DE/FR operator+public surfaces, WCAG audit of public pages | UC-025, UC-026; SYS-110–113 | M1 | Sonnet | M |
 | TASK-025 | omx/v1 round-trip & concurrency proof: full-meet export/import property tests; 10-operator concurrency suite | UC-027, UC-021; SYS-073, SYS-083, SYS-144 | TASK-019 | Sonnet | M |
+| TASK-029 | Privacy-review follow-ups (see `docs/delivery/reviews/privacy-review-task-023.md` #1/#2/#4): erasure and retention purge redact `entry`/`participant`/`result` audit-payload PII via `store.RedactAuditPII`; add a public-path crawler regression asserting a withdrawn athlete's name renders nowhere public | SYS-101, SYS-102; UC-024 | TASK-023 | Sonnet | S |
 
 ## M3 — Hardening & release 0.1
 
