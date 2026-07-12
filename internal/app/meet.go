@@ -39,11 +39,21 @@ var ErrConflict = store.ErrVersionConflict
 // summary (SYS-006). Every mutation is authorized (CapOrganizeMeet) and
 // audited.
 type MeetService struct {
-	db        *sql.DB
-	catalog   *domain.DisciplineCatalog
-	schemes   map[string]*domain.CategoryScheme
-	tables    map[string]*domain.ScoringTable
-	templates map[string]*domain.MeetTemplate
+	db             *sql.DB
+	catalog        *domain.DisciplineCatalog
+	schemes        map[string]*domain.CategoryScheme
+	tables         map[string]*domain.ScoringTable
+	templates      map[string]*domain.MeetTemplate
+	combinedTables map[string]*domain.CombinedScoringTable
+}
+
+// SetCombinedScoringTables wires the WA combined-events formula tables
+// (SYS-044, TASK-021) a wa-decathlon/wa-heptathlon-style template may
+// reference; normally domain.BuiltinCombinedScoringTables(). Optional: a
+// service with none configured simply cannot create meets from a template
+// that names one (CreateMeetFromTemplate reports the unknown reference).
+func (s *MeetService) SetCombinedScoringTables(tables map[string]*domain.CombinedScoringTable) {
+	s.combinedTables = tables
 }
 
 // NewMeetService wires a MeetService. catalog, schemes, tables and

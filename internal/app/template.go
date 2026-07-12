@@ -65,6 +65,11 @@ func (s *MeetService) CreateMeetFromTemplate(ctx context.Context, actor Session,
 			return MeetRecord{}, fmt.Errorf("template %q references unknown scoring table %q", tpl.ID, tpl.ScoringTableID)
 		}
 	}
+	if tpl.CombinedScoringTableID != "" {
+		if _, ok := s.combinedTables[tpl.CombinedScoringTableID]; !ok {
+			return MeetRecord{}, fmt.Errorf("template %q references unknown combined scoring table %q", tpl.ID, tpl.CombinedScoringTableID)
+		}
+	}
 	for _, ev := range tpl.Events {
 		if _, ok := s.catalog.ByCode(ev.DisciplineCode); !ok {
 			return MeetRecord{}, fmt.Errorf("template %q references unknown discipline %q", tpl.ID, ev.DisciplineCode)
@@ -117,6 +122,11 @@ func (s *MeetService) CreateMeetFromTemplate(ctx context.Context, actor Session,
 	})
 	if err != nil {
 		return MeetRecord{}, err
+	}
+	if tpl.CombinedScoringTableID != "" {
+		if err := store.SetMeetCombinedScoringTable(ctx, tx, rec.ID, tpl.CombinedScoringTableID); err != nil {
+			return MeetRecord{}, err
+		}
 	}
 	if _, err := store.CreateSession(ctx, tx, domain.Session{
 		MeetID: rec.ID, Day: req.Date, Label: tpl.Name,

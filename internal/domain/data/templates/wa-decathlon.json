@@ -1,0 +1,23 @@
+{
+  "id": "wa-decathlon",
+  "version": "2001",
+  "name": "Decathlon (men)",
+  "source": "World Athletics combined-events competition rules and event order: https://worldathleticsscores.com/resources/combined-events (fetched 2026-07-13). Scoring: the 2001 IAAF/WA combined-events formula table (domain.CombinedScoringTableWA2001, SYS-044). Long jump and every throw are limited to three attempts each in combined events ('In the long jump and all throwing events, each athlete has only three attempts, regardless of their position in the event' — same source), unlike the WA default 6-attempt/cut-to-8 series a standalone field event gets. Track/vertical events do not use the template's per-event 'attempts' count (it only shapes the horizontal-attempt grid); 1 is a structural placeholder there.",
+  "categorySchemeID": "swiss-athletics",
+  "combinedScoringTableID": "wa-combined-events-2001",
+  "tier": "combined-events",
+  "notes": "Ten disciplines over one or two days (SYS-031), scored generically through the WA combined-events formula table (SYS-044) rather than a lookup scoring table; standings (app.ResultsService.Standings) aggregate per-discipline points exactly as for a template meet — a combined-events meet needs no special-case standings code.",
+  "events": [
+    {"disciplineCode": "100m", "attempts": 1},
+    {"disciplineCode": "LJ", "attempts": 3},
+    {"disciplineCode": "SP", "attempts": 3},
+    {"disciplineCode": "HJ", "attempts": 1},
+    {"disciplineCode": "400m", "attempts": 1},
+    {"disciplineCode": "110mH", "attempts": 1},
+    {"disciplineCode": "DT", "attempts": 3},
+    {"disciplineCode": "PV", "attempts": 1},
+    {"disciplineCode": "JT", "attempts": 3},
+    {"disciplineCode": "1500m", "attempts": 1}
+  ],
+  "resultsPositioning": "federation_official"
+}

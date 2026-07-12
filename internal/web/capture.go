@@ -261,6 +261,14 @@ func (s *Server) handleCaptureUnit(w http.ResponseWriter, r *http.Request) {
 		// the capture page (the office reconciles a contested lock).
 		_, _ = s.results.EnsureCheckout(r.Context(), actor, meetID, unitID, deviceLabelOr(r.Header.Get("X-Device-Label")))
 	}
+	// Vertical jump units (TASK-021, SYS-043) render a different page — the
+	// height-progression grid, not the trial/track capture grid — so this
+	// shared route branches on discipline family before building either
+	// view.
+	if disc, err := s.results.UnitDiscipline(r.Context(), meetID, unitID); err == nil && disc.Family == domain.FamilyFieldVertical {
+		s.handleCaptureVerticalUnit(w, r)
+		return
+	}
 	v, err := s.captureView(r, meetID, unitID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
@@ -281,6 +289,10 @@ func (s *Server) handleCaptureStandings(w http.ResponseWriter, r *http.Request) 
 			renderForbidden(w, r, s.cats)
 			return
 		}
+	}
+	if disc, err := s.results.UnitDiscipline(r.Context(), meetID, unitID); err == nil && disc.Family == domain.FamilyFieldVertical {
+		s.handleCaptureVerticalStandings(w, r)
+		return
 	}
 	v, err := s.captureView(r, meetID, unitID)
 	if err != nil {

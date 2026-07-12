@@ -30,6 +30,13 @@ type TemplateEvent struct {
 // separate versioned data file, BuiltinSeriesUploadTemplate) this
 // template's meets can export to; empty means no series-upload export is
 // offered for this template.
+// CombinedScoringTableID names a WA combined-events formula table
+// (domain.CombinedScoringTable, e.g. "wa-combined-events-2001", SYS-044)
+// instead of ScoringTableID when this template's discipline programme is a
+// combined event (decathlon/heptathlon, TASK-021): the two are mutually
+// exclusive per template, matching how a meet built from it scores
+// (app.MeetService.CreateMeetFromTemplate). Empty means the template does
+// not use combined-events scoring.
 type MeetTemplate struct {
 	ID                     string             `json:"id"`
 	Version                string             `json:"version"`
@@ -37,6 +44,7 @@ type MeetTemplate struct {
 	Source                 string             `json:"source"`
 	CategorySchemeID       string             `json:"categorySchemeID"`
 	ScoringTableID         string             `json:"scoringTableID"`
+	CombinedScoringTableID string             `json:"combinedScoringTableID,omitempty"`
 	Tier                   string             `json:"tier"`
 	Notes                  string             `json:"notes"`
 	Events                 []TemplateEvent    `json:"events"`
@@ -89,6 +97,9 @@ func (t *MeetTemplate) Validate() error {
 	}
 	if t.ResultsPositioning != "" && !t.ResultsPositioning.Valid() {
 		return fmt.Errorf("meet template %q: invalid resultsPositioning %q (SYS-076)", t.ID, t.ResultsPositioning)
+	}
+	if t.ScoringTableID != "" && t.CombinedScoringTableID != "" {
+		return fmt.Errorf("meet template %q: scoringTableID and combinedScoringTableID are mutually exclusive (SYS-044)", t.ID)
 	}
 	return nil
 }

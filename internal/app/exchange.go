@@ -598,7 +598,7 @@ func (s *ResultsService) applyTimingRow(ctx context.Context, actor Session, meet
 		if err != nil {
 			return store.ResultRecord{}, err
 		}
-		if result.Points, err = s.scorePoints(uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
+		if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
 			return store.ResultRecord{}, err
 		}
 	}

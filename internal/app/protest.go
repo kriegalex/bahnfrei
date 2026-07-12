@@ -269,7 +269,7 @@ func (s *ResultsService) CorrectResult(ctx context.Context, actor Session, meetI
 		}
 		result.Mark = domain.FormatCentiMark(centi, 2)
 	}
-	if result.Points, err = s.scorePoints(uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
+	if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
 		return store.ResultRecord{}, err
 	}
 

@@ -60,6 +60,11 @@ var builtinSchemeFiles = map[string]string{
 const (
 	ScoringTableUBSKidsCup = "ubs-kids-cup"
 	TemplateUBSKidsCup     = "ubs-kids-cup"
+	// TemplateWADecathlon/TemplateWAHeptathlon are the SYS-031/UC-013
+	// combined-events templates (TASK-021): their meets score through
+	// CombinedScoringTableWA2001 instead of a lookup ScoringTable.
+	TemplateWADecathlon  = "wa-decathlon"
+	TemplateWAHeptathlon = "wa-heptathlon"
 )
 
 var builtinScoringTableFiles = map[string]string{
@@ -67,7 +72,9 @@ var builtinScoringTableFiles = map[string]string{
 }
 
 var builtinTemplateFiles = map[string]string{
-	TemplateUBSKidsCup: "data/templates/ubs-kids-cup.json",
+	TemplateUBSKidsCup:   "data/templates/ubs-kids-cup.json",
+	TemplateWADecathlon:  "data/templates/wa-decathlon.json",
+	TemplateWAHeptathlon: "data/templates/wa-heptathlon.json",
 }
 
 // BuiltinScoringTable loads and parses one of the shipped scoring tables by
@@ -153,6 +160,42 @@ func BuiltinSeriesUploadTemplates() (map[string]*SeriesUploadTemplate, error) {
 	out := make(map[string]*SeriesUploadTemplate, len(builtinSeriesUploadFiles))
 	for id := range builtinSeriesUploadFiles {
 		t, err := BuiltinSeriesUploadTemplate(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, nil
+}
+
+// Built-in combined-events scoring-table identifier (SYS-044, TASK-021).
+const CombinedScoringTableWA2001 = "wa-combined-events-2001"
+
+var builtinCombinedScoringTableFiles = map[string]string{
+	CombinedScoringTableWA2001: "data/scoring/wa-combined-events-2001.json",
+}
+
+// BuiltinCombinedScoringTable loads and parses one of the shipped WA
+// combined-events formula tables by ID (SYS-044 / ADR-005 §4: the 2001
+// IAAF/WA formula coefficients ship as data, interpreted generically).
+func BuiltinCombinedScoringTable(id string) (*CombinedScoringTable, error) {
+	path, ok := builtinCombinedScoringTableFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in combined scoring table %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in combined scoring table %q: %w", id, err)
+	}
+	return ParseCombinedScoringTable(data)
+}
+
+// BuiltinCombinedScoringTables loads every shipped combined-events scoring
+// table, keyed by ID.
+func BuiltinCombinedScoringTables() (map[string]*CombinedScoringTable, error) {
+	out := make(map[string]*CombinedScoringTable, len(builtinCombinedScoringTableFiles))
+	for id := range builtinCombinedScoringTableFiles {
+		t, err := BuiltinCombinedScoringTable(id)
 		if err != nil {
 			return nil, err
 		}

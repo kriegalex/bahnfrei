@@ -172,6 +172,15 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/sheet.pdf", captureRole(s.handleCaptureSheetPDF))
 
+	// Vertical jump capture (TASK-021, UC-012/SYS-043): the unit page and
+	// its standings fragment reuse the routes above — handleCaptureUnit/
+	// handleCaptureStandings branch on discipline family internally. Trial
+	// capture is field-official level (same floor as attempt/track);
+	// configuring the bar-height progression (including a jump-off height)
+	// is office-only, matching SYS-043's "office-configurable".
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/vertical-trial", captureRole(s.handleCaptureVerticalTrial))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/vertical-heights", office(s.handleCaptureVerticalHeights))
+
 	// Full track capture & corrections (TASK-019, UC-010/UC-015,
 	// SYS-040/046/047): wind is entered at the same capture-role floor as
 	// ordinary results (a field official records the race's wind reading);

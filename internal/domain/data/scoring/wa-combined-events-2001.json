@@ -1,0 +1,26 @@
+{
+ "id": "wa-combined-events-2001",
+ "version": "2001",
+ "name": "World Athletics Combined Events Scoring Tables (2001 edition, outdoor men's decathlon / women's heptathlon)",
+ "source": "Formula and per-event A/B/C coefficients: https://worldathleticsscores.com/resources/combined-events (fetched 2026-07-13), itself based on the IAAF/World Athletics Scoring Tables of Athletics (2001 combined-events edition; official PDF: https://worldathletics.org/download/download?filename=d23ffec9-b518-4137-ac16-4593d5d515f6.pdf&urlslug=IAAF%20Scoring%20Tables%20of%20Athletics%20-%20Outdoor). Coefficients cross-verified by recomputing two independently published world-record totals event-by-event with this exact formula: (1) Kevin Mayer, men's decathlon WR 9126 pts, Decastar, Talence, 16 Sep 2018 (marks/points per https://www.watchathletics.com/video/track-and-field/5337/ — the page's 110mH figure (1101) is a transcription error inconsistent with its own stated 9126 total; the formula-computed 1007 is what reproduces 9126 and is used here); (2) Jackie Joyner-Kersee, women's heptathlon WR 7291 pts, Seoul Olympics, 24 Sep 1988 (marks per published statistics; the formula reproduces the total exactly). Both totals match to the point, confirming the coefficients and floor-rounding behaviour transcribed below.",
+ "columns": [
+  {"disciplineCode": "100m", "sex": "M", "kind": "track", "a": 25.4347, "b": 18.00, "c": 1.81, "manualAdjustmentSec": 0.24},
+  {"disciplineCode": "LJ", "sex": "M", "kind": "jump", "a": 0.14354, "b": 220.00, "c": 1.40},
+  {"disciplineCode": "SP", "sex": "M", "kind": "throw", "a": 51.39, "b": 1.50, "c": 1.05},
+  {"disciplineCode": "HJ", "sex": "M", "kind": "jump", "a": 0.8465, "b": 75.00, "c": 1.42},
+  {"disciplineCode": "400m", "sex": "M", "kind": "track", "a": 1.53775, "b": 82.00, "c": 1.81, "manualAdjustmentSec": 0.14},
+  {"disciplineCode": "110mH", "sex": "M", "kind": "track", "a": 5.74352, "b": 28.50, "c": 1.92, "manualAdjustmentSec": 0.24},
+  {"disciplineCode": "DT", "sex": "M", "kind": "throw", "a": 12.91, "b": 4.00, "c": 1.10},
+  {"disciplineCode": "PV", "sex": "M", "kind": "jump", "a": 0.2797, "b": 100.00, "c": 1.35},
+  {"disciplineCode": "JT", "sex": "M", "kind": "throw", "a": 10.14, "b": 7.00, "c": 1.08},
+  {"disciplineCode": "1500m", "sex": "M", "kind": "track", "a": 0.03768, "b": 480.00, "c": 1.85},
+
+  {"disciplineCode": "100mH", "sex": "W", "kind": "track", "a": 9.23076, "b": 26.70, "c": 1.835, "manualAdjustmentSec": 0.24},
+  {"disciplineCode": "HJ", "sex": "W", "kind": "jump", "a": 1.84523, "b": 75.00, "c": 1.348},
+  {"disciplineCode": "SP", "sex": "W", "kind": "throw", "a": 56.0211, "b": 1.50, "c": 1.05},
+  {"disciplineCode": "200m", "sex": "W", "kind": "track", "a": 4.99087, "b": 42.50, "c": 1.81, "manualAdjustmentSec": 0.24},
+  {"disciplineCode": "LJ", "sex": "W", "kind": "jump", "a": 0.188807, "b": 210.00, "c": 1.41},
+  {"disciplineCode": "JT", "sex": "W", "kind": "throw", "a": 15.9803, "b": 3.80, "c": 1.04},
+  {"disciplineCode": "800m", "sex": "W", "kind": "track", "a": 0.11193, "b": 254.00, "c": 1.88}
+ ]
+}

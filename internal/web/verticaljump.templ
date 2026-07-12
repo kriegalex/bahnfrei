@@ -1,0 +1,166 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// verticalCapturePage is the vertical-jump capture surface (TASK-021,
+// UC-012, SYS-043): the height-progression grid plus the countback
+// standings that refresh over SSE, and the office's height-configuration
+// form.
+templ verticalCapturePage(p PageData, v verticalCaptureView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { v.Discipline }</h1>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("capture.back_to_units") }</a>
+			{ " · " }
+			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
+		</p>
+		if v.CanOffice {
+			@verticalHeightsForm(p, v)
+		}
+		if len(v.Heights) == 0 {
+			<p>{ p.T("capture.vertical.heights_not_configured") }</p>
+		} else if len(v.Rows) == 0 {
+			<p>{ p.T("capture.no_participants") }</p>
+		} else {
+			<p>{ p.T("capture.vertical.trial_help") }</p>
+			@verticalGrid(p, v)
+		}
+		<section
+			id="capture-standings"
+			data-sse-topic={ "meet-" + v.MeetID }
+			data-sse-event="results"
+			data-sse-refresh={ "/meets/" + v.MeetID + "/capture/" + v.UnitID + "/standings" }
+		>
+			@verticalCaptureStandings(p, v)
+		</section>
+	}
+}
+
+// verticalHeightsForm lets the office configure the bar-height progression
+// the first time, or extend it (a jump-off height) once already set
+// (SYS-043: "office-configurable").
+templ verticalHeightsForm(p PageData, v verticalCaptureView) {
+	<form
+		action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/vertical-heights") }
+		method="post"
+	>
+		<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+		<input type="hidden" name="version" value={ intToStr(int64(len(v.Heights))) }/>
+		if len(v.Heights) == 0 {
+			<label>
+				{ p.T("capture.vertical.configure_heights") }
+				<input type="text" name="heights" placeholder="1.60, 1.65, 1.70, ..." aria-label={ p.T("capture.vertical.configure_heights") }/>
+			</label>
+			<button type="submit">{ p.T("capture.save") }</button>
+		} else {
+			for _, h := range v.Heights {
+				<input type="hidden" name="heights" value={ h }/>
+			}
+			<label>
+				{ p.T("capture.vertical.add_height") }
+				<input type="text" name="add_height" value={ v.NextHeightHint } size="6" aria-label={ p.T("capture.vertical.add_height") }/>
+			</label>
+			<button type="submit">{ p.T("capture.save") }</button>
+		}
+	</form>
+}
+
+// verticalGrid renders the height-progression grid: one input per trial,
+// taking the D5.2 symbols (o clear, x foul, – pass, r retirement).
+templ verticalGrid(p PageData, v verticalCaptureView) {
+	<table class="capture-grid">
+		<thead>
+			<tr>
+				<th rowspan="2">{ p.T("roster.bib") }</th>
+				<th rowspan="2">{ p.T("roster.name") }</th>
+				for _, h := range v.Heights {
+					<th colspan="3">{ h }</th>
+				}
+				<th rowspan="2">{ p.T("capture.result") }</th>
+				<th rowspan="2">{ p.T("standings.points_abbr") }</th>
+			</tr>
+			<tr>
+				for range v.Heights {
+					<th>{ p.T("capture.trial_abbr") + "1" }</th>
+					<th>{ p.T("capture.trial_abbr") + "2" }</th>
+					<th>{ p.T("capture.trial_abbr") + "3" }</th>
+				}
+			</tr>
+		</thead>
+		<tbody>
+			for _, row := range v.Rows {
+				<tr>
+					<td>{ row.Bib }</td>
+					<td>{ row.Name }</td>
+					for hi, height := range row.Cells {
+						for si, cell := range height {
+							<td>
+								<form
+									action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/vertical-trial") }
+									method="post"
+									class="cell-form"
+								>
+									<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+									<input type="hidden" name="athlete" value={ row.AthleteID }/>
+									<input type="hidden" name="height" value={ intToStr(int64(hi)) }/>
+									<input type="hidden" name="seq" value={ intToStr(int64(si + 1)) }/>
+									<input type="hidden" name="version" value={ cell.Version }/>
+									<input
+										type="text"
+										name="value"
+										value={ cell.Value }
+										size="2"
+										aria-label={ v.Heights[hi] + " " + p.T("capture.trial_abbr") + intToStr(int64(si+1)) + " " + row.Name }
+									/>
+									<button type="submit">{ p.T("capture.save") }</button>
+								</form>
+							</td>
+						}
+					}
+					<td>{ row.Result }</td>
+					<td>{ row.Points }</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+// verticalCaptureStandings renders the current SYS-043 countback ranking
+// (UC-012 #3/#4): fewer attempts at the best height, then fewer total
+// failures, with a persisting first-place tie flagged for the office.
+templ verticalCaptureStandings(p PageData, v verticalCaptureView) {
+	<h2>{ p.T("capture.standings") }</h2>
+	if len(v.Standings) == 0 {
+		<p>{ p.T("capture.standings_empty") }</p>
+	} else {
+		<table>
+			<thead>
+				<tr>
+					<th>{ p.T("standings.rank") }</th>
+					<th>{ p.T("roster.bib") }</th>
+					<th>{ p.T("roster.name") }</th>
+					<th>{ p.T("capture.vertical.best") }</th>
+					<th>{ p.T("capture.vertical.attempts_at_best") }</th>
+					<th>{ p.T("capture.vertical.total_failures") }</th>
+					<th>{ p.T("standings.points_abbr") }</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range v.Standings {
+					<tr>
+						<td>{ row.Rank }</td>
+						<td>{ row.Bib }</td>
+						<td>{ row.Name }</td>
+						<td>{ row.BestHeight }</td>
+						<td>{ row.AttemptsAtBest }</td>
+						<td>{ row.TotalFailures }</td>
+						<td>{ row.Points }</td>
+						<td>{ row.Flags }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}

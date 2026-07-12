@@ -32,6 +32,10 @@ type ResultsService struct {
 	// (TASK-017), wired via SetImportMappingProfiles — normally the built-in
 	// system-native/alabus profiles (see internal/domain/schemes.go).
 	importProfiles map[string]*domain.ImportMappingProfile
+	// combinedTables are the SYS-044 WA combined-events formula tables
+	// (TASK-021), wired via SetCombinedScoringTables — normally the
+	// built-in domain.BuiltinCombinedScoringTables().
+	combinedTables map[string]*domain.CombinedScoringTable
 	onChange       func(meetID string)
 	now            Clock
 }
@@ -41,6 +45,17 @@ type ResultsService struct {
 // built-in profiles from domain.BuiltinImportMappingProfiles.
 func (s *ResultsService) SetImportMappingProfiles(profiles map[string]*domain.ImportMappingProfile) {
 	s.importProfiles = profiles
+}
+
+// SetCombinedScoringTables wires the WA combined-events formula tables
+// (SYS-044, TASK-021) scorePoints consults for a meet configured with one
+// (store.GetMeetCombinedScoringTable, set at meet creation from a
+// wa-decathlon/wa-heptathlon-style template) — normally the built-in
+// domain.BuiltinCombinedScoringTables(). Optional: without this, such a
+// meet's capture saves fail with a clear "unknown scoring table" error
+// rather than silently scoring 0.
+func (s *ResultsService) SetCombinedScoringTables(tables map[string]*domain.CombinedScoringTable) {
+	s.combinedTables = tables
 }
 
 // NewResultsService wires a ResultsService; catalog, schemes, tables and
@@ -263,7 +278,7 @@ func (s *ResultsService) SaveResult(ctx context.Context, actor Session, meetID s
 		if in.Mark == "" {
 			return store.ResultRecord{}, fmt.Errorf("a mark or a status is required")
 		}
-		if result.Points, err = s.scorePoints(meet, in.DisciplineCode, in.Timing, athlete.Sex, in.Mark); err != nil {
+		if result.Points, err = s.scorePoints(ctx, s.db, meet, in.DisciplineCode, in.Timing, athlete.Sex, in.Mark); err != nil {
 			return store.ResultRecord{}, err
 		}
 	}

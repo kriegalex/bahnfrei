@@ -150,10 +150,17 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 		_ = st.Close()
 		return serveDeps{}, fmt.Errorf("load import mapping profiles: %w", err)
 	}
+	combinedTables, err := domain.BuiltinCombinedScoringTables()
+	if err != nil {
+		_ = st.Close()
+		return serveDeps{}, fmt.Errorf("load combined scoring tables: %w", err)
+	}
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
+	meets.SetCombinedScoringTables(combinedTables)
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 	results.SetSeriesUploadTemplates(seriesUploads)
 	results.SetImportMappingProfiles(importProfiles)
+	results.SetCombinedScoringTables(combinedTables)
 	backup := app.NewBackupService(st)
 	privacy := app.NewPrivacyService(st.DB())
 

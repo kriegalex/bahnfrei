@@ -169,9 +169,9 @@ type CaptureUnit struct {
 	Family         domain.DisciplineFamily
 }
 
-// CaptureUnits lists a meet's capturable units — track and horizontal
-// field disciplines; vertical jumps and relays are later slices
-// (TASK-021/016). For an account with exactly RoleFieldOfficial the list is
+// CaptureUnits lists a meet's capturable units — track, horizontal and
+// vertical field disciplines (TASK-021); relays are a later slice
+// (TASK-016). For an account with exactly RoleFieldOfficial the list is
 // filtered to units it is assigned to for this meet (SYS-090 per-event
 // scoping, UC-022 #1); every other authorized role sees every capturable
 // unit, matching authorizeCaptureAccess's scoping rule.
@@ -193,7 +193,7 @@ func (s *ResultsService) CaptureUnits(ctx context.Context, actor Session, meetID
 		if !ok {
 			continue
 		}
-		if disc.Family != domain.FamilyTrack && disc.Family != domain.FamilyFieldHorizontal {
+		if disc.Family != domain.FamilyTrack && disc.Family != domain.FamilyFieldHorizontal && disc.Family != domain.FamilyFieldVertical {
 			continue
 		}
 		if actor.Role == RoleFieldOfficial && !assigned[u.UnitID] {
@@ -541,7 +541,7 @@ func (s *ResultsService) SaveFieldAttempt(ctx context.Context, actor Session, me
 	result := domain.Result{UnitID: unitID, AthleteID: in.AthleteID, Status: series.Status()}
 	if best, ok := series.Best(); ok {
 		result.Mark = best
-		if result.Points, err = s.scorePoints(uc.meet, uc.disc.Code, domain.TimingNone, p.Athlete.Sex, best); err != nil {
+		if result.Points, err = s.scorePoints(ctx, tx, uc.meet, uc.disc.Code, domain.TimingNone, p.Athlete.Sex, best); err != nil {
 			return store.AttemptRecord{}, err
 		}
 	}
@@ -650,7 +650,7 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 			return store.ResultRecord{}, fmt.Errorf("a timing method is required for a time (SYS-041)")
 		}
 		timing = in.Timing
-		if result.Points, err = s.scorePoints(uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
+		if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
 			return store.ResultRecord{}, err
 		}
 	}
@@ -683,8 +683,32 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 }
 
 // scorePoints scores a mark against the meet's scoring table, if it has
-// one (UC-033 #2); nil means the meet does not score points.
-func (s *ResultsService) scorePoints(meet store.MeetRecord, disciplineCode string, timing domain.Timing, sex domain.Sex, mark string) (*int, error) {
+// one (UC-033 #2); nil means the meet does not score points. A meet
+// configured with a WA combined-events formula table (SYS-044, TASK-021:
+// store.GetMeetCombinedScoringTable, set at creation from a
+// wa-decathlon/wa-heptathlon-style template) scores through that table
+// instead — the two are mutually exclusive per meet (0014_combined_scoring
+// .sql explains why). db must be the same handle (s.db, or the caller's
+// open tx) the caller is already using: several call sites invoke this
+// from inside a transaction, and this method's own store reads must run
+// on that transaction's connection, not a fresh one from the pool — a
+// single-connection SQLite pool deadlocks otherwise (the open tx never
+// releases its connection while waiting on a query that itself is waiting
+// for a connection).
+func (s *ResultsService) scorePoints(ctx context.Context, db store.DBTX, meet store.MeetRecord, disciplineCode string, timing domain.Timing, sex domain.Sex, mark string) (*int, error) {
+	if combinedID, ok, err := store.GetMeetCombinedScoringTable(ctx, db, meet.ID); err != nil {
+		return nil, err
+	} else if ok {
+		table, ok := s.combinedTables[combinedID]
+		if !ok {
+			return nil, fmt.Errorf("meet %s references unknown combined scoring table %q", meet.ID, combinedID)
+		}
+		pts, err := table.Points(disciplineCode, sex, timing, mark)
+		if err != nil {
+			return nil, err
+		}
+		return &pts, nil
+	}
 	if meet.ScoringTableID == "" {
 		return nil, nil
 	}

@@ -40,6 +40,12 @@ func (s *Server) handleCaptureSheetPDF(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
+	// Vertical jump units (TASK-021, UC-018 #1: "vertical: height columns")
+	// print a height-progression sheet instead of the trial/track grid.
+	if disc, err := s.results.UnitDiscipline(r.Context(), meetID, unitID); err == nil && disc.Family == domain.FamilyFieldVertical {
+		s.handleVerticalCaptureSheetPDF(w, r, detail.Name)
+		return
+	}
 	uc, err := s.results.UnitCapture(r.Context(), meetID, unitID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
