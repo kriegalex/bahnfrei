@@ -37,14 +37,14 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 		if len(v.Rows) == 0 {
 			<p>{ p.T("public.startlists.empty") }</p>
 		} else {
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th>{ p.T("roster.bib") }</th>
-							<th>{ p.T("roster.name") }</th>
-							<th>{ p.T("roster.birth_year") }</th>
-							<th>{ p.T("roster.club") }</th>
+							<th scope="col">{ p.T("roster.bib") }</th>
+							<th scope="col">{ p.T("roster.name") }</th>
+							<th scope="col">{ p.T("roster.birth_year") }</th>
+							<th scope="col">{ p.T("roster.club") }</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -89,19 +89,19 @@ templ publicResultsFragment(p PageData, v publicResultsView) {
 		<p>{ p.T("standings.gap_legend") }</p>
 		for _, div := range v.Divisions {
 			<h2>{ div.Code }</h2>
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th>{ p.T("standings.rank") }</th>
-							<th>{ p.T("roster.bib") }</th>
-							<th>{ p.T("roster.name") }</th>
-							<th>{ p.T("roster.club") }</th>
-							<th>{ p.T("roster.birth_year") }</th>
+							<th scope="col">{ p.T("standings.rank") }</th>
+							<th scope="col">{ p.T("roster.bib") }</th>
+							<th scope="col">{ p.T("roster.name") }</th>
+							<th scope="col">{ p.T("roster.club") }</th>
+							<th scope="col">{ p.T("roster.birth_year") }</th>
 							for _, d := range v.Disciplines {
-								<th>{ d }</th>
+								<th scope="col">{ d }</th>
 							}
-							<th>{ p.T("standings.total") }</th>
+							<th scope="col">{ p.T("standings.total") }</th>
 						</tr>
 					</thead>
 					<tbody>

@@ -32,17 +32,17 @@ func (s *Server) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	p := basePageData(r, s.cats)
 	v := auditLogView{}
 	for _, e := range events {
 		v.Rows = append(v.Rows, auditRowView{
-			When:   e.TS.UTC().Format("2006-01-02 15:04:05 MST"),
+			When:   p.FormatDateTime(e.TS),
 			Who:    e.ActorName,
 			Action: e.Action,
 			Entity: e.EntityType + ":" + e.EntityID,
 			Reason: e.Reason,
 		})
 	}
-	p := basePageData(r, s.cats)
 	p.Title = p.T("audit.title")
 	_ = auditLogPage(p, v).Render(r.Context(), w)
 }

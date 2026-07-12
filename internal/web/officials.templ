@@ -16,13 +16,13 @@ templ officialsPage(p PageData, v officialsView) {
 		} else if len(v.Columns) == 0 {
 			<p>{ p.T("capture.units_empty") }</p>
 		} else {
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th></th>
+							<th scope="col"></th>
 							for _, col := range v.Columns {
-								<th>{ col.Label }</th>
+								<th scope="col">{ col.Label }</th>
 							}
 						</tr>
 					</thead>

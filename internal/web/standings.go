@@ -214,17 +214,14 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
+	p := basePageData(r, s.cats)
 	v := standingsView{
 		MeetID:                detail.ID,
 		MeetName:              detail.Name,
 		SeriesUploadAvailable: s.results.SeriesUploadAvailable(r.Context(), meetID),
 	}
 	for _, code := range standings.Disciplines {
-		name := code
-		if disc, ok := s.meets.Catalog().ByCode(code); ok {
-			name = disc.Name
-		}
-		v.Disciplines = append(v.Disciplines, name)
+		v.Disciplines = append(v.Disciplines, s.localizedDisciplineName(p, code))
 	}
 	for _, div := range standings.Divisions {
 		dv := divisionView{Code: div.CategoryCode}
@@ -248,7 +245,6 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 		}
 		v.Divisions = append(v.Divisions, dv)
 	}
-	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("standings.title")
 	_ = standingsPage(p, v).Render(r.Context(), w)
 }

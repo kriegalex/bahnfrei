@@ -43,11 +43,11 @@ templ meetsListPage(p PageData, rows []meetRowView) {
 			<table>
 				<thead>
 					<tr>
-						<th>{ p.T("meet.field.name") }</th>
-						<th>{ p.T("meet.field.venue") }</th>
-						<th>{ p.T("meet.field.dates") }</th>
-						<th>{ p.T("meet.field.tier") }</th>
-						<th>{ p.T("meet.field.status") }</th>
+						<th scope="col">{ p.T("meet.field.name") }</th>
+						<th scope="col">{ p.T("meet.field.venue") }</th>
+						<th scope="col">{ p.T("meet.field.dates") }</th>
+						<th scope="col">{ p.T("meet.field.tier") }</th>
+						<th scope="col">{ p.T("meet.field.status") }</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -203,11 +203,11 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<table>
 				<thead>
 					<tr>
-						<th>{ p.T("programme.discipline") }</th>
-						<th>{ p.T("programme.categories") }</th>
-						<th>{ p.T("programme.capture_type") }</th>
-						<th>{ p.T("programme.rounds") }</th>
-						<th>{ p.T("programme.deadline") }</th>
+						<th scope="col">{ p.T("programme.discipline") }</th>
+						<th scope="col">{ p.T("programme.categories") }</th>
+						<th scope="col">{ p.T("programme.capture_type") }</th>
+						<th scope="col">{ p.T("programme.rounds") }</th>
+						<th scope="col">{ p.T("programme.deadline") }</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -267,13 +267,13 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<table>
 				<thead>
 					<tr>
-						<th>{ p.T("programme.discipline") }</th>
-						<th>{ p.T("programme.categories") }</th>
-						<th>{ p.T("timetable.round") }</th>
-						<th>{ p.T("timetable.scheduled_at") }</th>
-						<th>{ p.T("timetable.location") }</th>
+						<th scope="col">{ p.T("programme.discipline") }</th>
+						<th scope="col">{ p.T("programme.categories") }</th>
+						<th scope="col">{ p.T("timetable.round") }</th>
+						<th scope="col">{ p.T("timetable.scheduled_at") }</th>
+						<th scope="col">{ p.T("timetable.location") }</th>
 						if !d.Archived {
-							<th>{ p.T("timetable.schedule") }</th>
+							<th scope="col">{ p.T("timetable.schedule") }</th>
 						}
 					</tr>
 				</thead>
@@ -363,15 +363,15 @@ templ publicTimetablePage(p PageData, v publicTimetableView) {
 		<p>{ v.Venue } · { v.Dates }</p>
 		@publicNav(p, v.MeetID)
 		<p><small>{ p.T("timetable.versions.row", "version", intToStr(int64(v.Version)), "at", v.PublishedAt) }</small></p>
-		<div class="table-scroll">
+		<div class="table-scroll" tabindex="0">
 			<table>
 				<thead>
 					<tr>
-						<th>{ p.T("timetable.scheduled_at") }</th>
-						<th>{ p.T("programme.discipline") }</th>
-						<th>{ p.T("programme.categories") }</th>
-						<th>{ p.T("timetable.round") }</th>
-						<th>{ p.T("timetable.location") }</th>
+						<th scope="col">{ p.T("timetable.scheduled_at") }</th>
+						<th scope="col">{ p.T("programme.discipline") }</th>
+						<th scope="col">{ p.T("programme.categories") }</th>
+						<th scope="col">{ p.T("timetable.round") }</th>
+						<th scope="col">{ p.T("timetable.location") }</th>
 					</tr>
 				</thead>
 				<tbody>

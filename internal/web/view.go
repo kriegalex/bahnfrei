@@ -5,6 +5,7 @@ package web
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/web/i18n"
 )
@@ -40,6 +41,33 @@ type PageData struct {
 // i18n.Catalogs.Text).
 func (p PageData) T(key string, args ...string) string {
 	return p.Cats.Text(p.Locale, key, args...)
+}
+
+// dateDisplayLayout/dateTimeDisplayLayout are the SYS-110 "documented
+// project convention" for rendering dates and timestamps to a person:
+// day.month.year (Swiss/DE/FR convention — both MVP launch languages share
+// it, C7.3). This is intentionally distinct from formDateLayout /
+// formDateTimeLayout in meets.go, which are the fixed ISO wire formats
+// HTML <input type="date"/"datetime-local"> requires regardless of locale;
+// form pre-fill values must keep using those, never FormatDate/FormatDateTime.
+const (
+	dateDisplayLayout     = "02.01.2006"
+	dateTimeDisplayLayout = "02.01.2006 15:04"
+)
+
+// FormatDate renders t for display in the page's locale (SYS-110: "dates
+// ... format per locale convention"). Per-locale divergence is a hook, not
+// yet a need: DE and FR (the only MVP launch languages, DEC-008) share the
+// same day.month.year convention.
+func (p PageData) FormatDate(t time.Time) string {
+	return t.Format(dateDisplayLayout)
+}
+
+// FormatDateTime renders t for display, normalized to UTC (the system's
+// storage/display convention throughout) with an explicit "UTC" suffix so
+// a rendered timestamp is never ambiguous about its zone (SYS-110).
+func (p PageData) FormatDateTime(t time.Time) string {
+	return t.UTC().Format(dateTimeDisplayLayout) + " UTC"
 }
 
 // localeLabel renders the display name of loc in the page's own language,

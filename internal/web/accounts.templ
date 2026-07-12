@@ -12,15 +12,15 @@ templ accountsPage(p PageData, v accountsView) {
 		if len(v.Rows) == 0 {
 			<p>{ p.T("accounts.empty") }</p>
 		} else {
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th>{ p.T("accounts.field.username") }</th>
-							<th>{ p.T("accounts.field.display_name") }</th>
-							<th>{ p.T("accounts.field.role") }</th>
-							<th>{ p.T("accounts.field.status") }</th>
-							<th></th>
+							<th scope="col">{ p.T("accounts.field.username") }</th>
+							<th scope="col">{ p.T("accounts.field.display_name") }</th>
+							<th scope="col">{ p.T("accounts.field.role") }</th>
+							<th scope="col">{ p.T("accounts.field.status") }</th>
+							<th scope="col"></th>
 						</tr>
 					</thead>
 					<tbody>

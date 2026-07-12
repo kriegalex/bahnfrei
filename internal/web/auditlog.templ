@@ -13,15 +13,15 @@ templ auditLogPage(p PageData, v auditLogView) {
 		if len(v.Rows) == 0 {
 			<p>{ p.T("audit.empty") }</p>
 		} else {
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>
-							<th>{ p.T("audit.col.when") }</th>
-							<th>{ p.T("audit.col.who") }</th>
-							<th>{ p.T("audit.col.action") }</th>
-							<th>{ p.T("audit.col.entity") }</th>
-							<th>{ p.T("audit.col.reason") }</th>
+							<th scope="col">{ p.T("audit.col.when") }</th>
+							<th scope="col">{ p.T("audit.col.who") }</th>
+							<th scope="col">{ p.T("audit.col.action") }</th>
+							<th scope="col">{ p.T("audit.col.entity") }</th>
+							<th scope="col">{ p.T("audit.col.reason") }</th>
 						</tr>
 					</thead>
 					<tbody>

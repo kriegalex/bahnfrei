@@ -48,10 +48,10 @@ templ rosterPage(p PageData, v rosterView) {
 			<table>
 				<thead>
 					<tr>
-						<th>{ p.T("roster.bib") }</th>
-						<th>{ p.T("roster.name") }</th>
-						<th>{ p.T("roster.birth_year") }</th>
-						<th>{ p.T("roster.club") }</th>
+						<th scope="col">{ p.T("roster.bib") }</th>
+						<th scope="col">{ p.T("roster.name") }</th>
+						<th scope="col">{ p.T("roster.birth_year") }</th>
+						<th scope="col">{ p.T("roster.club") }</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -125,15 +125,15 @@ templ standingsPage(p PageData, v standingsView) {
 				<table>
 					<thead>
 						<tr>
-							<th>{ p.T("standings.rank") }</th>
-							<th>{ p.T("roster.bib") }</th>
-							<th>{ p.T("roster.name") }</th>
-							<th>{ p.T("roster.club") }</th>
-							<th>{ p.T("roster.birth_year") }</th>
+							<th scope="col">{ p.T("standings.rank") }</th>
+							<th scope="col">{ p.T("roster.bib") }</th>
+							<th scope="col">{ p.T("roster.name") }</th>
+							<th scope="col">{ p.T("roster.club") }</th>
+							<th scope="col">{ p.T("roster.birth_year") }</th>
 							for _, d := range v.Disciplines {
-								<th>{ d }</th>
+								<th scope="col">{ d }</th>
 							}
-							<th>{ p.T("standings.total") }</th>
+							<th scope="col">{ p.T("standings.total") }</th>
 						</tr>
 					</thead>
 					<tbody>

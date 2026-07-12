@@ -101,7 +101,7 @@ func (s *Server) handleMeetsList(w http.ResponseWriter, r *http.Request) {
 			ID:     m.ID,
 			Name:   m.Name,
 			Venue:  m.Venue,
-			Dates:  formatDateRange(m.StartDate, m.EndDate),
+			Dates:  formatDateRange(p, m.StartDate, m.EndDate),
 			Tier:   string(m.Tier),
 			Status: p.T("meet.status." + string(m.Status)),
 		})
@@ -321,10 +321,18 @@ func (s *Server) handlePublicTimetable(w http.ResponseWriter, r *http.Request) {
 		MeetID:      rec.ID,
 		MeetName:    rec.Name,
 		Venue:       rec.Venue,
-		Dates:       formatDateRange(rec.StartDate, rec.EndDate),
+		Dates:       formatDateRange(p, rec.StartDate, rec.EndDate),
 		Version:     v.Version,
-		PublishedAt: v.PublishedAt.UTC().Format("2006-01-02 15:04 MST"),
+		PublishedAt: p.FormatDateTime(v.PublishedAt),
 		Rows:        s.unitRows(p, v.Entries),
+	}
+	// SYS-074/SYS-111: the public timetable localizes discipline names the
+	// same way the public results page does; the operator meet-detail Units
+	// table (the other unitRows caller) keeps the canonical catalog name,
+	// consistent with the operator Programme table on the same page (PoC
+	// scope — see docs/requirements/open-questions-and-assumptions.md).
+	for i, e := range v.Entries {
+		view.Rows[i].Discipline = s.localizedDisciplineName(p, e.DisciplineCode)
 	}
 	_ = publicTimetablePage(p, view).Render(r.Context(), w)
 }
@@ -562,11 +570,11 @@ type publicTimetableView struct {
 	Rows        []unitRowView
 }
 
-func formatDateRange(start, end time.Time) string {
+func formatDateRange(p PageData, start, end time.Time) string {
 	if start.Equal(end) {
-		return start.Format(formDateLayout)
+		return p.FormatDate(start)
 	}
-	return start.Format(formDateLayout) + " – " + end.Format(formDateLayout)
+	return p.FormatDate(start) + " – " + p.FormatDate(end)
 }
 
 func (s *Server) unitRows(p PageData, entries []app.TimetableEntry) []unitRowView {
@@ -585,7 +593,7 @@ func (s *Server) unitRows(p PageData, entries []app.TimetableEntry) []unitRowVie
 		}
 		if e.ScheduledAt != nil {
 			row.Scheduled = true
-			row.When = e.ScheduledAt.UTC().Format(formDateTimeLayout)
+			row.When = p.FormatDateTime(*e.ScheduledAt)
 		}
 		rows = append(rows, row)
 	}
@@ -599,7 +607,7 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		Name:                    d.Name,
 		Venue:                   d.Venue,
 		HomologationRef:         d.HomologationRef,
-		Dates:                   formatDateRange(d.StartDate, d.EndDate),
+		Dates:                   formatDateRange(p, d.StartDate, d.EndDate),
 		Tier:                    string(d.Tier),
 		Status:                  p.T("meet.status." + string(d.Status)),
 		Archived:                d.Status == domain.MeetArchived,
@@ -609,7 +617,7 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 	}
 	for _, sess := range d.Sessions {
 		view.Sessions = append(view.Sessions, sessionRowView{
-			Day: sess.Day.Format(formDateLayout), Label: sess.Label,
+			Day: p.FormatDate(sess.Day), Label: sess.Label,
 		})
 	}
 	for _, pe := range d.Programme {
@@ -627,14 +635,14 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		}
 		row.Rounds = strings.Join(kinds, " → ")
 		if pe.EntryDeadline != nil {
-			row.Deadline = pe.EntryDeadline.UTC().Format(formDateTimeLayout)
+			row.Deadline = p.FormatDateTime(*pe.EntryDeadline)
 		}
 		view.Programme = append(view.Programme, row)
 	}
 	for _, v := range versions {
 		view.Versions = append(view.Versions, timetableVersionRowView{
 			Version:     v.Version,
-			PublishedAt: v.PublishedAt.UTC().Format("2006-01-02 15:04:05 MST"),
+			PublishedAt: p.FormatDateTime(v.PublishedAt),
 		})
 	}
 	for _, disc := range s.meets.Catalog().Disciplines {
@@ -682,16 +690,16 @@ func (s *Server) sanctioningView(p PageData, sum app.SanctioningSummary) sanctio
 		MeetName:        sum.Meet.Name,
 		Venue:           sum.Meet.Venue,
 		HomologationRef: sum.Meet.HomologationRef,
-		Dates:           formatDateRange(sum.Meet.StartDate, sum.Meet.EndDate),
+		Dates:           formatDateRange(p, sum.Meet.StartDate, sum.Meet.EndDate),
 		Organizer:       sum.Meet.Organizer,
 		Tier:            string(sum.Meet.Tier),
 		Categories:      strings.Join(sum.Categories, ", "),
 		Disciplines:     strings.Join(sum.Disciplines, ", "),
-		GeneratedAt:     sum.GeneratedAt.Format("2006-01-02 15:04 MST"),
+		GeneratedAt:     p.FormatDateTime(sum.GeneratedAt),
 	}
 	for _, sess := range sum.Sessions {
 		view.Sessions = append(view.Sessions, sessionRowView{
-			Day: sess.Day.Format(formDateLayout), Label: sess.Label,
+			Day: p.FormatDate(sess.Day), Label: sess.Label,
 		})
 	}
 	complete, missing := sum.Complete()

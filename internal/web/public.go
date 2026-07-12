@@ -40,7 +40,7 @@ func (s *Server) handlePublicMeet(w http.ResponseWriter, r *http.Request) {
 		MeetID:   d.ID,
 		MeetName: d.Name,
 		Venue:    d.Venue,
-		Dates:    formatDateRange(d.StartDate, d.EndDate),
+		Dates:    formatDateRange(p, d.StartDate, d.EndDate),
 		Status:   p.T("meet.status." + string(d.Status)),
 	}
 	_ = publicMeetPage(p, view).Render(r.Context(), w)
@@ -133,7 +133,7 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 		MeetID:     d.ID,
 		MeetName:   d.Name,
 		Venue:      d.Venue,
-		Dates:      formatDateRange(d.StartDate, d.EndDate),
+		Dates:      formatDateRange(p, d.StartDate, d.EndDate),
 		StatusLine: p.T("meet.status." + string(d.Status)),
 	}
 	// SYS-076: anything other than an explicit "primary" positioning

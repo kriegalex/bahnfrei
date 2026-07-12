@@ -23,7 +23,7 @@ templ layout(p PageData) {
 		<body>
 			<a class="skip-link" href="#main">{ p.T("nav.home") }</a>
 			<header>
-				<nav aria-label="primary">
+				<nav aria-label={ p.T("nav.aria_label") }>
 					<a href="/">{ p.T("app.title") }</a>
 					if p.CanOrganize {
 						<a href="/meets">{ p.T("nav.meets") }</a>
@@ -54,6 +54,11 @@ templ layout(p PageData) {
 								}
 							</select>
 						</label>
+						// The onchange auto-submit above is a convenience, not the only
+						// way to act (WCAG 2.2 SC 3.2.2 "On Input", AA): a person using a
+						// screen reader or with JS/onchange-triggered submits disabled
+						// still has an explicit, predictable control to apply the choice.
+						<button type="submit">{ p.T("footer.locale_apply") }</button>
 					</form>
 				</nav>
 			</header>

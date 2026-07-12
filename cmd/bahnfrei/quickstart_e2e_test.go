@@ -162,7 +162,7 @@ func TestQuickstartFreshInstallE2E(t *testing.T) {
 		}
 	}
 	_, page = get(meetPath)
-	for _, want := range []string{"Lauf", "Weite", "Staffel", "2027-06-01T23:59"} {
+	for _, want := range []string{"Lauf", "Weite", "Staffel", "01.06.2027 23:59"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("programme missing %q (UC-001 #3: capture types + deadlines)", want)
 		}
@@ -214,7 +214,7 @@ func TestQuickstartFreshInstallE2E(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Abendmeeting Uster", "Stadion Buchholz", "CH-ZH-042",
-		"2027-06-12", "C-Meeting", "admin", "U16 W",
+		"12.06.2027", "C-Meeting", "admin", "U16 W",
 	} {
 		if !strings.Contains(sum, want) {
 			t.Errorf("sanctioning summary missing %q (UC-001 #5)", want)

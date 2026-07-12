@@ -122,3 +122,26 @@ export async function seedUkcMeet(
   expect(Object.keys(athletes).length).toBeGreaterThan(0);
   return { meetID, units, athletes, unitURL };
 }
+
+/**
+ * Schedules one unit and publishes the timetable (mirrors
+ * internal/web/public_test.go's scheduleAndPublishTimetable), so the
+ * public timetable page (GET /m/{id}/timetable) has real content instead
+ * of 404ing — used by the accessibility audit (SYS-112/113, UC-026),
+ * which needs every public page type populated, not just the ones the
+ * capture-flow fixtures happen to touch.
+ */
+export async function publishTimetable(
+  request: APIRequestContext,
+  baseURL: string,
+  meetID: string,
+  unitID: string,
+): Promise<void> {
+  const meetPage = `${baseURL}/meets/${meetID}`;
+  await postForm(request, meetPage, `${meetPage}/units/${unitID}/schedule`, {
+    scheduled_at: "2027-06-12T14:30",
+    location: "Bahn 1",
+    version: "1",
+  });
+  await postForm(request, meetPage, `${meetPage}/timetable/publish`, {});
+}

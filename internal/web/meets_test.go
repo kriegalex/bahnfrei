@@ -154,7 +154,7 @@ func TestMeetCreationUC001_2(t *testing.T) {
 	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID))
 	for _, want := range []string{
 		"Abendmeeting Uster", "Stadion Buchholz", "C-Meeting",
-		"2027-06-12", "2027-06-13", "Entwurf", // draft, DE default locale
+		"12.06.2027", "13.06.2027", "Entwurf", // draft, DE default locale, SYS-110 display date format
 		"Session 1", "Session 2",
 	} {
 		if !strings.Contains(body, want) {
@@ -211,7 +211,7 @@ func TestEventProgrammeUC001_3(t *testing.T) {
 
 	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID))
 	// Capture types in the DE catalog: track=Lauf, horizontal=Weite, relay=Staffel.
-	for _, want := range []string{"Lauf", "Weite", "Staffel", "U16 W", "2027-06-01T23:59", "Qualifikation"} { //nolint:misspell // "Qualifikation" is the German catalog string (round.qualification, de.json)
+	for _, want := range []string{"Lauf", "Weite", "Staffel", "U16 W", "01.06.2027 23:59", "Qualifikation"} { //nolint:misspell // "Qualifikation" is the German catalog string (round.qualification, de.json)
 		if !strings.Contains(body, want) {
 			t.Errorf("programme missing %q (UC-001 #3)", want)
 		}
@@ -403,7 +403,7 @@ func TestSanctioningSummaryUC001_5Web(t *testing.T) {
 	body = bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/sanctioning"))
 	for _, want := range []string{
 		"Abendmeeting Uster", "Stadion Buchholz", "CH-ZH-042",
-		"2027-06-12", "C-Meeting", "admin", "U16 W", "100",
+		"12.06.2027", "C-Meeting", "admin", "U16 W", "100",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sanctioning summary missing %q (SYS-006)", want)
