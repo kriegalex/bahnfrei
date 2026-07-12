@@ -415,3 +415,77 @@ func TestOnResultsChangedHook(t *testing.T) {
 		t.Errorf("hook fired = %v, want twice with the meet ID", fired)
 	}
 }
+
+// TestUnitCaptureShowsLaneContextSYS026SYS027 proves the capture unit view
+// gains lane context once heat seeding runs (TASK-018 unlocking full track
+// capture, TASK-019): a generated heat's drawn lanes surface on the
+// capture grid's rows, read-only, without touching attempt-capture
+// semantics — SaveTrackResult still works exactly as before.
+func TestUnitCaptureShowsLaneContextSYS026SYS027(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	meet, err := meets.CreateMeet(ctx, organizer, ucMeetRequest())
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	ev, err := meets.AddEvent(ctx, organizer, meet.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"U18 W"},
+	})
+	if err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	if err := meets.PublishMeet(ctx, organizer, meet.ID, meet.Version); err != nil {
+		t.Fatalf("PublishMeet: %v", err)
+	}
+
+	entrySubmitterSession := Session{AccountID: "01ESB", Role: RoleEntrySubmitter}
+	var athleteIDs []string
+	for i := 0; i < 4; i++ {
+		detail, err := results.SubmitIndividualEntry(ctx, entrySubmitterSession, meet.ID, IndividualEntryInput{
+			EventID: ev.ID, FirstName: "Athlete", LastName: fmt.Sprintf("L%d", i),
+			BirthYear: 2009, Sex: domain.SexFemale, SeedPerformance: fmt.Sprintf("12.%02d", 50+i),
+		})
+		if err != nil {
+			t.Fatalf("SubmitIndividualEntry: %v", err)
+		}
+		if err := results.ConfirmCheckIn(ctx, office, meet.ID, detail.ID, detail.Version); err != nil {
+			t.Fatalf("ConfirmCheckIn: %v", err)
+		}
+		athleteIDs = append(athleteIDs, detail.EntryRecord.AthleteID)
+	}
+
+	rounds, err := store.ListRounds(ctx, results.db, ev.ID)
+	if err != nil {
+		t.Fatalf("ListRounds: %v", err)
+	}
+	sheet, err := results.GenerateHeats(ctx, office, meet.ID, ev.ID, rounds[0].ID, GenerateHeatsRequest{MaxHeatSize: 4, TrackLanes: 8})
+	if err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+	if len(sheet.Units) != 1 {
+		t.Fatalf("expected a single heat for 4 entries, got %d", len(sheet.Units))
+	}
+	unitID := sheet.Units[0].UnitID
+
+	v, err := results.UnitCapture(ctx, meet.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitCapture: %v", err)
+	}
+	seenLane := 0
+	for _, row := range v.Rows {
+		if row.Lane != 0 {
+			seenLane++
+		}
+	}
+	if seenLane != 4 {
+		t.Fatalf("expected all 4 seeded athletes to carry lane context on the capture grid, got %d", seenLane)
+	}
+
+	// Capturing a result still works exactly as before — lane context is
+	// read-only display data, never part of attempt/result versioning.
+	if _, err := results.SaveTrackResult(ctx, office, meet.ID, unitID, TrackResultInput{
+		AthleteID: athleteIDs[0], Time: "12.34", Timing: domain.TimingElectronic,
+	}); err != nil {
+		t.Fatalf("SaveTrackResult unaffected by lane context: %v", err)
+	}
+}

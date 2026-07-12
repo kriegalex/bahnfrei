@@ -221,6 +221,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 						<th scope="col">{ p.T("programme.capture_type") }</th>
 						<th scope="col">{ p.T("programme.rounds") }</th>
 						<th scope="col">{ p.T("programme.deadline") }</th>
+						<th scope="col">{ p.T("checkin.title") }</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -231,6 +232,15 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 							<td>{ row.CaptureType }</td>
 							<td>{ row.Rounds }</td>
 							<td>{ row.Deadline }</td>
+							<td>
+								if !d.Archived {
+									<a href={ templ.URL("/meets/" + d.ID + "/events/" + row.EventID + "/checkin") }>{ p.T("checkin.title") }</a>
+									for _, rl := range row.RoundLinks {
+										<br/>
+										<a href={ templ.URL("/meets/" + d.ID + "/events/" + row.EventID + "/rounds/" + rl.RoundID + "/seeding") }>{ p.T("seeding.title") } ({ rl.Label })</a>
+									}
+								}
+							</td>
 						</tr>
 					}
 				</tbody>

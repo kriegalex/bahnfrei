@@ -6,6 +6,7 @@ package web
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 )
@@ -53,16 +54,44 @@ type publicStartListRowView struct {
 	Bib, Name, BirthYear, Club string
 }
 
+// publicHeatRowView is one entry's line within a public heat/flight section
+// (TASK-018, UC-008/009, SYS-026/027/029): lane and qualification code, once
+// heat seeding/progression has run for that round.
+type publicHeatRowView struct {
+	Name, Club, Lane, Qualification string
+}
+
+type publicHeatUnitView struct {
+	Label string
+	Rows  []publicHeatRowView
+}
+
+type publicHeatRoundView struct {
+	RoundLabel string
+	Units      []publicHeatUnitView
+}
+
+type publicHeatEventView struct {
+	DisciplineLabel string
+	Categories      string
+	Rounds          []publicHeatRoundView
+}
+
 type publicStartListsView struct {
 	MeetID   string
 	MeetName string
 	Rows     []publicStartListRowView
+	// HeatEvents lists every event whose heats/flights have been generated
+	// (TASK-018): shown alongside the flat roster below, additively — an
+	// event with no seeded round simply does not appear here.
+	HeatEvents []publicHeatEventView
 }
 
 // handlePublicStartLists serves the meet's participants (UC-017 #2):
-// currently the live roster (this PoC has no separate start-list
-// publication step distinct from the roster — see
-// docs/requirements/open-questions-and-assumptions.md).
+// the live roster (this PoC has no separate start-list publication step
+// distinct from the roster — see
+// docs/requirements/open-questions-and-assumptions.md, OQ-021), plus any
+// generated heat/lane breakdown per event (UC-008/009).
 func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) {
 	meetID := r.PathValue("id")
 	d, err := s.meets.Meet(r.Context(), meetID)
@@ -95,6 +124,38 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 			Club:      club,
 		})
 	}
+
+	heatSheets, err := s.results.PublicHeatSheets(r.Context(), meetID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	for _, ev := range heatSheets {
+		label := ev.DisciplineName
+		if label == "" {
+			label = ev.EventID
+		}
+		hev := publicHeatEventView{DisciplineLabel: label, Categories: strings.Join(ev.CategoryCodes, ", ")}
+		for _, round := range ev.Rounds {
+			hr := publicHeatRoundView{RoundLabel: p.T("round." + string(round.RoundKind))}
+			for i, u := range round.Units {
+				hu := publicHeatUnitView{Label: p.T("seeding.heat") + " " + strconv.Itoa(i+1)}
+				for _, row := range u.Rows {
+					lane := ""
+					if row.Lane != 0 {
+						lane = strconv.Itoa(row.Lane)
+					}
+					hu.Rows = append(hu.Rows, publicHeatRowView{
+						Name: row.AthleteName, Club: row.ClubName, Lane: lane, Qualification: string(row.Qualification),
+					})
+				}
+				hr.Units = append(hr.Units, hu)
+			}
+			hev.Rounds = append(hev.Rounds, hr)
+		}
+		view.HeatEvents = append(view.HeatEvents, hev)
+	}
+
 	_ = publicStartListsPage(p, view).Render(r.Context(), w)
 }
 

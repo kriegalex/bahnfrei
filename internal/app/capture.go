@@ -221,6 +221,13 @@ type CaptureRow struct {
 	BirthYear int
 	Attempts  []*store.AttemptRecord
 	Result    *store.ResultRecord
+	// Lane is the athlete's drawn lane for this unit, if heat seeding
+	// (TASK-018, SYS-026/027) assigned one; 0 = no lane assigned (a
+	// non-laned event, or the unit has not been seeded yet). Read-only
+	// display context — never written back here, so it carries no bearing
+	// on capture-attempt versioning or the offline sync protocol
+	// (internal/sync/doc.go).
+	Lane int
 }
 
 // UnitStandingRow is one line of a unit's current ranking (UC-011 #4).
@@ -275,6 +282,10 @@ func (s *ResultsService) UnitCapture(ctx context.Context, meetID, unitID string)
 	if err != nil {
 		return UnitCaptureView{}, err
 	}
+	lanes, err := s.laneByAthlete(ctx, unitID)
+	if err != nil {
+		return UnitCaptureView{}, err
+	}
 
 	v := UnitCaptureView{
 		Meet:           uc.meet,
@@ -305,6 +316,7 @@ func (s *ResultsService) UnitCapture(ctx context.Context, meetID, unitID string)
 			BirthYear: p.Athlete.BirthYear,
 			Attempts:  make([]*store.AttemptRecord, v.Config.Attempts),
 			Result:    byAthleteResult[p.AthleteID],
+			Lane:      lanes[p.AthleteID],
 		}
 		if len(p.Athlete.ClubIDs) > 0 {
 			row.ClubName = clubs[p.Athlete.ClubIDs[0]]
@@ -323,6 +335,34 @@ func (s *ResultsService) UnitCapture(ctx context.Context, meetID, unitID string)
 		v.Standings = trackStandings(results)
 	}
 	return v, nil
+}
+
+// laneByAthlete resolves a unit's drawn lanes (TASK-018, SYS-026/027),
+// keyed by athlete ID, for the capture grid's read-only lane column — a
+// unit that has not been seeded yet (or a non-laned event) yields an empty
+// map, so every CaptureRow's Lane simply stays 0.
+func (s *ResultsService) laneByAthlete(ctx context.Context, unitID string) (map[string]int, error) {
+	assignments, err := store.ListUnitAssignments(ctx, s.db, unitID)
+	if err != nil {
+		return nil, err
+	}
+	if len(assignments) == 0 {
+		return nil, nil
+	}
+	lanes := make(map[string]int, len(assignments))
+	for _, a := range assignments {
+		if a.Lane == 0 {
+			continue
+		}
+		entry, err := store.GetEntry(ctx, s.db, a.EntryID)
+		if err != nil {
+			return nil, err
+		}
+		if entry.AthleteID != "" {
+			lanes[entry.AthleteID] = a.Lane
+		}
+	}
+	return lanes, nil
 }
 
 // fieldStandings ranks the field by best mark with next-best tie-breaking

@@ -15,7 +15,7 @@ import (
 // (UC-002 #4) — embedding is purely a distribution mechanism, not a special
 // code path.
 //
-//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json data/import-profiles/*.json
+//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json data/import-profiles/*.json data/seeding/*.json
 var builtinData embed.FS
 
 // Built-in category-scheme identifiers (SYS-005).
@@ -159,6 +159,29 @@ func BuiltinSeriesUploadTemplates() (map[string]*SeriesUploadTemplate, error) {
 		out[id] = t
 	}
 	return out, nil
+}
+
+// Built-in seeding-rules identifier (SYS-026/027, TASK-018): World Athletics
+// TR20 seeding, heat-distribution and lane-draw rules (D2.2-D2.4).
+const SeedingRulesTR20 = "tr20"
+
+var builtinSeedingRulesFiles = map[string]string{
+	SeedingRulesTR20: "data/seeding/tr20.json",
+}
+
+// BuiltinSeedingRules loads and parses one of the shipped seeding-rules data
+// files by ID (SYS-026/027 — "the applied rule set SHALL be visible to the
+// operator", D2.2).
+func BuiltinSeedingRules(id string) (*SeedingRules, error) {
+	path, ok := builtinSeedingRulesFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in seeding rules %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in seeding rules %q: %w", id, err)
+	}
+	return ParseSeedingRules(data)
 }
 
 // builtinDisciplineCatalogFile is the shipped discipline catalog (SYS-003).

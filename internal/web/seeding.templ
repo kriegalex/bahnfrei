@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// checkInPage is the office check-in/call-room workspace (TASK-018, UC-007,
+// SYS-025): confirm entries or close check-in in one action, marking every
+// still-unconfirmed entry DNS; a DNS entry can be reinstated (referee
+// override).
+templ checkInPage(p PageData, v checkInView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { v.EventLabel } — { p.T("checkin.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/checkin/close") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<button type="submit">{ p.T("checkin.close") }</button>
+		</form>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("checkin.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">{ p.T("roster.name") }</th>
+							<th scope="col">{ p.T("roster.club") }</th>
+							<th scope="col">{ p.T("entries.status") }</th>
+							<th scope="col">{ p.T("checkin.action") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.Who }</td>
+								<td>{ row.ClubName }</td>
+								<td>{ row.Status }</td>
+								<td>
+									if row.IsEntered {
+										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/confirm") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="version" value={ row.Version }/>
+											<button type="submit">{ p.T("checkin.confirm") }</button>
+										</form>
+									}
+									if row.IsDNS {
+										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/reinstate") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="version" value={ row.Version }/>
+											<button type="submit">{ p.T("checkin.reinstate") }</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// seedingPage is the office heat-seeding, lane-draw and round-progression
+// workspace (TASK-018, UC-008/009, SYS-026-030): generate/regenerate a
+// round's heats, manually override an athlete's heat/lane, and advance the
+// round once its results are settled.
+templ seedingPage(p PageData, v seedingView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { v.EventLabel } — { v.RoundLabel } — { p.T("seeding.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if v.RulesID != "" {
+			<p class="hint">{ p.T("seeding.rules_applied") }: { v.RulesID } ({ v.RulesVersion })</p>
+		}
+
+		<h2>{ p.T("seeding.generate.title") }</h2>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/seeding/generate") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>{ p.T("seeding.max_heat_size") } <input type="number" name="max_heat_size" min="1" value="8"/></label>
+			<label>{ p.T("seeding.track_lanes") } <input type="number" name="track_lanes" min="0" value="8"/></label>
+			<button type="submit">{ p.T("seeding.generate.submit") }</button>
+		</form>
+
+		if v.Tie != nil {
+			<h2>{ p.T("seeding.tie.title") }</h2>
+			<p>{ p.T("seeding.tie.hint", "mark", v.Tie.Mark, "slots", v.Tie.RemainingSlots) }</p>
+			for _, te := range v.Tie.Entries {
+				<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/manual-advance") } method="post" class="inline-form">
+					<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+					<input type="hidden" name="entry_id" value={ te.EntryID }/>
+					{ te.Who }
+					<select name="code">
+						<option value="q">q</option>
+						<option value="qD">qD</option>
+						<option value="qR">qR</option>
+						<option value="qJ">qJ</option>
+					</select>
+					<button type="submit">{ p.T("seeding.tie.advance") }</button>
+				</form>
+			}
+		}
+
+		if len(v.Units) == 0 {
+			<p>{ p.T("seeding.empty") }</p>
+		} else {
+			for _, u := range v.Units {
+				<h2>{ u.Label }</h2>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col">{ p.T("roster.name") }</th>
+								<th scope="col">{ p.T("roster.club") }</th>
+								<th scope="col">{ p.T("entries.seed") }</th>
+								<th scope="col">{ p.T("seeding.lane") }</th>
+								<th scope="col">{ p.T("seeding.qualification") }</th>
+								<th scope="col">{ p.T("seeding.override") }</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, row := range u.Rows {
+								<tr>
+									<td>{ row.Who }</td>
+									<td>{ row.ClubName }</td>
+									<td>{ row.SeedMark }</td>
+									<td>{ row.Lane }</td>
+									<td>
+										{ row.Qualification }
+										if row.ManualOverride {
+											<small>({ p.T("seeding.manual") })</small>
+										}
+									</td>
+									<td>
+										<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/seeding/override") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="entry_id" value={ row.EntryID }/>
+											<input type="hidden" name="version" value={ row.Version }/>
+											<select name="target_unit">
+												for _, opt := range v.UnitOptions {
+													<option value={ opt.UnitID } selected?={ opt.UnitID == u.UnitID }>{ opt.Label }</option>
+												}
+											</select>
+											<input type="number" name="lane" min="0" value={ row.Lane }/>
+											<button type="submit">{ p.T("seeding.override") }</button>
+										</form>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		}
+
+		<h2>{ p.T("seeding.advance.title") }</h2>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/advance") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<label>{ p.T("seeding.advance.top_n") } <input type="number" name="top_n" min="0" placeholder="0"/></label>
+			<label>{ p.T("seeding.advance.fastest_k") } <input type="number" name="fastest_k" min="0" placeholder="0"/></label>
+			<label>{ p.T("seeding.advance.standard") } <input type="text" name="standard" placeholder=""/></label>
+			<label>{ p.T("seeding.advance.capacity") } <input type="number" name="finals_capacity" min="0" placeholder="0"/></label>
+			<label>
+				{ p.T("seeding.advance.better_direction") }
+				<select name="better_direction">
+					<option value="higher">{ p.T("seeding.advance.higher") }</option>
+					<option value="lower">{ p.T("seeding.advance.lower") }</option>
+				</select>
+			</label>
+			<button type="submit">{ p.T("seeding.advance.submit") }</button>
+		</form>
+	}
+}

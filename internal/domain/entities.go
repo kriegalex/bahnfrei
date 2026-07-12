@@ -404,7 +404,52 @@ const (
 	StatusR    QualificationStatus = "r"
 	StatusQ    QualificationStatus = "Q"
 	StatusQt   QualificationStatus = "q"
+	// StatusQR/StatusQJ/StatusQD are the manual-advancement codes (D2.4,
+	// D5.2, SYS-029): advanced by Referee, Jury of Appeal, or draw
+	// respectively — set by round progression (TASK-018), never by the
+	// operator-settable capture-status vocabulary (SYS-045,
+	// internal/domain/track.go's captureStatuses).
+	StatusQR QualificationStatus = "qR"
+	StatusQJ QualificationStatus = "qJ"
+	StatusQD QualificationStatus = "qD"
 )
+
+// UnitAssignment is one entry's placement within a Round's Unit (heat,
+// flight or lane group): its seed rank within the unit, drawn lane (0 = no
+// lane assigned — a by-lot or non-laned event), and qualification code once
+// round progression runs (SyRS §2; SYS-026–030, D2.2–D2.4). ManualOverride
+// marks a heat/lane the operator hand-edited (SYS-028): a later regeneration
+// SHALL leave it untouched unless explicitly released.
+type UnitAssignment struct {
+	ID             string
+	UnitID         string
+	EntryID        string
+	SeedRank       int
+	Lane           int
+	Qualification  QualificationStatus
+	ManualOverride bool
+}
+
+// Validate checks the minimal UnitAssignment invariants (SYS-026): identity,
+// the unit and entry it links, and — when set — a qualification code drawn
+// from the D2.4 advancement vocabulary.
+func (a *UnitAssignment) Validate() error {
+	if a.ID == "" {
+		return errors.New("unit assignment: id is required")
+	}
+	if a.UnitID == "" {
+		return errors.New("unit assignment: unit id is required")
+	}
+	if a.EntryID == "" {
+		return errors.New("unit assignment: entry id is required")
+	}
+	switch a.Qualification {
+	case StatusNone, StatusQ, StatusQt, StatusQR, StatusQJ, StatusQD:
+	default:
+		return fmt.Errorf("unit assignment: invalid qualification code %q (SYS-029/D5.2)", a.Qualification)
+	}
+	return nil
+}
 
 // Result is the SyRS §2 Participation/Result entity: per-unit lane/position,
 // mark, wind, status, points, placing, record flags. Attempt-sequence detail

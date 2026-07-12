@@ -111,6 +111,22 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/entries/eligibility", office(s.handleEligibilityList))
 	mux.HandleFunc("POST /meets/{id}/entries/{entry}/eligibility/override", office(s.handleEligibilityOverride))
 
+	// Check-in / call-room and DNS handling (TASK-018, UC-007, SYS-025):
+	// office level, matching UC-007's "operator (check-in/call room)" actor.
+	mux.HandleFunc("GET /meets/{id}/events/{event}/checkin", office(s.handleCheckIn))
+	mux.HandleFunc("POST /meets/{id}/events/{event}/checkin/close", office(s.handleCheckInClose))
+	mux.HandleFunc("POST /meets/{id}/entries/{entry}/confirm", office(s.handleCheckInConfirm))
+	mux.HandleFunc("POST /meets/{id}/entries/{entry}/reinstate", office(s.handleCheckInReinstate))
+
+	// Heat seeding, lane draws and round progression (TASK-018, UC-008/009,
+	// SYS-026-030): office level, matching UC-008/009's "operator
+	// (competition office)" actor.
+	mux.HandleFunc("GET /meets/{id}/events/{event}/rounds/{round}/seeding", office(s.handleSeeding))
+	mux.HandleFunc("POST /meets/{id}/events/{event}/rounds/{round}/seeding/generate", office(s.handleSeedingGenerate))
+	mux.HandleFunc("POST /meets/{id}/events/{event}/rounds/{round}/seeding/override", office(s.handleSeedingOverride))
+	mux.HandleFunc("POST /meets/{id}/events/{event}/rounds/{round}/advance", office(s.handleAdvanceRound))
+	mux.HandleFunc("POST /meets/{id}/events/{event}/rounds/{round}/manual-advance", office(s.handleManualAdvance))
+
 	// Printables (TASK-011, UC-018 subset, SYS-072, PoC scope): the UKC
 	// result list as PDF is office-level, matching the standings page it
 	// mirrors.

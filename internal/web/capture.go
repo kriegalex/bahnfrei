@@ -71,6 +71,9 @@ type captureRowView struct {
 	Cells     []attemptCellView
 	Result    string // settled: best mark or rendered status
 	Points    string
+	// Lane is the heat-seeded lane context (TASK-018, SYS-026/027), "" when
+	// none (non-laned event, or the unit is not seeded yet).
+	Lane string
 }
 
 type standingRowView2 struct {
@@ -126,6 +129,9 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 			AthleteID: row.AthleteID,
 			Bib:       row.Bib,
 			Name:      row.FirstName + " " + row.LastName,
+		}
+		if row.Lane != 0 {
+			rv.Lane = strconv.Itoa(row.Lane)
 		}
 		for i, a := range row.Attempts {
 			cell := attemptCellView{Seq: strconv.Itoa(i + 1), Version: "0"}

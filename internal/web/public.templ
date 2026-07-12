@@ -36,6 +36,41 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("public.startlists.title") }</h1>
 		@publicNav(p, v.MeetID)
+		if len(v.HeatEvents) > 0 {
+			<h2>{ p.T("seeding.title") }</h2>
+			for _, ev := range v.HeatEvents {
+				<h3>{ ev.DisciplineLabel } ({ ev.Categories })</h3>
+				for _, round := range ev.Rounds {
+					<h4>{ round.RoundLabel }</h4>
+					for _, u := range round.Units {
+						<div class="table-scroll" tabindex="0">
+							<table>
+								<caption>{ u.Label }</caption>
+								<thead>
+									<tr>
+										<th scope="col">{ p.T("seeding.lane") }</th>
+										<th scope="col">{ p.T("roster.name") }</th>
+										<th scope="col">{ p.T("roster.club") }</th>
+										<th scope="col">{ p.T("seeding.qualification") }</th>
+									</tr>
+								</thead>
+								<tbody>
+									for _, row := range u.Rows {
+										<tr>
+											<td>{ row.Lane }</td>
+											<td>{ row.Name }</td>
+											<td>{ row.Club }</td>
+											<td>{ row.Qualification }</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					}
+				}
+			}
+			<h2>{ p.T("public.startlists.title") }</h2>
+		}
 		if len(v.Rows) == 0 {
 			<p>{ p.T("public.startlists.empty") }</p>
 		} else {

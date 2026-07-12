@@ -510,11 +510,20 @@ type meetFormView struct {
 }
 
 type programmeRowView struct {
+	EventID     string
 	Discipline  string
 	Categories  string
 	CaptureType string
 	Rounds      string
 	Deadline    string
+	// RoundLinks lists this event's rounds (id + localized label) for the
+	// check-in/seeding workspace links (TASK-018, UC-007/008/009).
+	RoundLinks []programmeRoundLinkView
+}
+
+type programmeRoundLinkView struct {
+	RoundID string
+	Label   string
 }
 
 type unitRowView struct {
@@ -641,6 +650,7 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 	}
 	for _, pe := range d.Programme {
 		row := programmeRowView{
+			EventID:     pe.ID,
 			Discipline:  pe.DisciplineName,
 			Categories:  strings.Join(pe.CategoryCodes, ", "),
 			CaptureType: p.T("family." + string(pe.Family)),
@@ -650,7 +660,9 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		}
 		kinds := make([]string, 0, len(pe.Rounds))
 		for _, round := range pe.Rounds {
-			kinds = append(kinds, p.T("round."+string(round.Kind)))
+			label := p.T("round." + string(round.Kind))
+			kinds = append(kinds, label)
+			row.RoundLinks = append(row.RoundLinks, programmeRoundLinkView{RoundID: round.ID, Label: label})
 		}
 		row.Rounds = strings.Join(kinds, " → ")
 		if pe.EntryDeadline != nil {

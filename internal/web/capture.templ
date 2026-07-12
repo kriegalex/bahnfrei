@@ -181,6 +181,7 @@ templ trackForm(p PageData, v captureView) {
 		<thead>
 			<tr>
 				<th>{ p.T("roster.bib") }</th>
+				<th>{ p.T("seeding.lane") }</th>
 				<th>{ p.T("roster.name") }</th>
 				<th>{ p.T("capture.time") }</th>
 				<th>{ p.T("capture.timing") }</th>
@@ -195,6 +196,7 @@ templ trackForm(p PageData, v captureView) {
 			for _, row := range v.Rows {
 				<tr>
 					<td>{ row.Bib }</td>
+					<td>{ row.Lane }</td>
 					<td>{ row.Name }</td>
 					<td>
 						<input type="text" name="time" size="7" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.time") + " " + row.Name }/>

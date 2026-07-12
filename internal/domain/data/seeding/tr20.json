@@ -1,0 +1,20 @@
+{
+ "id": "tr20",
+ "version": "wa-tr20.4-2024",
+ "name": "World Athletics TR20 seeding, heat and lane-draw rules",
+ "source": "WA Seedings, Draws and Qualification in Track Events (TR20), D2.2-D2.4; https://www.northernathletics.co.uk/wp-content/uploads/2025/04/WA-Seeding-Draws-and-Qualifications.pdf",
+ "distribution": "serpentine",
+ "clubSeparation": true,
+ "laneRaceDisciplines": [
+  "60m", "100m", "200m", "300m", "400m", "800m",
+  "100mH", "110mH", "300mH", "400mH",
+  "4x100m", "4x400m"
+ ],
+ "laneGroups": {
+  "8": [
+   { "rankFrom": 1, "rankTo": 4, "lanes": [4, 5, 6, 7] },
+   { "rankFrom": 5, "rankTo": 6, "lanes": [3, 8] },
+   { "rankFrom": 7, "rankTo": 8, "lanes": [1, 2] }
+  ]
+ }
+}
