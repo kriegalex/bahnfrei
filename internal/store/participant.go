@@ -51,6 +51,47 @@ func RegisterParticipant(ctx context.Context, db DBTX, meetID, athleteID, bib st
 	return p, nil
 }
 
+// GetParticipantByAthlete looks up an athlete's participant row at meetID.
+func GetParticipantByAthlete(ctx context.Context, db DBTX, meetID, athleteID string) (Participant, error) {
+	var p Participant
+	err := db.QueryRowContext(ctx, `SELECT id, meet_id, athlete_id, bib, version
+		FROM participants WHERE meet_id = ? AND athlete_id = ?`, meetID, athleteID).
+		Scan(&p.ID, &p.MeetID, &p.AthleteID, &p.Bib, &p.Version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Participant{}, ErrNotFound
+	case err != nil:
+		return Participant{}, err
+	}
+	return p, nil
+}
+
+// EnsureParticipant idempotently registers athleteID as a participant of
+// meetID with no bib yet (TASK-016, SYS-018): an online entry needs its
+// athlete(s) to hold a meet-wide participant row so bib assignment stays
+// meet-scoped rather than per-event, regardless of how many events (or, for
+// a relay, how many entries) the athlete appears in.
+func EnsureParticipant(ctx context.Context, db DBTX, meetID, athleteID string) (Participant, error) {
+	p, err := RegisterParticipant(ctx, db, meetID, athleteID, "")
+	if errors.Is(err, ErrDuplicateParticipant) {
+		return GetParticipantByAthlete(ctx, db, meetID, athleteID)
+	}
+	return p, err
+}
+
+// UpdateParticipantBib assigns or edits a participant's bib under optimistic
+// concurrency (SYS-018): the meet-wide UNIQUE(meet_id, bib) index
+// (0004_athletes_results.sql) rejects a duplicate manual assignment as
+// ErrDuplicateParticipant (UC-006 #2).
+func UpdateParticipantBib(ctx context.Context, db DBTX, id string, expectedVersion int64, bib string) (int64, error) {
+	v, err := OptimisticUpdate(ctx, db, "participants", id, expectedVersion,
+		Set{Column: "bib", Value: bib})
+	if isUniqueViolation(err) {
+		return 0, ErrDuplicateParticipant
+	}
+	return v, err
+}
+
 // ListParticipants returns a meet's participants with their athlete data,
 // ordered by bib then name for stable start lists.
 func ListParticipants(ctx context.Context, db DBTX, meetID string) ([]ParticipantRow, error) {

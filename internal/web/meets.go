@@ -216,6 +216,19 @@ func (s *Server) handleMeetArchive(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
 }
 
+// handleMeetPublish moves a meet from draft to published (TASK-016's
+// prerequisite for online entries to open, UC-003 #1).
+func (s *Server) handleMeetPublish(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	actor, _ := sessionFromContext(r.Context())
+	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
+	if err := s.meets.PublishMeet(r.Context(), actor, meetID, version); err != nil {
+		s.redirectMeetError(w, r, meetID, err)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
+}
+
 func (s *Server) handleEventCreate(w http.ResponseWriter, r *http.Request) {
 	meetID := r.PathValue("id")
 	actor, _ := sessionFromContext(r.Context())
@@ -223,10 +236,12 @@ func (s *Server) handleEventCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	entryLimit, _ := strconv.Atoi(r.FormValue("entry_limit"))
 	req := app.AddEventRequest{
 		DisciplineCode: r.FormValue("discipline"),
 		CategoryCodes:  r.Form["categories"],
 		EntryStandard:  strings.TrimSpace(r.FormValue("entry_standard")),
+		EntryLimit:     entryLimit,
 	}
 	for _, kind := range []domain.RoundKind{domain.RoundQualification, domain.RoundSemifinal, domain.RoundFinal} {
 		if r.FormValue("round_"+string(kind)) != "" {
@@ -532,13 +547,16 @@ type meetDetailView struct {
 	Tier            string
 	Status          string
 	Archived        bool
-	SchemeID        string
-	Sessions        []sessionRowView
-	Programme       []programmeRowView
-	Units           []unitRowView
-	Versions        []timetableVersionRowView
-	Disciplines     []disciplineOptionView
-	Categories      []string
+	// Draft gates the publish action (TASK-016, UC-003 #1 prerequisite):
+	// only a draft meet can be published.
+	Draft       bool
+	SchemeID    string
+	Sessions    []sessionRowView
+	Programme   []programmeRowView
+	Units       []unitRowView
+	Versions    []timetableVersionRowView
+	Disciplines []disciplineOptionView
+	Categories  []string
 	// ResultsPositioningLabel is the localized SYS-076 configuration
 	// summary shown to the organizer ("Federation channel is official —
 	// source: …" / "This system is the primary publication").
@@ -611,6 +629,7 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		Tier:                    string(d.Tier),
 		Status:                  p.T("meet.status." + string(d.Status)),
 		Archived:                d.Status == domain.MeetArchived,
+		Draft:                   d.Status == domain.MeetDraft,
 		SchemeID:                d.CategorySchemeID,
 		Units:                   s.unitRows(p, d.Units),
 		ResultsPositioningLabel: resultsPositioningSummary(p, d.ResultsPositioning, d.OfficialSourceName),

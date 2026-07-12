@@ -14,6 +14,8 @@ templ publicNav(p PageData, meetID string) {
 		<a href={ templ.URL("/m/" + meetID + "/startlists") }>{ p.T("public.nav.startlists") }</a>
 		{ " · " }
 		<a href={ templ.URL("/m/" + meetID + "/results") }>{ p.T("public.nav.results") }</a>
+		{ " · " }
+		<a href={ templ.URL("/meets/" + meetID + "/entries") }>{ p.T("public.nav.entries") }</a>
 	</p>
 }
 

@@ -64,10 +64,34 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/edit", organize(s.handleMeetEditForm))
 	mux.HandleFunc("POST /meets/{id}/edit", organize(s.handleMeetEditSubmit))
 	mux.HandleFunc("POST /meets/{id}/archive", organize(s.handleMeetArchive))
+	mux.HandleFunc("POST /meets/{id}/publish", organize(s.handleMeetPublish))
 	mux.HandleFunc("POST /meets/{id}/events", organize(s.handleEventCreate))
 	mux.HandleFunc("POST /meets/{id}/units/{unit}/schedule", organize(s.handleUnitSchedule))
 	mux.HandleFunc("POST /meets/{id}/timetable/publish", organize(s.handleTimetablePublish))
 	mux.HandleFunc("GET /meets/{id}/sanctioning", organize(s.handleSanctioning))
+
+	// Online entries (TASK-016, UC-003, SYS-011/012/015): entry-submitter
+	// level and above (CapSubmitEntries, SYS-090).
+	submitEntries := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleEntrySubmitter, s.cats, h)
+	}
+	mux.HandleFunc("GET /meets/{id}/entries", submitEntries(s.handleEntries))
+	mux.HandleFunc("POST /meets/{id}/entries/individual", submitEntries(s.handleEntryIndividualSubmit))
+	mux.HandleFunc("POST /meets/{id}/entries/bulk", submitEntries(s.handleEntryBulkSubmit))
+	mux.HandleFunc("POST /meets/{id}/entries/relay", submitEntries(s.handleEntryRelaySubmit))
+	mux.HandleFunc("POST /meets/{id}/entries/{entry}/relay-composition", submitEntries(s.handleEntryRelayCompositionUpdate))
+
+	// Entry-standard exceptions, bib assignment and the fee schedule/summary
+	// (TASK-016, UC-006, SYS-015/017/018): organizer level, matching UC-006's
+	// "operator (organizer)" actor.
+	mux.HandleFunc("GET /meets/{id}/entries/exceptions", organize(s.handleEntryExceptions))
+	mux.HandleFunc("GET /meets/{id}/bibs", organize(s.handleBibs))
+	mux.HandleFunc("GET /meets/{id}/bibs.pdf", organize(s.handleBibsPDF))
+	mux.HandleFunc("POST /meets/{id}/bibs/bulk", organize(s.handleBibBulkAssign))
+	mux.HandleFunc("POST /meets/{id}/bibs/{participant}", organize(s.handleBibAssign))
+	mux.HandleFunc("GET /meets/{id}/fees", organize(s.handleFees))
+	mux.HandleFunc("POST /meets/{id}/fees/schedule", organize(s.handleFeeScheduleSubmit))
+	mux.HandleFunc("GET /meets/{id}/fees/export", organize(s.handleFeeExport))
 
 	// Roster & standings (UC-033): competition-office level and above —
 	// day-of-competition surfaces (SYS-090).

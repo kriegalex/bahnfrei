@@ -257,9 +257,87 @@ func (s *MeetService) ArchiveMeet(ctx context.Context, actor Session, meetID str
 	return nil
 }
 
+// ErrMeetNotDraft means PublishMeet was attempted on a meet that is not
+// currently in draft status.
+var ErrMeetNotDraft = errors.New("meet is not in draft status")
+
+// PublishMeet moves a meet from draft to published (SYS-001's status
+// lifecycle; the "published meet" precondition TASK-016's online entries
+// require, UC-003 #1): the organizer's one-way "go live" action once the
+// programme is ready to accept entries. Not itself acceptance-criteria
+// bearing on any single UC in the Phase A baseline, but the wired
+// transition every downstream published/live check depends on.
+func (s *MeetService) PublishMeet(ctx context.Context, actor Session, meetID string, expectedVersion int64) error {
+	if err := Authorize(actor.Role, CapOrganizeMeet); err != nil {
+		return err
+	}
+	meet, err := store.GetMeet(ctx, s.db, meetID)
+	if err != nil {
+		return err
+	}
+	if meet.Status != domain.MeetDraft {
+		return ErrMeetNotDraft
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("publish meet: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.SetMeetStatus(ctx, tx, meetID, expectedVersion, domain.MeetPublished); err != nil {
+		return err
+	}
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "meet.publish",
+		EntityType: "meet", EntityID: meetID,
+		After: `{"status":"published"}`,
+	}); err != nil {
+		return fmt.Errorf("audit meet publish: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("publish meet: %w", err)
+	}
+	return nil
+}
+
 // ListMeets returns all meets, newest first (operator overview).
 func (s *MeetService) ListMeets(ctx context.Context) ([]MeetRecord, error) {
 	return store.ListMeets(ctx, s.db)
+}
+
+// SetFeeSchedule sets the SYS-017 configurable fee schedule (a flat
+// per-individual-entry fee and a flat per-relay-team-entry fee, in
+// Rappen/cents) an organizer configures per meet (TASK-016, UC-006 #3).
+// Negative fees are rejected; a zero fee is valid (many club meets are
+// entry-free).
+func (s *MeetService) SetFeeSchedule(ctx context.Context, actor Session, meetID string, expectedVersion int64, entryFeeCents, relayFeeCents int64) error {
+	if err := Authorize(actor.Role, CapOrganizeMeet); err != nil {
+		return err
+	}
+	if entryFeeCents < 0 || relayFeeCents < 0 {
+		return errors.New("fee schedule: fees must not be negative")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set fee schedule: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.UpdateMeetFeeSchedule(ctx, tx, meetID, expectedVersion, entryFeeCents, relayFeeCents); err != nil {
+		return err
+	}
+	after, _ := json.Marshal(map[string]int64{"entryFeeCents": entryFeeCents, "relayFeeCents": relayFeeCents})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "meet.fee_schedule",
+		EntityType: "meet", EntityID: meetID, After: string(after),
+	}); err != nil {
+		return fmt.Errorf("audit fee schedule: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("set fee schedule: %w", err)
+	}
+	return nil
 }
 
 // ProgrammeEvent is one programme line enriched with the discipline's
@@ -320,6 +398,9 @@ type AddEventRequest struct {
 	Rounds         []domain.RoundKind // empty means a single final
 	EntryStandard  string
 	EntryDeadline  *time.Time
+	// EntryLimit caps this event's active entries (SYS-015); zero means
+	// unlimited (TASK-016, UC-003).
+	EntryLimit int
 }
 
 // AddEvent appends an event (discipline × category) with its round
@@ -366,6 +447,7 @@ func (s *MeetService) AddEvent(ctx context.Context, actor Session, meetID string
 		CategoryCodes:  req.CategoryCodes,
 		EntryStandard:  req.EntryStandard,
 		EntryDeadline:  req.EntryDeadline,
+		EntryLimit:     req.EntryLimit,
 	})
 	if err != nil {
 		return EventRecord{}, err

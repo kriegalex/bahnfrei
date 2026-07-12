@@ -72,14 +72,14 @@ inspection/analysis procedure.
 | SYS-005 | UC-002 #1–#4 | T | TASK-004 (domain core): `internal/domain` `TestResolveDefaultCategory_SwissAthletics_UC002_1`, `TestResolveDefaultCategory_CalendarYearTransition`, `TestEvaluateEntry_StartUpAndDisciplineBar`, `TestParseCategoryScheme_CustomSchemeNoCodeChange` (built-in Swiss Athletics + UBS Kids Cup schemes, data-interpreter resolver, custom-scheme load) |
 | SYS-006 | UC-001 #5 | T | TASK-006 (meet setup): `internal/app` `TestSanctioningSummaryUC001_5`; `internal/web` `TestSanctioningSummaryUC001_5Web`; `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` |
 | SYS-010 | UC-004 #1, UC-028 #1 | T | Phase B |
-| SYS-011 | UC-003 #1–#3 | T | Phase B |
-| SYS-012 | UC-003 #4 | T | Phase B |
+| SYS-011 | UC-003 #1–#3 | T | TASK-016 (online entries): `internal/store` `TestEntryStoreCreateAndGetSYS011`, `TestEntryStoreDuplicateRejectedSYS011UC003_1`, `TestEntryStoreListByMeetAndSubmitter`; `internal/app` `TestOnlineEntryIndividualSYS011UC003_1`, `TestOnlineEntryClubBulkSYS011UC003_2`, `TestOnlineEntryBulkAtomicSYS011`, `TestOnlineEntryDeadlinePassedRejectedSYS011UC003_3`, `TestSubmitEntryRequiresRoleSYS011`; `internal/web` `TestOnlineEntryIndividualFlowSYS011UC003_1Web`, `TestOnlineEntryClubBulkFlowSYS011UC003_2Web`, `TestOnlineEntryDeadlinePassedRejectedWebSYS011UC003_3`, `TestEntriesBibsFeesRequireRoleSYS090` |
+| SYS-012 | UC-003 #4 | T | TASK-016 (online entries): `internal/domain` `TestRelayTeam_Validate`; `internal/store` `TestRelayTeamCreateAndUpdateCompositionSYS012`; `internal/app` `TestOnlineEntryRelaySYS012UC003_4`; `internal/web` `TestOnlineEntryRelayFlowSYS012UC003_4Web` |
 | SYS-013 | UC-004 #1–#4 | T | Phase B |
 | SYS-014 | UC-005 #1–#5 | T | Phase B |
-| SYS-015 | UC-003 #5 | T | Phase B |
+| SYS-015 | UC-003 #5 | T | TASK-016 (online entries): `internal/domain` `TestEvaluateEntryStandardSYS015UC003_5`, `TestEvaluateEntryStandard_FieldDirection`, `TestEvaluateEntryStandard_NoStandardConfigured`, `TestEvaluateEntryStandard_SeedRequiredWhenStandardConfigured`, `TestEvaluateEntryStandard_InvalidMarks`; `internal/store` `TestEntryStoreCountActiveExcludesScratchedSYS015`, `TestEventEntryLimitRoundTripSYS015`; `internal/app` `TestOnlineEntryFailsStandardSYS015UC003_5`, `TestOnlineEntrySeedRequiredSYS015`, `TestOnlineEntryLimitReachedSYS015`; `internal/web` `TestEntryExceptionReportSYS015UC003_5Web` |
 | SYS-016 | UC-008 #5 (scratch), UC-015 #3 (audit) | T | Phase B |
-| SYS-017 | UC-006 #3 | T | Phase B |
-| SYS-018 | UC-006 #1–#2 | T | Phase B |
+| SYS-017 | UC-006 #3 | T | TASK-016 (online entries): `internal/store` `TestMeetFeeScheduleRoundTripSYS017`; `internal/app` `TestFeeSummarySYS017UC006_3`, `TestFeeSummaryRequiresOrganizerRoleSYS017`; `internal/web` `TestFeeSummaryFlowSYS017UC006_3Web` |
+| SYS-018 | UC-006 #1–#2 | T | TASK-016 (online entries): `internal/store` `TestEnsureParticipantIdempotentSYS018`, `TestUpdateParticipantBibSYS018UC006_1_2`; `internal/app` `TestBibAssignmentSYS018UC006_1`, `TestBibAssignmentDuplicateRejectedSYS018UC006_2`, `TestBibAssignRequiresOrganizerRoleSYS018`; `internal/web` `TestBibAssignmentFlowSYS018UC006_1_2Web`, `TestBibsPDFDownloadSYS018UC006_1Web` |
 | SYS-025 | UC-007 #1–#3 | T | Phase B |
 | SYS-026 | UC-008 #1–#2 | T | Phase B |
 | SYS-027 | UC-008 #3–#4 | T | Phase B |

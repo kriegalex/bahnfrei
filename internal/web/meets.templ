@@ -172,6 +172,10 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/entries") }>{ p.T("entries.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·
@@ -179,6 +183,13 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<a href={ templ.URL("/m/" + d.ID + "/results") }>{ p.T("public.nav.results") }</a>
 		</p>
 		<p><small>{ d.ResultsPositioningLabel }</small></p>
+		if d.Draft {
+			<form action={ templ.URL("/meets/" + d.ID + "/publish") } method="post" class="inline-form">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<input type="hidden" name="version" value={ intToStr(d.Version) }/>
+				<button type="submit">{ p.T("meet.publish") }</button>
+			</form>
+		}
 		if !d.Archived {
 			<form action={ templ.URL("/meets/" + d.ID + "/archive") } method="post" class="inline-form">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -256,6 +267,10 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 				<label>
 					{ p.T("programme.entry_standard") }
 					<input type="text" name="entry_standard"/>
+				</label>
+				<label>
+					{ p.T("programme.entry_limit") }
+					<input type="number" name="entry_limit" min="0" placeholder="0"/>
 				</label>
 				<button type="submit">{ p.T("programme.add.submit") }</button>
 			</form>

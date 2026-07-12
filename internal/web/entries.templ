@@ -1,0 +1,370 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// entriesPage is the entry-submitter workspace (TASK-016, UC-003):
+// individual, club-bulk and relay online entry forms, plus the submitter's
+// own entries with their current status (SYS-011/012/015).
+templ entriesPage(p PageData, v entriesView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("entries.title") }</h1>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a>
+		</p>
+		if len(v.Events) == 0 && len(v.RelayEvents) == 0 {
+			<p>{ p.T("entries.no_open_events") }</p>
+		}
+		if len(v.Events) > 0 {
+			<h2>{ p.T("entries.individual.title") }</h2>
+			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/individual") } method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>
+					{ p.T("entries.event") }
+					<select name="event">
+						for _, ev := range v.Events {
+							<option value={ ev.ID }>{ ev.Label }</option>
+						}
+					</select>
+				</label>
+				<label>{ p.T("roster.first_name") } <input type="text" name="first_name" required?={ true }/></label>
+				<label>{ p.T("roster.last_name") } <input type="text" name="last_name" required?={ true }/></label>
+				<label>{ p.T("roster.birth_year") } <input type="number" name="birth_year" min="1900" required?={ true }/></label>
+				<label>
+					{ p.T("roster.sex") }
+					<select name="sex">
+						<option value="W">{ p.T("roster.sex") } W</option>
+						<option value="M">{ p.T("roster.sex") } M</option>
+					</select>
+				</label>
+				<label>{ p.T("roster.club") } <input type="text" name="club"/></label>
+				<label>{ p.T("entries.seed") } <input type="text" name="seed" required?={ true }/></label>
+				<button type="submit">{ p.T("entries.individual.submit") }</button>
+			</form>
+
+			<h2>{ p.T("entries.bulk.title") }</h2>
+			<p>{ p.T("entries.bulk.hint") }</p>
+			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/bulk") } method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>{ p.T("roster.club") } <input type="text" name="club" required?={ true }/></label>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr>
+								<th>{ p.T("roster.first_name") }</th>
+								<th>{ p.T("roster.last_name") }</th>
+								<th>{ p.T("roster.birth_year") }</th>
+								<th>{ p.T("roster.sex") }</th>
+								<th>{ p.T("entries.event") }</th>
+								<th>{ p.T("entries.seed") }</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, i := range v.BulkRows {
+								<tr>
+									<td><input type="text" name={ "bulk_first_name_" + intToStr(int64(i)) }/></td>
+									<td><input type="text" name={ "bulk_last_name_" + intToStr(int64(i)) }/></td>
+									<td><input type="number" name={ "bulk_birth_year_" + intToStr(int64(i)) } min="1900"/></td>
+									<td>
+										<select name={ "bulk_sex_" + intToStr(int64(i)) }>
+											<option value="W">W</option>
+											<option value="M">M</option>
+										</select>
+									</td>
+									<td>
+										<select name={ "bulk_event_" + intToStr(int64(i)) }>
+											for _, ev := range v.Events {
+												<option value={ ev.ID }>{ ev.Label }</option>
+											}
+										</select>
+									</td>
+									<td><input type="text" name={ "bulk_seed_" + intToStr(int64(i)) }/></td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				<button type="submit">{ p.T("entries.bulk.submit") }</button>
+			</form>
+		}
+
+		if len(v.RelayEvents) > 0 {
+			<h2>{ p.T("entries.relay.title") }</h2>
+			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/relay") } method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>
+					{ p.T("entries.event") }
+					<select name="relay_event">
+						for _, ev := range v.RelayEvents {
+							<option value={ ev.ID }>{ ev.Label }</option>
+						}
+					</select>
+				</label>
+				<label>{ p.T("roster.club") } <input type="text" name="relay_club" required?={ true }/></label>
+				<fieldset>
+					<legend>{ p.T("entries.relay.composition") }</legend>
+					for _, i := range v.RelayLegRows {
+						<div class="session-row">
+							<label>{ p.T("roster.first_name") } <input type="text" name={ "leg_first_name_" + intToStr(int64(i)) }/></label>
+							<label>{ p.T("roster.last_name") } <input type="text" name={ "leg_last_name_" + intToStr(int64(i)) }/></label>
+							<label>{ p.T("roster.birth_year") } <input type="number" name={ "leg_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
+							<label>
+								{ p.T("roster.sex") }
+								<select name={ "leg_sex_" + intToStr(int64(i)) }>
+									<option value="W">W</option>
+									<option value="M">M</option>
+								</select>
+							</label>
+						</div>
+					}
+				</fieldset>
+				<fieldset>
+					<legend>{ p.T("entries.relay.reserves") }</legend>
+					for _, i := range v.RelayReserveRow {
+						<div class="session-row">
+							<label>{ p.T("roster.first_name") } <input type="text" name={ "reserve_first_name_" + intToStr(int64(i)) }/></label>
+							<label>{ p.T("roster.last_name") } <input type="text" name={ "reserve_last_name_" + intToStr(int64(i)) }/></label>
+							<label>{ p.T("roster.birth_year") } <input type="number" name={ "reserve_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
+							<label>
+								{ p.T("roster.sex") }
+								<select name={ "reserve_sex_" + intToStr(int64(i)) }>
+									<option value="W">W</option>
+									<option value="M">M</option>
+								</select>
+							</label>
+						</div>
+					}
+				</fieldset>
+				<button type="submit">{ p.T("entries.relay.submit") }</button>
+			</form>
+		}
+
+		<h2>{ p.T("entries.mine.title") }</h2>
+		if len(v.MyEntries) == 0 {
+			<p>{ p.T("entries.mine.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("entries.event") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("entries.seed") }</th>
+							<th>{ p.T("entries.status") }</th>
+							<th>{ p.T("entries.fee") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.MyEntries {
+							<tr>
+								<td>{ row.EventLabel }</td>
+								<td>
+									{ row.Who }
+									if row.IsRelay {
+										<br/>
+										<small>{ p.T("entries.relay.composition") }: { joinStrings(row.Composition) }</small>
+									}
+								</td>
+								<td>{ row.Seed }</td>
+								<td>
+									{ row.Status }
+									if row.FailsStandard {
+										<strong class="error"> { p.T("entries.fails_standard") }</strong>
+									}
+								</td>
+								<td>{ row.FeeCHF }</td>
+							</tr>
+							if row.IsRelay && row.CanEditRelay {
+								<tr>
+									<td colspan="5">
+										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/relay-composition") } method="post" class="inline-form">
+											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+											<input type="hidden" name="relay_version" value={ row.RelayVersion }/>
+											<details>
+												<summary>{ p.T("entries.relay.edit") }</summary>
+												for _, i := range v.RelayLegRows {
+													<div class="session-row">
+														<input type="text" name={ "edit_leg_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") }/>
+														<input type="text" name={ "edit_leg_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") }/>
+														<input type="number" name={ "edit_leg_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") }/>
+														<select name={ "edit_leg_sex_" + intToStr(int64(i)) }>
+															<option value="W">W</option>
+															<option value="M">M</option>
+														</select>
+													</div>
+												}
+												for _, i := range v.RelayReserveRow {
+													<div class="session-row">
+														<input type="text" name={ "edit_reserve_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") }/>
+														<input type="text" name={ "edit_reserve_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") }/>
+														<input type="number" name={ "edit_reserve_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") }/>
+														<select name={ "edit_reserve_sex_" + intToStr(int64(i)) }>
+															<option value="W">W</option>
+															<option value="M">M</option>
+														</select>
+													</div>
+												}
+												<button type="submit">{ p.T("entries.relay.update") }</button>
+											</details>
+										</form>
+									</td>
+								</tr>
+							}
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// entryExceptionsPage is the organizer's entry-standard exception report
+// (UC-003 #5, SYS-015: "entries failing conditions SHALL be marked and
+// reportable").
+templ entryExceptionsPage(p PageData, v exceptionsView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("entries.exceptions.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		if len(v.Rows) == 0 {
+			<p>{ p.T("entries.exceptions.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("entries.event") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("entries.seed") }</th>
+							<th>{ p.T("programme.entry_standard") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.EventLabel }</td>
+								<td>{ row.Who }</td>
+								<td>{ row.Seed }</td>
+								<td>{ row.Standard }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// bibsPage is the organizer's bib assignment workspace (UC-006 #1/#2,
+// SYS-018): manual per-participant assignment, bulk assignment by club from
+// a starting number, and a printable per-club bib list.
+templ bibsPage(p PageData, v bibsView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("bibs.title") }</h1>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a> ·
+			<a href={ templ.URL("/meets/" + v.MeetID + "/bibs.pdf") }>{ p.T("bibs.printable") }</a>
+		</p>
+		if len(v.Clubs) > 0 {
+			<h2>{ p.T("bibs.bulk.title") }</h2>
+			<form action={ templ.URL("/meets/" + v.MeetID + "/bibs/bulk") } method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>
+					{ p.T("roster.club") }
+					<select name="club">
+						for _, c := range v.Clubs {
+							<option value={ c.ID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+				<label>{ p.T("bibs.bulk.start") } <input type="number" name="start" min="1" required?={ true }/></label>
+				<button type="submit">{ p.T("bibs.bulk.submit") }</button>
+			</form>
+		}
+		if len(v.Rows) == 0 {
+			<p>{ p.T("bibs.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("roster.bib") }</th>
+							<th>{ p.T("roster.name") }</th>
+							<th>{ p.T("roster.club") }</th>
+							<th>{ p.T("bibs.assign") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							<tr>
+								<td>{ row.Bib }</td>
+								<td>{ row.Name }</td>
+								<td>{ row.Club }</td>
+								<td>
+									<form action={ templ.URL("/meets/" + v.MeetID + "/bibs/" + row.ParticipantID) } method="post" class="inline-form">
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<input type="hidden" name="version" value={ row.Version }/>
+										<input type="text" name="bib" value={ row.Bib }/>
+										<button type="submit">{ p.T("bibs.assign") }</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+// feesPage is the organizer's fee schedule configuration and per-club fee
+// summary (UC-006 #3, SYS-017).
+templ feesPage(p PageData, v feesView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("fees.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		<h2>{ p.T("fees.schedule.title") }</h2>
+		<form action={ templ.URL("/meets/" + v.MeetID + "/fees/schedule") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<input type="hidden" name="version" value={ v.Version }/>
+			<label>{ p.T("fees.schedule.entry_fee") } <input type="text" name="entry_fee" value={ v.EntryFeeCHF }/></label>
+			<label>{ p.T("fees.schedule.relay_fee") } <input type="text" name="relay_fee" value={ v.RelayFeeCHF }/></label>
+			<button type="submit">{ p.T("fees.schedule.submit") }</button>
+		</form>
+		<h2>{ p.T("fees.summary.title") }</h2>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID + "/fees/export") }>{ p.T("fees.export.link") }</a>
+		</p>
+		if !v.HasFeeSummary {
+			<p>{ p.T("fees.summary.empty") }</p>
+		} else {
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th>{ p.T("fees.export.club") }</th>
+							<th>{ p.T("fees.export.individual") }</th>
+							<th>{ p.T("fees.export.relay") }</th>
+							<th>{ p.T("fees.export.total") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Clubs {
+							<tr>
+								<td>{ row.ClubName }</td>
+								<td>{ intToStr(int64(row.IndividualEntries)) }</td>
+								<td>{ intToStr(int64(row.RelayEntries)) }</td>
+								<td>{ row.TotalCHF }</td>
+							</tr>
+						}
+					</tbody>
+					<tfoot>
+						<tr>
+							<td colspan="3">{ p.T("fees.export.total") }</td>
+							<td>{ v.TotalCHF }</td>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+		}
+	}
+}

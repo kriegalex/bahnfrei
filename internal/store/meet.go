@@ -56,12 +56,13 @@ func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error)
 		return MeetRecord{}, err
 	}
 	_, err := db.ExecContext(ctx, `INSERT INTO meets
-		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, results_positioning, official_source_name, official_source_url, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		(id, name, venue, homologation_ref, start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table, results_positioning, official_source_name, official_source_url, entry_fee_cents, relay_fee_cents, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 		m.ID, m.Name, m.Venue, m.HomologationRef,
 		m.StartDate.Format(dayFormat), m.EndDate.Format(dayFormat),
 		m.Organizer, string(m.Tier), string(m.Status), m.CategorySchemeID,
-		m.TemplateID, m.ScoringTableID, string(m.ResultsPositioning), m.OfficialSourceName, m.OfficialSourceURL)
+		m.TemplateID, m.ScoringTableID, string(m.ResultsPositioning), m.OfficialSourceName, m.OfficialSourceURL,
+		m.EntryFeeCents, m.RelayFeeCents)
 	if err != nil {
 		return MeetRecord{}, fmt.Errorf("create meet %q: %w", m.Name, err)
 	}
@@ -72,7 +73,7 @@ func CreateMeet(ctx context.Context, db DBTX, m domain.Meet) (MeetRecord, error)
 func GetMeet(ctx context.Context, db DBTX, id string) (MeetRecord, error) {
 	return scanMeet(db.QueryRowContext(ctx, `SELECT id, name, venue, homologation_ref,
 		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table,
-		results_positioning, official_source_name, official_source_url, version
+		results_positioning, official_source_name, official_source_url, entry_fee_cents, relay_fee_cents, version
 		FROM meets WHERE id = ?`, id))
 }
 
@@ -80,7 +81,7 @@ func GetMeet(ctx context.Context, db DBTX, id string) (MeetRecord, error) {
 func ListMeets(ctx context.Context, db DBTX) ([]MeetRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, name, venue, homologation_ref,
 		start_date, end_date, organizer, tier, status, category_scheme, template_id, scoring_table,
-		results_positioning, official_source_name, official_source_url, version
+		results_positioning, official_source_name, official_source_url, entry_fee_cents, relay_fee_cents, version
 		FROM meets ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil, err
@@ -130,12 +131,22 @@ func SetMeetStatus(ctx context.Context, db DBTX, id string, expectedVersion int6
 		Set{Column: "status", Value: string(status)})
 }
 
+// UpdateMeetFeeSchedule sets the SYS-017 configurable fee schedule (a flat
+// per-individual-entry fee and a flat per-relay-team-entry fee, in
+// Rappen/cents) under optimistic concurrency.
+func UpdateMeetFeeSchedule(ctx context.Context, db DBTX, id string, expectedVersion int64, entryFeeCents, relayFeeCents int64) (int64, error) {
+	return OptimisticUpdate(ctx, db, "meets", id, expectedVersion,
+		Set{Column: "entry_fee_cents", Value: entryFeeCents},
+		Set{Column: "relay_fee_cents", Value: relayFeeCents})
+}
+
 func scanMeet(row *sql.Row) (MeetRecord, error) {
 	var m MeetRecord
 	var start, end, tier, status, positioning string
 	err := row.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
 		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
-		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL, &m.Version)
+		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL,
+		&m.EntryFeeCents, &m.RelayFeeCents, &m.Version)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return MeetRecord{}, ErrNotFound
@@ -150,7 +161,8 @@ func scanMeetRow(rows *sql.Rows) (MeetRecord, error) {
 	var start, end, tier, status, positioning string
 	if err := rows.Scan(&m.ID, &m.Name, &m.Venue, &m.HomologationRef,
 		&start, &end, &m.Organizer, &tier, &status, &m.CategorySchemeID,
-		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL, &m.Version); err != nil {
+		&m.TemplateID, &m.ScoringTableID, &positioning, &m.OfficialSourceName, &m.OfficialSourceURL,
+		&m.EntryFeeCents, &m.RelayFeeCents, &m.Version); err != nil {
 		return MeetRecord{}, err
 	}
 	return decodeMeet(m, start, end, tier, status, positioning)
@@ -233,19 +245,27 @@ func CreateEvent(ctx context.Context, db DBTX, e domain.Event) (EventRecord, err
 		deadline = e.EntryDeadline.UTC().Format(instantFormat)
 	}
 	_, err = db.ExecContext(ctx, `INSERT INTO events
-		(id, meet_id, discipline_code, category_codes, entry_standard, entry_deadline, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.MeetID, e.DisciplineCode, string(cats), e.EntryStandard, deadline, string(e.Status))
+		(id, meet_id, discipline_code, category_codes, entry_standard, entry_deadline, status, entry_limit)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, e.MeetID, e.DisciplineCode, string(cats), e.EntryStandard, deadline, string(e.Status), e.EntryLimit)
 	if err != nil {
 		return EventRecord{}, fmt.Errorf("create event %s for meet %s: %w", e.DisciplineCode, e.MeetID, err)
 	}
 	return EventRecord{Event: e, Version: 1}, nil
 }
 
+const eventColumns = `id, meet_id, discipline_code, category_codes,
+	entry_standard, entry_deadline, status, entry_limit, version`
+
+// GetEvent looks up one programme event by ID (TASK-016 entry submission:
+// resolving the event an entry targets).
+func GetEvent(ctx context.Context, db DBTX, id string) (EventRecord, error) {
+	return scanEvent(db.QueryRowContext(ctx, `SELECT `+eventColumns+` FROM events WHERE id = ?`, id))
+}
+
 // ListEvents returns a meet's programme in creation order.
 func ListEvents(ctx context.Context, db DBTX, meetID string) ([]EventRecord, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, meet_id, discipline_code, category_codes,
-		entry_standard, entry_deadline, status, version
+	rows, err := db.QueryContext(ctx, `SELECT `+eventColumns+`
 		FROM events WHERE meet_id = ? ORDER BY id`, meetID)
 	if err != nil {
 		return nil, err
@@ -254,27 +274,54 @@ func ListEvents(ctx context.Context, db DBTX, meetID string) ([]EventRecord, err
 
 	var out []EventRecord
 	for rows.Next() {
-		var e EventRecord
-		var cats, status string
-		var deadline sql.NullString
-		if err := rows.Scan(&e.ID, &e.MeetID, &e.DisciplineCode, &cats,
-			&e.EntryStandard, &deadline, &status, &e.Version); err != nil {
+		e, err := scanEventRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal([]byte(cats), &e.CategoryCodes); err != nil {
-			return nil, fmt.Errorf("event %s: bad category codes %q: %w", e.ID, cats, err)
-		}
-		if deadline.Valid {
-			t, err := time.Parse(instantFormat, deadline.String)
-			if err != nil {
-				return nil, fmt.Errorf("event %s: bad entry deadline %q: %w", e.ID, deadline.String, err)
-			}
-			e.EntryDeadline = &t
-		}
-		e.Status = domain.EventStatus(status)
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+func scanEvent(row *sql.Row) (EventRecord, error) {
+	var e EventRecord
+	var cats, status string
+	var deadline sql.NullString
+	err := row.Scan(&e.ID, &e.MeetID, &e.DisciplineCode, &cats,
+		&e.EntryStandard, &deadline, &status, &e.EntryLimit, &e.Version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return EventRecord{}, ErrNotFound
+	case err != nil:
+		return EventRecord{}, err
+	}
+	return decodeEvent(e, cats, status, deadline)
+}
+
+func scanEventRow(rows *sql.Rows) (EventRecord, error) {
+	var e EventRecord
+	var cats, status string
+	var deadline sql.NullString
+	if err := rows.Scan(&e.ID, &e.MeetID, &e.DisciplineCode, &cats,
+		&e.EntryStandard, &deadline, &status, &e.EntryLimit, &e.Version); err != nil {
+		return EventRecord{}, err
+	}
+	return decodeEvent(e, cats, status, deadline)
+}
+
+func decodeEvent(e EventRecord, cats, status string, deadline sql.NullString) (EventRecord, error) {
+	if err := json.Unmarshal([]byte(cats), &e.CategoryCodes); err != nil {
+		return EventRecord{}, fmt.Errorf("event %s: bad category codes %q: %w", e.ID, cats, err)
+	}
+	if deadline.Valid {
+		t, err := time.Parse(instantFormat, deadline.String)
+		if err != nil {
+			return EventRecord{}, fmt.Errorf("event %s: bad entry deadline %q: %w", e.ID, deadline.String, err)
+		}
+		e.EntryDeadline = &t
+	}
+	e.Status = domain.EventStatus(status)
+	return e, nil
 }
 
 // CreateRound inserts one round of an event's progression, at position seq.

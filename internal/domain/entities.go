@@ -181,6 +181,13 @@ type Meet struct {
 	OfficialSourceName string
 	OfficialSourceURL  string
 	ExternalIDs        ExternalIDs
+	// EntryFeeCents/RelayFeeCents are the SYS-017 configurable fee schedule
+	// (Rappen/cents, CHF): a flat per-individual-entry fee and a flat
+	// per-relay-team-entry fee, summed per club/athlete for the fee summary
+	// (UC-006 #3). Zero means "no fee configured" — never an error, since
+	// many club meets are entry-free.
+	EntryFeeCents int64
+	RelayFeeCents int64
 }
 
 // Validate checks the minimal Meet invariants (SYS-001).
@@ -243,6 +250,9 @@ type Event struct {
 	EntryStandard  string     // seed-performance threshold, if configured (SYS-015)
 	EntryDeadline  *time.Time // entry condition per event (SYS-002, UC-001 #3)
 	Status         EventStatus
+	// EntryLimit caps the number of active (non-scratched) entries this
+	// event accepts (SYS-015 "entry limits"); zero means unlimited.
+	EntryLimit int
 }
 
 // RoundKind is the round position within an Event's progression (D2.1).
@@ -305,6 +315,76 @@ type Entry struct {
 	StartedUp       bool
 	StartedDown     bool
 	FailsStandard   bool // seed does not meet the event's entry standard (SYS-015)
+	// SubmittedBy is the account ID that created this entry (empty for
+	// entries with no acting account, e.g. a future bulk import): the
+	// submitter's "my entries" view (UC-003 #1/#2) and the audit trail both
+	// key off this.
+	SubmittedBy string
+}
+
+// Validate checks the minimal Entry invariants (SYS-011/012): identity, the
+// event it targets, and exactly one of athlete/relay-team composition.
+func (e *Entry) Validate() error {
+	if e.ID == "" {
+		return errors.New("entry: id is required")
+	}
+	if e.EventID == "" {
+		return errors.New("entry: event id is required")
+	}
+	if e.AthleteID == "" && e.RelayTeamID == "" {
+		return errors.New("entry: athlete id or relay team id is required")
+	}
+	if e.AthleteID != "" && e.RelayTeamID != "" {
+		return errors.New("entry: athlete id and relay team id are mutually exclusive")
+	}
+	return nil
+}
+
+// RelayTeam is the SyRS §2 relay-team composition (SYS-012): a club's
+// ordered leg assignment for one relay entry, plus reserves. Composition may
+// be revised (UC-003 #4: "permits changes until the configured deadline")
+// by replacing Composition/Reserves under optimistic concurrency.
+type RelayTeam struct {
+	ID     string
+	ClubID string
+	// Composition is the ordered athlete IDs running each leg, in order.
+	Composition []string
+	// Reserves lists reserve athlete IDs, not assigned to a leg.
+	Reserves []string
+}
+
+// Validate checks the minimal RelayTeam invariants (SYS-012): identity, club,
+// and a non-empty, duplicate-free leg composition.
+func (t *RelayTeam) Validate() error {
+	if t.ID == "" {
+		return errors.New("relay team: id is required")
+	}
+	if t.ClubID == "" {
+		return errors.New("relay team: club id is required")
+	}
+	if len(t.Composition) == 0 {
+		return errors.New("relay team: at least one leg is required")
+	}
+	seen := make(map[string]bool, len(t.Composition)+len(t.Reserves))
+	for _, id := range t.Composition {
+		if id == "" {
+			return errors.New("relay team: leg athlete id is required")
+		}
+		if seen[id] {
+			return fmt.Errorf("relay team: athlete %q assigned to more than one leg", id)
+		}
+		seen[id] = true
+	}
+	for _, id := range t.Reserves {
+		if id == "" {
+			return errors.New("relay team: reserve athlete id is required")
+		}
+		if seen[id] {
+			return fmt.Errorf("relay team: athlete %q is both a leg and a reserve", id)
+		}
+		seen[id] = true
+	}
+	return nil
 }
 
 // QualificationStatus is the standard result/qualification code vocabulary
