@@ -136,6 +136,16 @@ func resolveLocale(r *http.Request, cats i18n.Catalogs) i18n.Locale {
 func csrfMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The timing-agent API (TASK-020, ADR-006) authenticates with a
+			// meet-scoped Bearer token, never the browser session cookie the
+			// double-submit-cookie scheme below defends — a page a victim's
+			// browser is tricked into POSTing to can never know or attach
+			// that token, so CSRF does not apply to it (the standard
+			// bearer-token-API exemption; see internal/web/timing.go).
+			if strings.HasPrefix(r.URL.Path, "/agent/v1/") {
+				next.ServeHTTP(w, r)
+				return
+			}
 			tok, err := ensureCSRFCookie(w, r)
 			if err != nil {
 				http.Error(w, "internal error", http.StatusInternalServerError)

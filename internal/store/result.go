@@ -16,7 +16,15 @@ import (
 // and its version.
 type ResultRecord struct {
 	domain.Result
-	Timing  domain.Timing
+	Timing domain.Timing
+	// Source is the capture provenance (SYS-041, ADR-006 consequence #4):
+	// "manual" (operator keyboard entry — SaveResult's default, every
+	// pre-existing call site) or "import_lif"/"import_csv" (the
+	// timing-exchange ingest pipeline, internal/app/exchange.go). The
+	// timing-import conflict pipeline reads this to tell an existing
+	// manual result (never silently overwritten, SYS-061) from a row a
+	// previous import itself wrote (safe to refresh).
+	Source  string
 	Version int64
 }
 
@@ -32,8 +40,20 @@ type MeetResult struct {
 // SaveResult inserts or replaces the settled result for (unit, athlete) —
 // capture flows re-submit as marks are corrected; every save bumps the
 // version and the caller audits the change (SYS-046). The attempt-level
-// sequence is TASK-008's; this row is the settled per-unit outcome.
+// sequence is TASK-008's; this row is the settled per-unit outcome. Every
+// call through this entry point is operator capture provenance ("manual",
+// SYS-041) — the timing-exchange ingest pipeline uses
+// SaveResultWithSource instead so an import never gets misread as a
+// manual entry by a later conflict check.
 func SaveResult(ctx context.Context, db DBTX, r domain.Result, timing domain.Timing) (ResultRecord, error) {
+	return SaveResultWithSource(ctx, db, r, timing, "manual")
+}
+
+// SaveResultWithSource is SaveResult with an explicit provenance tag
+// (ADR-006 consequence #4). source must be one of the results.source CHECK
+// constraint's values ("manual", "import_lif", "import_csv") — the
+// migration enforces it as a defense-in-depth backstop.
+func SaveResultWithSource(ctx context.Context, db DBTX, r domain.Result, timing domain.Timing, source string) (ResultRecord, error) {
 	if r.UnitID == "" || r.AthleteID == "" {
 		return ResultRecord{}, fmt.Errorf("result: unit id and athlete id are required")
 	}
@@ -43,16 +63,17 @@ func SaveResult(ctx context.Context, db DBTX, r domain.Result, timing domain.Tim
 	}
 	r.ID = NewID()
 	_, err = db.ExecContext(ctx, `INSERT INTO results
-		(id, unit_id, athlete_id, mark, timing, status, status_detail, points, wind, lane, placing, record_flags, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+		(id, unit_id, athlete_id, mark, timing, status, status_detail, points, wind, lane, placing, record_flags, source, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
 		ON CONFLICT (unit_id, athlete_id) DO UPDATE SET
 		mark = excluded.mark, timing = excluded.timing, status = excluded.status,
 		status_detail = excluded.status_detail,
 		points = excluded.points, wind = excluded.wind, lane = excluded.lane,
 		placing = excluded.placing, record_flags = excluded.record_flags,
+		source = excluded.source,
 		version = results.version + 1`,
 		r.ID, r.UnitID, r.AthleteID, r.Mark, string(timing), string(r.Status),
-		r.StatusDetail, r.Points, r.Wind, r.Lane, r.Placing, string(flags))
+		r.StatusDetail, r.Points, r.Wind, r.Lane, r.Placing, string(flags), source)
 	if err != nil {
 		return ResultRecord{}, fmt.Errorf("save result unit %s athlete %s: %w", r.UnitID, r.AthleteID, err)
 	}
@@ -62,7 +83,7 @@ func SaveResult(ctx context.Context, db DBTX, r domain.Result, timing domain.Tim
 // GetResult returns the settled result for (unit, athlete).
 func GetResult(ctx context.Context, db DBTX, unitID, athleteID string) (ResultRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, unit_id, athlete_id, mark, timing,
-		status, status_detail, points, wind, lane, placing, record_flags, version
+		status, status_detail, points, wind, lane, placing, record_flags, source, version
 		FROM results WHERE unit_id = ? AND athlete_id = ?`, unitID, athleteID)
 	if err != nil {
 		return ResultRecord{}, err
@@ -81,7 +102,7 @@ func GetResult(ctx context.Context, db DBTX, unitID, athleteID string) (ResultRe
 // and discipline, the standings computation's input (UC-033 #2).
 func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult, error) {
 	rows, err := db.QueryContext(ctx, `SELECT r.id, r.unit_id, r.athlete_id, r.mark,
-		r.timing, r.status, r.status_detail, r.points, r.wind, r.lane, r.placing, r.record_flags, r.version,
+		r.timing, r.status, r.status_detail, r.points, r.wind, r.lane, r.placing, r.record_flags, r.source, r.version,
 		e.id, e.discipline_code
 		FROM results r
 		JOIN units u ON u.id = r.unit_id
@@ -99,7 +120,7 @@ func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult,
 		var m MeetResult
 		var timing, status, flags string
 		if err := rows.Scan(&m.ID, &m.UnitID, &m.AthleteID, &m.Mark, &timing, &status,
-			&m.StatusDetail, &m.Points, &m.Wind, &m.Lane, &m.Placing, &flags, &m.Version,
+			&m.StatusDetail, &m.Points, &m.Wind, &m.Lane, &m.Placing, &flags, &m.Source, &m.Version,
 			&m.EventID, &m.DisciplineCode); err != nil {
 			return nil, err
 		}
@@ -117,7 +138,7 @@ func ListMeetResults(ctx context.Context, db DBTX, meetID string) ([]MeetResult,
 // view's and unit-ranking computation's input.
 func ListUnitResults(ctx context.Context, db DBTX, unitID string) ([]ResultRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, unit_id, athlete_id, mark, timing,
-		status, status_detail, points, wind, lane, placing, record_flags, version
+		status, status_detail, points, wind, lane, placing, record_flags, source, version
 		FROM results WHERE unit_id = ? ORDER BY athlete_id`, unitID)
 	if err != nil {
 		return nil, err
@@ -141,7 +162,7 @@ func scanResult(rows interface {
 	var r ResultRecord
 	var timing, status, flags string
 	if err := rows.Scan(&r.ID, &r.UnitID, &r.AthleteID, &r.Mark, &timing, &status,
-		&r.StatusDetail, &r.Points, &r.Wind, &r.Lane, &r.Placing, &flags, &r.Version); err != nil {
+		&r.StatusDetail, &r.Points, &r.Wind, &r.Lane, &r.Placing, &flags, &r.Source, &r.Version); err != nil {
 		return ResultRecord{}, err
 	}
 	r.Timing = domain.Timing(timing)

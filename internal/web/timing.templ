@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// timingPage is the competition office's timing-exchange workspace
+// (TASK-020, UC-014, SYS-060-062, ADR-006): download the current
+// lynx.ppl/.sch/.evt start lists (or the generic CSV fallback), upload a
+// .lif or CSV result file, resolve queued import conflicts one at a time
+// (never a silent overwrite, SYS-061), review ingest history, and manage
+// the watched-folder timing agent's bearer credentials.
+templ timingPage(p PageData, v timingView) {
+	@layout(p) {
+		<h1>{ v.MeetName } — { p.T("timing.title") }</h1>
+		<p>{ p.T("timing.hint") }</p>
+		<section>
+			<h2>{ p.T("timing.export.title") }</h2>
+			<p>
+				<a href={ templ.URL("/meets/" + v.MeetID + "/timing/export/ppl") }>lynx.ppl</a> ·
+				<a href={ templ.URL("/meets/" + v.MeetID + "/timing/export/sch") }>lynx.sch</a> ·
+				<a href={ templ.URL("/meets/" + v.MeetID + "/timing/export/evt") }>lynx.evt</a> ·
+				<a href={ templ.URL("/meets/" + v.MeetID + "/timing/export/csv") }>{ p.T("timing.export.csv") }</a>
+			</p>
+		</section>
+		<section>
+			<h2>{ p.T("timing.import.title") }</h2>
+			<form action={ templ.URL("/meets/" + v.MeetID + "/timing/import") } method="post" enctype="multipart/form-data">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<label>
+					{ p.T("timing.import.format") }
+					<select name="format">
+						<option value="lif">.lif (FinishLynx)</option>
+						<option value="csv">{ p.T("timing.export.csv") }</option>
+					</select>
+				</label>
+				<label>{ p.T("timing.import.file") } <input type="file" name="file" required?={ true }/></label>
+				<button type="submit">{ p.T("timing.import.submit") }</button>
+			</form>
+			if v.ImportError != "" {
+				<p class="flash-error" role="alert">{ v.ImportError }</p>
+			}
+			if v.ImportResult != nil {
+				<p>{ p.T("timing.import.result", "applied", intToStr(int64(v.ImportResult.Applied)), "conflicts", intToStr(int64(v.ImportResult.Conflicts))) }</p>
+			}
+		</section>
+		<section>
+			<h2>{ p.T("timing.conflicts.title") }</h2>
+			if len(v.Conflicts) == 0 {
+				<p>{ p.T("timing.conflicts.empty") }</p>
+			} else {
+				for _, c := range v.Conflicts {
+					<div class="conflict-row">
+						<p>
+							<strong>{ p.T("timing.conflicts.reason." + c.Reason) }</strong> —
+							{ p.T("timing.conflicts.bib") }: { c.Bib }
+							if c.Lane > 0 {
+								, { p.T("timing.conflicts.lane") }: { intToStr(int64(c.Lane)) }
+							}
+						</p>
+						<form action={ templ.URL("/meets/" + v.MeetID + "/timing/conflicts/" + c.ID + "/resolve") } method="post" class="inline-form">
+							<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+							<select name="action">
+								<option value="keep">{ p.T("timing.conflicts.action.keep") }</option>
+								<option value="replace">{ p.T("timing.conflicts.action.replace") }</option>
+								<option value="merge">{ p.T("timing.conflicts.action.merge") }</option>
+								<option value="discard">{ p.T("timing.conflicts.action.discard") }</option>
+							</select>
+							if c.Reason == "unknown_bib" {
+								<label>
+									{ p.T("timing.conflicts.reassign") }
+									<select name="reassign_athlete_id">
+										<option value="">—</option>
+										for _, a := range v.Participants {
+											<option value={ a.AthleteID }>{ a.Bib } — { a.Name }</option>
+										}
+									</select>
+								</label>
+							}
+							if c.Reason == "unmapped_status" {
+								<label>
+									{ p.T("timing.conflicts.override_status") }
+									<select name="override_status">
+										<option value="">—</option>
+										<option value="DNS">DNS</option>
+										<option value="DNF">DNF</option>
+										<option value="DQ">DQ</option>
+										<option value="NM">NM</option>
+									</select>
+								</label>
+								<input type="text" name="override_status_detail" placeholder={ p.T("timing.conflicts.status_detail_placeholder") }/>
+							}
+							<input type="text" name="reason" placeholder={ p.T("timing.conflicts.reason_placeholder") }/>
+							<input type="text" name="escalation" placeholder={ p.T("timing.conflicts.escalation_placeholder") }/>
+							<button type="submit">{ p.T("timing.conflicts.resolve") }</button>
+						</form>
+					</div>
+				}
+			}
+		</section>
+		<section>
+			<h2>{ p.T("timing.batches.title") }</h2>
+			if len(v.Batches) == 0 {
+				<p>{ p.T("timing.batches.empty") }</p>
+			} else {
+				<div class="table-scroll" tabindex="0">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col">{ p.T("timing.batches.filename") }</th>
+								<th scope="col">{ p.T("timing.batches.created_at") }</th>
+								<th scope="col">{ p.T("timing.batches.applied") }</th>
+								<th scope="col">{ p.T("timing.batches.conflicted") }</th>
+								<th scope="col">{ p.T("timing.batches.imported_by") }</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, b := range v.Batches {
+								<tr>
+									<td>{ b.Filename }</td>
+									<td>{ b.CreatedAt }</td>
+									<td>{ intToStr(int64(b.Applied)) }</td>
+									<td>{ intToStr(int64(b.Conflicted)) }</td>
+									<td>{ b.ImportedBy }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</section>
+		<section>
+			<h2>{ p.T("timing.agents.title") }</h2>
+			<p>{ p.T("timing.agents.hint") }</p>
+			if v.NewTokenPlaintext != "" {
+				<p class="flash-error" role="alert">{ p.T("timing.agents.new_token", "token", v.NewTokenPlaintext) }</p>
+			}
+			<form action={ templ.URL("/meets/" + v.MeetID + "/timing/agents") } method="post" class="inline-form">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<input type="text" name="label" placeholder={ p.T("timing.agents.label_placeholder") } required?={ true }/>
+				<button type="submit">{ p.T("timing.agents.create") }</button>
+			</form>
+			if len(v.Tokens) > 0 {
+				<ul>
+					for _, tok := range v.Tokens {
+						<li>
+							{ tok.Label } — { tok.CreatedAt }
+							if tok.Revoked {
+								{ " " }{ p.T("timing.agents.revoked") }
+							} else {
+								<form action={ templ.URL("/meets/" + v.MeetID + "/timing/agents/" + tok.ID + "/revoke") } method="post" class="inline-form">
+									<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+									<button type="submit">{ p.T("timing.agents.revoke") }</button>
+								</form>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</section>
+	}
+}

@@ -6,7 +6,8 @@
 // TASK-005; first-run setup is the browser /setup flow (TASK-006, SYS-131 —
 // no config file, no CLI wizard); "backup" and "restore" (SYS-084,
 // UC-020 #3) are TASK-014's; "demo" seeds the M1 club-demo meet (TASK-015,
-// DEC-011).
+// DEC-011); "timing-agent" is the watched-folder FinishLynx bridge that
+// runs on the timing PC (TASK-020, ADR-006's hub-first amendment).
 package main
 
 import (
@@ -46,6 +47,11 @@ func run(ctx context.Context, args []string, out io.Writer) {
 			return
 		case "demo":
 			if err := runDemo(ctx, args[1:], out); err != nil {
+				fmt.Fprintf(out, "bahnfrei: %v\n", err)
+			}
+			return
+		case "timing-agent":
+			if err := runTimingAgent(ctx, args[1:], out); err != nil {
 				fmt.Fprintf(out, "bahnfrei: %v\n", err)
 			}
 			return

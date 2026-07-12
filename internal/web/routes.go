@@ -195,6 +195,29 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/apply", office(s.handleReconciliationResolve(true)))
 	mux.HandleFunc("POST /meets/{id}/reconciliation/{item}/discard", office(s.handleReconciliationResolve(false)))
 
+	// Timing exchange (TASK-020, UC-014, SYS-060-062, ADR-006): office-level
+	// export/import/conflict-resolution and timing-agent token management.
+	mux.HandleFunc("GET /meets/{id}/timing", office(s.handleTimingIndex))
+	mux.HandleFunc("GET /meets/{id}/timing/export/ppl", office(s.handleTimingExportPPL))
+	mux.HandleFunc("GET /meets/{id}/timing/export/sch", office(s.handleTimingExportSCH))
+	mux.HandleFunc("GET /meets/{id}/timing/export/evt", office(s.handleTimingExportEVT))
+	mux.HandleFunc("GET /meets/{id}/timing/export/csv", office(s.handleTimingExportCSV))
+	mux.HandleFunc("POST /meets/{id}/timing/import", office(s.handleTimingImportSubmit))
+	mux.HandleFunc("POST /meets/{id}/timing/conflicts/{conflict}/resolve", office(s.handleTimingConflictResolve))
+	mux.HandleFunc("POST /meets/{id}/timing/agents", office(s.handleTimingAgentTokenCreate))
+	mux.HandleFunc("POST /meets/{id}/timing/agents/{token}/revoke", office(s.handleTimingAgentTokenRevoke))
+
+	// Timing-agent HTTP API (ADR-006's hub-first amendment): the watched-
+	// folder agent on the timing PC authenticates with its own meet-scoped
+	// Bearer token (internal/web/timing.go's authenticateAgent), never a
+	// browser session — deliberately unguarded by requireRole/office here
+	// (and exempted from CSRF, middleware.go) since it is not a
+	// cookie-authenticated surface at all.
+	mux.HandleFunc("POST /agent/v1/meets/{id}/lif", s.handleAgentImportLIF)
+	mux.HandleFunc("POST /agent/v1/meets/{id}/csv", s.handleAgentImportCSV)
+	mux.HandleFunc("GET /agent/v1/meets/{id}/exports/manifest", s.handleAgentExportManifest)
+	mux.HandleFunc("GET /agent/v1/meets/{id}/exports/{kind}", s.handleAgentExportFile)
+
 	// Public read (SYS-090/070): unauthenticated, stable /m/{id}/... URLs
 	// that keep serving a meet's archived state after it closes (UC-017).
 	mux.HandleFunc("GET /m/{id}", s.handlePublicMeet)
