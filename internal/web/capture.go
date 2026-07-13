@@ -75,6 +75,23 @@ type captureRowView struct {
 	// Lane is the heat-seeded lane context (TASK-018, SYS-026/027), "" when
 	// none (non-laned event, or the unit is not seeded yet).
 	Lane string
+	// Track-form preserved input (OQ-075, UC-038 #4): zero value on a
+	// normal render (the grid is always fetched fresh from the DB); after a
+	// failed track/correction submit, renderTrackFormError overlays the
+	// submitted values onto the one row that failed so the operator's typed
+	// input survives the re-render instead of reverting to blank fields.
+	Time, Timing, Status, StatusDetail, Reason, Escalation string
+	// Errors carries this row's field-level validation errors, keyed
+	// "<field>-<athleteID>" (e.g. "reason-01H..."), so multiple rows on the
+	// same page never collide on the same DOM id.
+	Errors FieldErrors
+}
+
+// rowFieldKey namespaces a track/correction form field name by athlete so
+// each row's `.field-error` paragraph and `aria-describedby` reference get
+// a page-unique DOM id even though every row repeats the same field names.
+func rowFieldKey(field, athleteID string) string {
+	return field + "-" + athleteID
 }
 
 type standingRowView2 struct {
@@ -489,6 +506,7 @@ func (s *Server) handleCaptureCorrect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	athleteID := r.FormValue("athlete")
 	in := app.CorrectionInput{
 		Mark:         strings.TrimSpace(r.FormValue("time")),
 		Timing:       domain.Timing(r.FormValue("timing")),
@@ -497,12 +515,20 @@ func (s *Server) handleCaptureCorrect(w http.ResponseWriter, r *http.Request) {
 		Reason:       strings.TrimSpace(r.FormValue("reason")),
 		Escalation:   strings.TrimSpace(r.FormValue("escalation")),
 	}
-	if _, err := s.results.CorrectResult(r.Context(), actor, meetID, unitID, r.FormValue("athlete"), in); err != nil {
+	if _, err := s.results.CorrectResult(r.Context(), actor, meetID, unitID, athleteID, in); err != nil {
+		// OQ-075/UC-038 #4: SYS-046/047's two named validation failures
+		// (missing reason, missing escalation reference) are attributed to
+		// their own field on the offending athlete's row, with the row's
+		// submitted values preserved — instead of a page-level flash that
+		// re-fetches the grid from the DB and drops what was typed.
+		p := basePageData(r, s.cats)
 		switch {
 		case errors.Is(err, app.ErrCorrectionReasonRequired):
-			s.renderCaptureError(w, r, meetID, unitID, "capture.error.reason_required", "")
+			s.renderCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in,
+				FieldErrors{rowFieldKey("reason", athleteID): p.T("capture.field_error.reason.required")})
 		case errors.Is(err, app.ErrEscalationRequired):
-			s.renderCaptureError(w, r, meetID, unitID, "capture.error.escalation_required", "")
+			s.renderCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in,
+				FieldErrors{rowFieldKey("escalation", athleteID): p.T("capture.field_error.escalation.required")})
 		default:
 			if _, forbidden := err.(app.ErrForbidden); forbidden {
 				renderForbidden(w, r, s.cats)
@@ -513,6 +539,35 @@ func (s *Server) handleCaptureCorrect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// renderCaptureCorrectionError re-renders the capture grid with one
+// athlete's just-submitted (and rejected) correction preserved on their row,
+// alongside its field-level error — the rest of the grid is fetched fresh
+// from the DB like any other capture-error render.
+func (s *Server) renderCaptureCorrectionError(w http.ResponseWriter, r *http.Request, p PageData, meetID, unitID, athleteID string, in app.CorrectionInput, errs FieldErrors) {
+	v, err := s.captureView(r, meetID, unitID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	for i := range v.Rows {
+		if v.Rows[i].AthleteID != athleteID {
+			continue
+		}
+		v.Rows[i].Time = in.Mark
+		v.Rows[i].Timing = string(in.Timing)
+		v.Rows[i].Status = string(in.Status)
+		v.Rows[i].StatusDetail = in.StatusDetail
+		v.Rows[i].Reason = in.Reason
+		v.Rows[i].Escalation = in.Escalation
+		v.Rows[i].Errors = errs
+		break
+	}
+	p.Title = v.MeetName + " — " + v.Discipline
+	p.FlashError = p.T("capture.error.correction_invalid")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = capturePage(p, v).Render(r.Context(), w)
 }
 
 // handleCaptureAnnounce posts a unit's current result list (UC-015 #1):

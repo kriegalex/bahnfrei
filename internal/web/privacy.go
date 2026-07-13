@@ -116,7 +116,12 @@ func (s *Server) handlePrivacyExport(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePrivacyErase performs the SYS-101 erasure/pseudonymization
-// request (UC-024 #2).
+// request (UC-024 #2). OQ-074 (TASK-034): reached only via the
+// GET .../erase/confirm sub-page's form, and gated again here on the
+// server side — the typed-confirmation token (the athlete's bib) must
+// match before the irreversible erasure runs; a mismatch re-renders the
+// confirm page with an inline field error rather than silently failing or
+// (worse) proceeding.
 func (s *Server) handlePrivacyErase(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
 	meetID := r.PathValue("id")
@@ -127,6 +132,21 @@ func (s *Server) handlePrivacyErase(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	p := basePageData(r, s.cats)
+	name, bib, ok, err := s.participantDisplay(r, meetID, athleteID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		s.handleNotFound(w, r)
+		return
+	}
+	if got, want := r.FormValue("confirm_text"), eraseConfirmToken(bib); got != want {
+		v := s.eraseConfirmView(p, meetID, athleteID, name, bib, p.T("privacy.erase.confirm.mismatch"))
+		s.renderConfirm(w, r, p, v, http.StatusUnprocessableEntity)
 		return
 	}
 	reason := r.FormValue("reason")
@@ -153,11 +173,25 @@ func (s *Server) handleRetentionPurgeForm(w http.ResponseWriter, r *http.Request
 }
 
 // handleRetentionPurge runs the SYS-102 retention purge on manual admin
-// trigger (UC-024 #3).
+// trigger (UC-024 #3). OQ-074 (TASK-034): reached only via the
+// GET /admin/privacy/purge/confirm sub-page's form, and gated again here —
+// this is an instance-wide, unrecoverable action, so it requires the fixed
+// typed-confirmation token (retentionPurgeConfirmToken) in addition to the
+// confirm step every destructive action gets.
 func (s *Server) handleRetentionPurge(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
 	if s.privacy == nil {
 		s.handleNotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	p := basePageData(r, s.cats)
+	if r.FormValue("confirm_text") != retentionPurgeConfirmToken {
+		v := s.retentionPurgeConfirmView(p, p.T("privacy.retention.confirm.mismatch"))
+		s.renderConfirm(w, r, p, v, http.StatusUnprocessableEntity)
 		return
 	}
 	report, err := s.privacy.PurgeExpired(r.Context(), actor, app.DefaultRetentionDays)

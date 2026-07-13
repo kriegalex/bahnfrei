@@ -47,10 +47,11 @@ templ accountsPage(p PageData, v accountsView) {
 								</td>
 								<td>
 									if a.Enabled {
-										<form action={ templ.URL("/admin/accounts/" + a.ID + "/disable") } method="post" class="inline-form">
-											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-											<button type="submit">{ p.T("accounts.action.disable") }</button>
-										</form>
+										// OQ-074 (TASK-034): disable is
+										// reversible (enable exists below),
+										// so a plain GET confirm sub-page
+										// suffices — no typed confirmation.
+										<a href={ templ.URL("/admin/accounts/" + a.ID + "/disable/confirm") } class="button">{ p.T("accounts.action.disable") }</a>
 									} else {
 										<form action={ templ.URL("/admin/accounts/" + a.ID + "/enable") } method="post" class="inline-form">
 											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>

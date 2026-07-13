@@ -168,6 +168,47 @@ func TestOnlineEntryDeadlinePassedRejectedWebSYS011UC003_3(t *testing.T) {
 	}
 }
 
+// TestOnlineEntryIndividualFieldErrorsOQ075UC038_4 covers UC-038 #4's
+// "online entry" representative form: submitting with a missing last name
+// and no seed performance re-renders the form (never a redirect) with
+// field-level errors naming each offending input and preserving every
+// other submitted value — the OQ-075 fix.
+func TestOnlineEntryIndividualFieldErrorsOQ075UC038_4(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, base+"/meets/"+meetID+"/entries/individual", url.Values{
+		"event": {eventID}, "first_name": {"Anna"}, "last_name": {""},
+		"birth_year": {"2011"}, "sex": {"W"}, "club": {"LC Test"}, "seed": {""},
+	})
+	body := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("individual entry with missing fields = %d, want 422: %s", resp.StatusCode, body)
+	}
+	for _, want := range []string{
+		`aria-invalid="true"`,
+		`id="last_name-error"`,
+		`id="seed-error"`,
+		// the submitted values that WERE valid must survive the re-render
+		// (UC-038 #4's "preserves the user's input").
+		`value="Anna"`,
+		`value="LC Test"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("re-rendered individual-entry form missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "Anna Muster") {
+		t.Error("no entry should have been created while the form re-renders with field errors")
+	}
+}
+
 // TestBibAssignmentFlowSYS018UC006_1_2Web drives UC-006 #1/#2 over real
 // HTTP: bulk bib assignment by club produces unique bibs, and a manual
 // duplicate assignment is rejected.

@@ -233,27 +233,55 @@ templ trackForm(p PageData, v captureView) {
 					<td>{ row.Lane }</td>
 					<td>{ row.Name }</td>
 					<td>
-						<input type="text" name="time" size="7" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.time") + " " + row.Name }/>
+						<input type="text" name="time" size="7" value={ row.Time } form={ "track-" + row.AthleteID } aria-label={ p.T("capture.time") + " " + row.Name }/>
 					</td>
 					<td>
 						<select name="timing" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.timing") + " " + row.Name }>
 							for _, t := range v.TrackTimings {
-								<option value={ t }>{ p.T("capture.timing." + t) }</option>
+								<option value={ t } selected?={ t == row.Timing }>{ p.T("capture.timing." + t) }</option>
 							}
 						</select>
 					</td>
 					<td>
 						<select name="status" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
-							<option value="">{ p.T("capture.status.none") }</option>
+							<option value="" selected?={ row.Status == "" }>{ p.T("capture.status.none") }</option>
 							for _, st := range v.TrackStatuses {
-								<option value={ st }>{ st }</option>
+								<option value={ st } selected?={ st == row.Status }>{ st }</option>
 							}
 						</select>
 					</td>
-					<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+					<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
 					if v.Protest.CorrectionMode {
-						<td><input type="text" name="reason" size="14" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.correct.reason") + " " + row.Name }/></td>
-						<td><input type="text" name="escalation" size="12" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.correct.escalation") + " " + row.Name }/></td>
+						<td>
+							<input
+								type="text"
+								name="reason"
+								size="14"
+								value={ row.Reason }
+								form={ "track-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.reason") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("reason", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("reason", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("reason", row.AthleteID), row.Errors)
+						</td>
+						<td>
+							<input
+								type="text"
+								name="escalation"
+								size="12"
+								value={ row.Escalation }
+								form={ "track-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.escalation") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("escalation", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("escalation", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("escalation", row.AthleteID), row.Errors)
+						</td>
 					}
 					<td><button type="submit" form={ "track-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
 					<td>{ row.Result }</td>

@@ -70,6 +70,26 @@ type entriesView struct {
 	BulkRows        []int
 	RelayLegRows    []int
 	RelayReserveRow []int
+	// IndividualForm carries the individual-entry form's state (OQ-075,
+	// UC-038 #4): on a fresh GET this is the zero value (empty fields, no
+	// errors); after a failed submit, handleEntryIndividualSubmit overlays
+	// the submitted values and per-field errors so the re-rendered page
+	// both names what to fix and preserves the operator's input.
+	IndividualForm individualEntryFormView
+}
+
+// individualEntryFormView is the re-renderable state of the individual
+// online-entry form (UC-038 #4's "online entry" representative form).
+type individualEntryFormView struct {
+	Event                string
+	FirstName            string
+	LastName             string
+	BirthYear            string
+	Sex                  string
+	Club                 string
+	Seed                 string
+	PublicationWithdrawn bool
+	Errors               FieldErrors
 }
 
 type exceptionRowView struct {
@@ -283,31 +303,101 @@ func redirectEntriesError(w http.ResponseWriter, r *http.Request, meetID string,
 	http.Redirect(w, r, "/meets/"+meetID+"/entries?err="+entryFlashKey(err), http.StatusSeeOther)
 }
 
+// individualEntryBirthYearBounds mirrors the plausible-birth-year range the
+// roster/entry forms already communicate via hint text (entries.hint.birth_year):
+// no athlete competing today was born before 1900, and a birth year in the
+// future is never valid.
+func individualEntryBirthYearBounds() (min, max int) {
+	return 1900, time.Now().Year()
+}
+
 func (s *Server) handleEntryIndividualSubmit(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
 	meetID := r.PathValue("id")
+	p := basePageData(r, s.cats)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	birthYear, _ := strconv.Atoi(r.FormValue("birth_year"))
-	in := app.IndividualEntryInput{
-		EventID:         r.FormValue("event"),
-		FirstName:       strings.TrimSpace(r.FormValue("first_name")),
-		LastName:        strings.TrimSpace(r.FormValue("last_name")),
-		BirthYear:       birthYear,
-		Sex:             domain.Sex(r.FormValue("sex")),
-		Club:            strings.TrimSpace(r.FormValue("club")),
-		SeedPerformance: strings.TrimSpace(r.FormValue("seed")),
-		// SYS-103/UC-023 (TASK-023): the entry flow collects the
-		// publication-consent choice up front, mirroring the roster form.
+	birthYearStr := strings.TrimSpace(r.FormValue("birth_year"))
+	birthYear, _ := strconv.Atoi(birthYearStr)
+	form := individualEntryFormView{
+		Event:                r.FormValue("event"),
+		FirstName:            strings.TrimSpace(r.FormValue("first_name")),
+		LastName:             strings.TrimSpace(r.FormValue("last_name")),
+		BirthYear:            birthYearStr,
+		Sex:                  r.FormValue("sex"),
+		Club:                 strings.TrimSpace(r.FormValue("club")),
+		Seed:                 strings.TrimSpace(r.FormValue("seed")),
 		PublicationWithdrawn: r.FormValue("publication_withdrawn") == "true",
 	}
+
+	// OQ-075/UC-038 #4: attribute each validation failure to its own field
+	// and re-render with the submitted values intact, rather than
+	// redirecting to a page-level flash that loses the operator's input.
+	errs := FieldErrors{}
+	if form.FirstName == "" {
+		errs["first_name"] = p.T("entries.field_error.first_name.required")
+	}
+	if form.LastName == "" {
+		errs["last_name"] = p.T("entries.field_error.last_name.required")
+	}
+	minYear, maxYear := individualEntryBirthYearBounds()
+	if birthYearStr == "" || birthYear < minYear || birthYear > maxYear {
+		errs["birth_year"] = p.T("entries.field_error.birth_year.invalid")
+	}
+	if form.Seed == "" {
+		errs["seed"] = p.T("entries.field_error.seed.required")
+	}
+	if len(errs) > 0 {
+		form.Errors = errs
+		s.renderEntriesFormError(w, r, p, meetID, form)
+		return
+	}
+
+	in := app.IndividualEntryInput{
+		EventID:         form.Event,
+		FirstName:       form.FirstName,
+		LastName:        form.LastName,
+		BirthYear:       birthYear,
+		Sex:             domain.Sex(form.Sex),
+		Club:            form.Club,
+		SeedPerformance: form.Seed,
+		// SYS-103/UC-023 (TASK-023): the entry flow collects the
+		// publication-consent choice up front, mirroring the roster form.
+		PublicationWithdrawn: form.PublicationWithdrawn,
+	}
 	if _, err := s.results.SubmitIndividualEntry(r.Context(), actor, meetID, in); err != nil {
+		// ErrSeedPerformanceRequired is the one SubmitIndividualEntry
+		// business error that names a single field; the rest (deadline
+		// passed, entry limit reached, duplicate, entries closed) are
+		// whole-form/state conditions with no one field to fix, so they
+		// keep the existing page-level flash redirect.
+		if errors.Is(err, app.ErrSeedPerformanceRequired) {
+			form.Errors = FieldErrors{"seed": p.T("entries.field_error.seed.required")}
+			s.renderEntriesFormError(w, r, p, meetID, form)
+			return
+		}
 		redirectEntriesError(w, r, meetID, err)
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/entries", http.StatusSeeOther)
+}
+
+// renderEntriesFormError re-renders the entries page with the individual
+// form's submitted values and field errors overlaid onto an otherwise
+// freshly loaded view (open events, the submitter's existing entries).
+func (s *Server) renderEntriesFormError(w http.ResponseWriter, r *http.Request, p PageData, meetID string, form individualEntryFormView) {
+	actor, _ := sessionFromContext(r.Context())
+	v, err := s.entriesView(r, p, actor, meetID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	v.IndividualForm = form
+	p.Title = v.MeetName + " — " + p.T("entries.title")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = entriesPage(p, v).Render(r.Context(), w)
 }
 
 func (s *Server) handleEntryBulkSubmit(w http.ResponseWriter, r *http.Request) {

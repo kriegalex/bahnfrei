@@ -117,14 +117,15 @@ func (s *Server) handleMeetNewForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMeetCreate(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
-	form, req, err := s.parseMeetForm(r)
+	p := basePageData(r, s.cats)
+	form, req, err := s.parseMeetForm(r, p)
 	if err != nil {
-		s.renderMeetForm(w, r, form, "/meets", err)
+		s.renderMeetForm(w, r, p, form, "/meets", err)
 		return
 	}
 	rec, err := s.meets.CreateMeet(r.Context(), actor, req)
 	if err != nil {
-		s.renderMeetForm(w, r, form, "/meets", err)
+		s.renderMeetForm(w, r, p, form, "/meets", err)
 		return
 	}
 	http.Redirect(w, r, "/meets/"+rec.ID, http.StatusSeeOther)
@@ -192,14 +193,15 @@ func (s *Server) handleMeetEditForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMeetEditSubmit(w http.ResponseWriter, r *http.Request) {
 	meetID := r.PathValue("id")
 	actor, _ := sessionFromContext(r.Context())
-	form, req, err := s.parseMeetForm(r)
+	p := basePageData(r, s.cats)
+	form, req, err := s.parseMeetForm(r, p)
 	action := "/meets/" + meetID + "/edit"
 	if err != nil {
-		s.renderMeetForm(w, r, form, action, err)
+		s.renderMeetForm(w, r, p, form, action, err)
 		return
 	}
 	if err := s.meets.UpdateMeet(r.Context(), actor, meetID, form.Version, req); err != nil {
-		s.renderMeetForm(w, r, form, action, err)
+		s.renderMeetForm(w, r, p, form, action, err)
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID, http.StatusSeeOther)
@@ -377,8 +379,11 @@ func (s *Server) emptyMeetForm() meetFormView {
 
 // parseMeetForm maps the meet form to an app.MeetRequest, returning the
 // re-renderable form state alongside so validation errors keep the
-// operator's input.
-func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, error) {
+// operator's input. p is used to localize any OQ-075/UC-038 #4 per-field
+// error messages onto form.Errors; when form.Errors is non-empty the
+// returned error is always errBadInput (the caller's page-level flash
+// summary), with the field-specific detail carried on the form itself.
+func (s *Server) parseMeetForm(r *http.Request, p PageData) (meetFormView, app.MeetRequest, error) {
 	form := s.emptyMeetForm()
 	if err := r.ParseForm(); err != nil {
 		return form, app.MeetRequest{}, errBadInput
@@ -415,16 +420,46 @@ func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, 
 		OfficialSourceName: form.OfficialSourceName,
 		OfficialSourceURL:  form.OfficialSourceURL,
 	}
-	if req.Name == "" || form.StartDate == "" || form.EndDate == "" {
+
+	// OQ-075/UC-038 #4: attribute each validation failure to its own field
+	// instead of a single page-level "could not be saved" flash — this is
+	// the audit's literal repro case (end_date before start_date).
+	errs := FieldErrors{}
+	if form.Name == "" {
+		errs["name"] = p.T("meet.field_error.name.required")
+	}
+	if form.Venue == "" {
+		errs["venue"] = p.T("meet.field_error.venue.required")
+	}
+	var startOK, endOK bool
+	switch {
+	case form.StartDate == "":
+		errs["start_date"] = p.T("meet.field_error.start_date.required")
+	default:
+		if d, err := time.Parse(formDateLayout, form.StartDate); err != nil {
+			errs["start_date"] = p.T("meet.field_error.start_date.invalid")
+		} else {
+			req.StartDate, startOK = d, true
+		}
+	}
+	switch {
+	case form.EndDate == "":
+		errs["end_date"] = p.T("meet.field_error.end_date.required")
+	default:
+		if d, err := time.Parse(formDateLayout, form.EndDate); err != nil {
+			errs["end_date"] = p.T("meet.field_error.end_date.invalid")
+		} else {
+			req.EndDate, endOK = d, true
+		}
+	}
+	if startOK && endOK && req.EndDate.Before(req.StartDate) {
+		errs["end_date"] = p.T("meet.field_error.end_date.before_start")
+	}
+	if len(errs) > 0 {
+		form.Errors = errs
 		return form, req, errBadInput
 	}
-	var err error
-	if req.StartDate, err = time.Parse(formDateLayout, form.StartDate); err != nil {
-		return form, req, errBadInput
-	}
-	if req.EndDate, err = time.Parse(formDateLayout, form.EndDate); err != nil {
-		return form, req, errBadInput
-	}
+
 	for _, row := range form.Sessions {
 		if row.Day == "" && row.Label == "" {
 			continue
@@ -438,8 +473,7 @@ func (s *Server) parseMeetForm(r *http.Request) (meetFormView, app.MeetRequest, 
 	return form, req, nil
 }
 
-func (s *Server) renderMeetForm(w http.ResponseWriter, r *http.Request, form meetFormView, action string, err error) {
-	p := basePageData(r, s.cats)
+func (s *Server) renderMeetForm(w http.ResponseWriter, r *http.Request, p PageData, form meetFormView, action string, err error) {
 	p.Title = p.T("meet.new.title")
 	p.FlashError = flashFor(p, err)
 	w.WriteHeader(statusFor(err))
@@ -507,6 +541,10 @@ type meetFormView struct {
 	ResultsPositionings []string
 	OfficialSourceName  string
 	OfficialSourceURL   string
+	// Errors carries OQ-075/UC-038 #4 per-field validation errors (name,
+	// venue, start_date, end_date) so a re-rendered form names what to fix
+	// at the offending input, alongside the page-level FlashError summary.
+	Errors FieldErrors
 }
 
 type programmeRowView struct {

@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// fieldError renders the inline validation-error paragraph for one named
+// form field (OQ-075, UC-038 #4), if errs carries one — otherwise it renders
+// nothing. Pair it with the field's own input carrying a matching
+// conditional `aria-invalid`/`aria-describedby`:
+//
+//	<input name="foo" ... if errs.Has("foo") { aria-invalid="true" aria-describedby={ fieldErrorID("foo") } }/>
+//	@fieldError("foo", errs)
+//
+// This is the one place the `.field-error`/`aria-invalid` markup shape
+// (docs/architecture/design-system.md §2) is authored; every retrofitted
+// form reuses it rather than repeating the markup.
+templ fieldError(field string, errs FieldErrors) {
+	if errs.Has(field) {
+		<p class="field-error" id={ fieldErrorID(field) } role="alert">{ errs.Msg(field) }</p>
+	}
+}
