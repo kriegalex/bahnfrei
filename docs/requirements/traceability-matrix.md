@@ -44,19 +44,22 @@ Every STR maps to ≥1 SYS. (Priorities per StRS §3.)
 | STR-031 | SYS-091, SYS-092, SYS-093, SYS-100, SYS-101, SYS-102, SYS-104, SYS-105 |
 | STR-032 | SYS-100, SYS-102, SYS-103 |
 | STR-033 | SYS-074, SYS-110, SYS-111 |
-| STR-034 | SYS-112, SYS-113 |
-| STR-035 | SYS-114, SYS-120, SYS-131 |
+| STR-034 | SYS-112, SYS-113, SYS-115 |
+| STR-035 | SYS-114, SYS-115, SYS-117, SYS-120, SYS-131 |
 | STR-036 | SYS-092, SYS-132, SYS-133, SYS-146, CON-02 |
 | STR-037 | SYS-062, SYS-073, SYS-078 *(L)*, SYS-105, SYS-144 |
-| STR-038 | SYS-092, SYS-104, SYS-140, SYS-141, SYS-142, SYS-143, SYS-144, SYS-145, SYS-146 |
+| STR-038 | SYS-092, SYS-104, SYS-116, SYS-140, SYS-141, SYS-142, SYS-143, SYS-144, SYS-145, SYS-146 |
 | STR-039 | SYS-084, SYS-131, SYS-132 |
 | STR-040 | SYS-090, SYS-091, SYS-086 |
 | STR-041 | SYS-081, SYS-084, SYS-085, SYS-086, SYS-087, SYS-130 |
 | STR-042 | SYS-076, SYS-077, SYS-078 *(L)* |
 | STR-043 | SYS-053, SYS-077 |
+| STR-044 | SYS-115 |
+| STR-045 | SYS-116, SYS-117 |
 
-**Coverage check:** 43/43 STR covered. Zero orphan stakeholder requirements.
-*(2026-07-05 delta: STR-042/043 added from founder answers; STR-030 re-scoped per DEC-007.)*
+**Coverage check:** 45/45 STR covered. Zero orphan stakeholder requirements.
+*(2026-07-05 delta: STR-042/043 added from founder answers; STR-030 re-scoped per DEC-007.
+2026-07-13 delta: STR-044/045 added from founder UX request.)*
 
 ## 2. System requirements → Use-cases → verification
 
@@ -138,6 +141,9 @@ inspection/analysis procedure.
 | SYS-112 | UC-026 #1–#2 | T/I | TASK-024: `e2e/tests/a11y-public-SYS113.spec.ts` (axe-core `@axe-core/playwright`, WCAG 2.2 AA rule tags `wcag2a`/`wcag2aa`/`wcag21a`/`wcag21aa`/`wcag22aa`) — one scan per public page type (`UC-026 #1: meet overview...`, `...public timetable...`, `...public start lists...`, `...public results...(populated with a captured result)...`) against a real seeded meet with a published timetable and a captured result, wired into `cd e2e && npx playwright test` (CI's existing `e2e` job). Fixes landed to reach zero violations: keyboard access to `.table-scroll` overflow regions (`tabindex="0"`, `internal/web/{public,meets,accounts,auditlog,officials}.templ`), localized `nav aria-label` (was the hardcoded English word `"primary"`), explicit `<th scope="col">` on every table header cell. UC-026 #2 (screen-reader walk-through, per release) is process documentation, not a one-shot automated check: `docs/requirements/accessibility-manual-audit-checklist.md` (I). |
 | SYS-113 | UC-017 #2, UC-026 #1 | T | TASK-010: `internal/web` `TestPublicPagesAnonymousAccessSYS070UC017_2` (viewport meta tag present on every public page). TASK-024: `e2e/tests/a11y-public-SYS113.spec.ts` `SYS-113: public pages are usable at 360px width...` (real 360×740 viewport against all four public page types: `document.documentElement.scrollWidth` never exceeds `clientWidth` — no page-level horizontal scroll, wide tables scroll within their own `.table-scroll` box per the existing CSS contract — plus the same WCAG 2.2 AA scan at that viewport size, since AA already requires sufficient contrast/no-hover-only-interaction and this pins it at the width SYS-113 names). |
 | SYS-114 | Keyboard-only E2E pass of check-in/result-entry flows | T/D | Phase B (TASK-030, M3) |
+| SYS-115 | UC-037 #1–#5 | T/I | Phase B (TASK-031, M3) |
+| SYS-116 | UC-038 #1–#2 | T/I | Phase B (TASK-032, M3) |
+| SYS-117 | UC-038 #3–#4, UC-037 #5 | T/I | Phase B (TASK-032, M3) |
 | SYS-120 | Benchmark on reference dataset (1,500 athletes / 4,000 entries / 250 units) | A | Phase B |
 | SYS-121 | Benchmark (seeding 200 entries ≤10 s; recompute ≤5 s) | A | Phase B |
 | SYS-122 | Load test (UC-017 #4) | A | Phase B |
@@ -160,7 +166,7 @@ in either direction.
 
 | Check | Status |
 |-------|--------|
-| Every requirement uniquely identified, atomic, testable | ✅ STR-001…043, SYS-001…146 (blocks), UC-001…033 |
+| Every requirement uniquely identified, atomic, testable | ✅ STR-001…045, SYS-001…146 (blocks), UC-001…038 |
 | Zero orphan requirements (both directions) | ✅ §1–§2 above |
 | Vague founder language converted to measurable targets | ✅ "well tested/bug free/state of the art" → SYS-140…146, SYS-092, SYS-120…122; no adjectives used as requirements |
 | External facts cited; named systems verified by exact spelling | ✅ Seltec (not "setlec") confirmed; Swiss Athletics stack verified; SVM (not "CSI"); see `../research/*.md` |

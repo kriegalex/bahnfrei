@@ -50,6 +50,8 @@ automated tests. Acceptance criteria are Given/When/Then and MUST be automatable
 | UC-034 | Offline-tolerant field capture & walk-by sync | MVP | SYS-085, SYS-086, SYS-087 |
 | UC-035 | Swiss youth-series results upload file | MVP | SYS-077 |
 | UC-036 | TAF3 coexistence exports | Later | SYS-078 |
+| UC-037 | Contextual input help | MVP | SYS-115 |
+| UC-038 | Design-system conformance & usability audit | MVP | SYS-116, SYS-117 |
 
 Cross-cutting quality requirements (SYS-140…146, SYS-120/121, SYS-114, SYS-104/105,
 SYS-132/133) are verified by CI gates, benchmarks, and inspection — see
@@ -622,3 +624,45 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
 2. **Given** a meet's results, **when** exported as TAF3-compatible CSV, **then** the
    structure matches the publicly documented TAF3 result-export layout (fixture-verified;
    ingestion into a real TAF3 is a manual demonstration until OQ-013/OQ-014 give access).
+
+## UC-037 Contextual input help — MVP
+
+**Actors:** operator (first-time volunteer), participant entering online entries.
+**Traces:** SYS-115 → STR-044, STR-035, STR-034.
+
+1. **Given** the help-content registry (SYS-115), **when** each screen containing a
+   registered input renders, **then** every registered input shows a help icon adjacent to
+   its label — no registered input lacks one (rendering-time coverage test over the
+   registry).
+2. **Given** a help icon, **when** activated by (a) pointer hover, (b) keyboard focus,
+   (c) click/tap, **then** the same short help text appears, localized (asserted in DE and
+   FR).
+3. **Given** open help content, **then** Escape dismisses it without moving focus, the
+   pointer can be moved onto the content without it disappearing, and it persists until
+   dismissed or de-hovered/blurred (WCAG 2.2 SC 1.4.13 — Playwright).
+4. **Given** a help trigger and its content, **then** the trigger is keyboard-focusable with
+   an accessible name, the content is programmatically associated with the trigger, and the
+   automated WCAG 2.2 AA scan of a help-open state reports zero violations.
+5. **Given** any field with a hard input constraint (format, units, mandatory), **then** the
+   constraint is visible on-screen as label/hint text without activating help (fixtures for
+   representative fields; full sweep via the SYS-117 release audit).
+
+## UC-038 Design-system conformance & usability audit — MVP
+
+**Actors:** contributor (via CI), release auditor.
+**Traces:** SYS-116, SYS-117 → STR-045, STR-038.
+
+1. **Given** the in-repo design-token and component documentation, **when** the CI
+   style-conformance check runs over all templates and stylesheets, **then** zero raw
+   visual literals (colors, font sizes, spacing) occur outside the token definitions
+   (documented allowlist for the mechanical check's known limits).
+2. **Given** every interactive component in the inventory, **then** a keyboard walk shows a
+   visible focus indicator per component, and each documented component state renders
+   (automated e2e; contrast per the existing WCAG AA scans).
+3. **Given** a release candidate, **when** the SYS-117 usability audit checklist is
+   executed, **then** the completed, dated record is committed in-repo with zero open
+   critical findings (I — same mechanism as the accessibility manual audit checklist).
+4. **Given** representative forms (meet setup, online entry, result correction), **then**
+   each input shows a permanently visible label and visible constraint hints, and a
+   submitted validation error renders inline at the field, states what to fix, and
+   preserves the user's input (T).

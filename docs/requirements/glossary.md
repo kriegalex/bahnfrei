@@ -84,6 +84,15 @@ equivalents given where they appear in Swiss federation practice. Sources: `D#` 
 | **Global Calendar** | World Athletics' registry a meet must join for World Ranking status; separate from national sanctioning (C2, D10.1). |
 | **World Rankings** | WA points-based athlete ranking (result score + placing score) fed by ratified results, ideally within 24h (D6.3, D10.2). |
 
+## UI & interaction
+
+| Term | Definition |
+|------|------------|
+| **Contextual help** | Short explanation available at an input's point of use via a "?" help icon (SYS-115). Opens on hover, keyboard focus, and tap/click — never hover-only — and meets WCAG 2.2 SC 1.4.13 (dismissible, hoverable, persistent). Sometimes called a *toggletip* when click/tap-toggled. |
+| **Hint text** | Short, permanently visible helper text under an input's label carrying information needed to complete the field (format, units, bounds). Required information lives here, never only inside contextual help (SYS-115/117; GOV.UK Design System pattern). |
+| **Help-content registry** | Machine-readable list of which inputs carry contextual help and their localized texts; drives the UC-037 coverage test (SYS-115). |
+| **Design token** | Named, single-source visual value (color, type scale, spacing, radius, elevation) from which all surfaces are styled (SYS-116); screens introduce no visual literals outside the tokens. |
+
 ## Legal & project
 
 | Term | Definition |
