@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"testing"
@@ -181,6 +182,177 @@ func TestUC034_ReconciliationApplyOverJSON(t *testing.T) {
 	recon = bodyString(t, mustGet(t, client, meetURL+"/reconciliation"))
 	if !strings.Contains(recon, "Keine offenen") { // "no pending" empty state (DE)
 		t.Errorf("reconciliation queue should be empty after apply: %s", recon)
+	}
+}
+
+// TestUnitCheckoutRejectsUnassignedFieldOfficialWeb covers handleUnitCheckout's
+// app.ErrUnitNotAssigned branch (SYS-090's per-event scoping): a field
+// official never assigned to this meet's units is refused with a 403 JSON
+// body, not a 200/500.
+func TestUnitCheckoutRejectsUnassignedFieldOfficialWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	unitURL, _, _ := syncSetup(t, client, base)
+
+	createAccountWeb(t, client, base, "unassigned-fo", "field_official")
+	logout(t, client, base)
+	login(t, client, base, "unassigned-fo", "s3cret-passphrase")
+	csrf := csrfTokenFrom(t, bodyString(t, mustGet(t, client, base+"/")))
+
+	resp := postJSON(t, client, unitURL+"/checkout", csrf, checkoutRequest{DeviceLabel: "tablet-C"})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("checkout by an unassigned field official = %d, want 403", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if body["error"] != "unit_not_assigned" {
+		t.Errorf("error body = %+v, want unit_not_assigned", body)
+	}
+}
+
+// TestUnitCheckoutConflictBetweenAccountsWeb covers handleUnitCheckout's
+// app.ErrCheckedOutByAnother branch (SYS-086): once one account's device
+// actively holds a unit's capture lock, a different account's checkout
+// attempt is refused with 409 until the office overrides it — never
+// silently reassigned.
+func TestUnitCheckoutConflictBetweenAccountsWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	// Opening the unit page as admin takes the checkout (EnsureCheckout,
+	// SYS-086) under admin's account.
+	unitURL, _, _ := syncSetup(t, client, base)
+	createAccountWeb(t, client, base, "office2", "competition_office")
+
+	jar2, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client2 := &http.Client{Jar: jar2, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	login(t, client2, base, "office2", "s3cret-passphrase")
+	csrf2 := csrfTokenFrom(t, bodyString(t, mustGet(t, client2, base+"/")))
+
+	resp := postJSON(t, client2, unitURL+"/checkout", csrf2, checkoutRequest{DeviceLabel: "tablet-B"})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("checkout by a different account while actively held = %d, want 409", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if body["error"] != "checked_out_by_another" {
+		t.Errorf("error body = %+v, want checked_out_by_another", body)
+	}
+}
+
+// TestUnitSyncRejectsMalformedJSONAndUnassignedOfficialWeb covers
+// handleUnitSync's two non-happy-path branches: a malformed JSON body never
+// reaches ReplayCaptureBatch (400, not a panic or 500), and an unassigned
+// field official's otherwise well-formed batch is refused (403,
+// unit_not_assigned) — mirroring handleUnitCheckout's equivalent gates.
+func TestUnitSyncRejectsMalformedJSONAndUnassignedOfficialWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	unitURL, _, csrf := syncSetup(t, client, base)
+
+	req, err := http.NewRequest(http.MethodPost, unitURL+"/sync", bytes.NewReader([]byte("{not valid json")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrf)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("malformed sync body = %d, want 400", resp.StatusCode)
+	}
+
+	createAccountWeb(t, client, base, "unassigned-fo2", "field_official")
+	logout(t, client, base)
+	login(t, client, base, "unassigned-fo2", "s3cret-passphrase")
+	csrf2 := csrfTokenFrom(t, bodyString(t, mustGet(t, client, base+"/")))
+
+	syncResp := postJSON(t, client, unitURL+"/sync", csrf2, syncRequest{
+		Ops: []syncOp{{OpID: "01OP0000000000000000000099", AthleteID: "irrelevant", Seq: 1, Value: "3.42"}},
+	})
+	defer func() { _ = syncResp.Body.Close() }()
+	if syncResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("sync by an unassigned field official = %d, want 403", syncResp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(syncResp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if body["error"] != "unit_not_assigned" {
+		t.Errorf("error body = %+v, want unit_not_assigned", body)
+	}
+}
+
+// TestCheckoutOverrideAndReviseStartListUnknownUnitIs404Web covers
+// handleCheckoutOverride's and handleReviseStartList's shared error-mapping
+// path: a syntactically fine but nonexistent unit id within a real meet
+// surfaces the shared 404, not a 500.
+func TestCheckoutOverrideAndReviseStartListUnknownUnitIs404Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	page := base + "/meets/" + meetID
+	badUnitURL := base + "/meets/" + meetID + "/capture/does-not-exist"
+
+	overrideResp := postForm(t, client, page, badUnitURL+"/override", url.Values{"device": {"tablet-B"}, "reason": {"lost"}})
+	_ = bodyString(t, overrideResp)
+	if overrideResp.StatusCode != http.StatusNotFound {
+		t.Errorf("checkout override on an unknown unit = %d, want 404", overrideResp.StatusCode)
+	}
+
+	reviseResp := postForm(t, client, page, badUnitURL+"/revise-startlist", url.Values{})
+	_ = bodyString(t, reviseResp)
+	if reviseResp.StatusCode != http.StatusNotFound {
+		t.Errorf("revise-startlist on an unknown unit = %d, want 404", reviseResp.StatusCode)
+	}
+}
+
+// TestReconciliationUnknownMeetAndItemIs404Web covers handleReconciliation's
+// and handleReconciliationResolve's error-mapping paths.
+func TestReconciliationUnknownMeetAndItemIs404Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	resp := mustGet(t, client, base+"/meets/does-not-exist/reconciliation")
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET reconciliation for an unknown meet = %d, want 404", resp.StatusCode)
+	}
+
+	meetID := createUCMeet(t, client, base)
+	page := base + "/meets/" + meetID + "/reconciliation"
+	applyResp := postForm(t, client, page, page+"/does-not-exist/apply", url.Values{})
+	_ = bodyString(t, applyResp)
+	if applyResp.StatusCode != http.StatusNotFound {
+		t.Errorf("resolve an unknown reconciliation item = %d, want 404", applyResp.StatusCode)
+	}
+}
+
+// TestDeviceSuffixRenders covers deviceSuffix's pure formatting: the default
+// "web" label (and blank) render no suffix at all, a real device label
+// renders parenthesized.
+func TestDeviceSuffixRenders(t *testing.T) {
+	for _, tc := range []struct{ label, want string }{
+		{"", ""}, {"web", ""}, {"tablet-A", " (tablet-A)"},
+	} {
+		if got := deviceSuffix(tc.label); got != tc.want {
+			t.Errorf("deviceSuffix(%q) = %q, want %q", tc.label, got, tc.want)
+		}
 	}
 }
 

@@ -262,6 +262,163 @@ func TestPollAndWriteExportsWritesOnlyOnChange(t *testing.T) {
 	}
 }
 
+// TestNewTimingAgentClientInsecureSkipVerify covers newTimingAgentClient's
+// --insecure-skip-verify wiring directly: the opt-in flag (for a venue's
+// self-signed local hub certificate, OQ-050) actually reaches the
+// transport's TLS config, and is off by default.
+func TestNewTimingAgentClientInsecureSkipVerify(t *testing.T) {
+	def := newTimingAgentClient(timingAgentConfig{hubURL: "https://hub", meetID: "m1", token: "t"})
+	transport, ok := def.http.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client transport = %T, want *http.Transport", def.http.Transport)
+	}
+	if transport.TLSClientConfig != nil && transport.TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecureSkipVerify=false (default) must not skip TLS verification")
+	}
+
+	insecure := newTimingAgentClient(timingAgentConfig{hubURL: "https://hub", meetID: "m1", token: "t", insecureSkipVerify: true})
+	transport2, ok := insecure.http.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client transport = %T, want *http.Transport", insecure.http.Transport)
+	}
+	if transport2.TLSClientConfig == nil || !transport2.TLSClientConfig.InsecureSkipVerify {
+		t.Error("insecureSkipVerify=true must reach the transport's TLS config")
+	}
+}
+
+// TestUploadRejectsMalformedJSONResponse covers upload's decode-error
+// branch: a hub that returns 200 with a non-JSON body is reported as an
+// error, not silently treated as zero applied/zero conflicts.
+func TestUploadRejectsMalformedJSONResponse(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/agent/v1/meets/m1/lif", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := newTimingAgentClient(timingAgentConfig{hubURL: srv.URL, meetID: "m1", token: "t"})
+
+	if _, err := client.upload(context.Background(), "lif", "race.lif", []byte("161,1,1,Test\n")); err == nil {
+		t.Error("upload with a non-JSON 200 response: want an error, got nil")
+	}
+}
+
+// TestManifestAndDownloadExportErrorPathsWeb covers manifest's and
+// downloadExport's shared non-200 branch: the hub returning an error status
+// (rather than being unreachable) is reported with the response body
+// included, not silently swallowed.
+func TestManifestAndDownloadExportErrorPathsWeb(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/agent/v1/meets/m1/exports/manifest", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	})
+	mux.HandleFunc("/agent/v1/meets/m1/exports/evt", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("down for maintenance"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := newTimingAgentClient(timingAgentConfig{hubURL: srv.URL, meetID: "m1", token: "t"})
+
+	if _, err := client.manifest(context.Background()); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("manifest() with a 500 response: err = %v, want it to include the response body", err)
+	}
+	if _, err := client.downloadExport(context.Background(), "evt"); err == nil || !strings.Contains(err.Error(), "down for maintenance") {
+		t.Errorf("downloadExport() with a 503 response: err = %v, want it to include the response body", err)
+	}
+}
+
+// TestScanAndUploadLIFFilesLogsReadError covers scanAndUploadLIFFiles' file-
+// read-error branch: a *.lif path that exists but cannot be read as a file
+// (here, a directory someone dropped in the watched folder) is logged and
+// skipped, not uploaded or fatal to the whole scan.
+func TestScanAndUploadLIFFilesLogsReadError(t *testing.T) {
+	hub := &fakeHub{t: t, wantToken: "secret"}
+	srv := hub.server()
+	defer srv.Close()
+	client := newTimingAgentClient(timingAgentConfig{hubURL: srv.URL, meetID: "m1", token: "secret"})
+	state := newTimingAgentState()
+
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "not-a-file.lif"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var log bytes.Buffer
+	if err := scanAndUploadLIFFiles(context.Background(), client, dir, state, &log); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(hub.uploads) != 0 {
+		t.Fatalf("uploads = %d, want 0 (a directory cannot be read as a file)", len(hub.uploads))
+	}
+	if !strings.Contains(log.String(), "not-a-file.lif") {
+		t.Errorf("expected the read failure to be logged with the path, got: %s", log.String())
+	}
+}
+
+// TestRunTimingAgentCyclePropagatesPollError covers runTimingAgentCycle's
+// error-propagation branch: a poll failure (here, the hub's manifest
+// endpoint returning an error) surfaces as the cycle's own error rather than
+// being swallowed — the caller (runTimingAgent's --once path) needs it to
+// report cycle failure.
+func TestRunTimingAgentCyclePropagatesPollError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/agent/v1/meets/m1/exports/manifest", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := newTimingAgentClient(timingAgentConfig{hubURL: srv.URL, meetID: "m1", token: "secret"})
+	state := newTimingAgentState()
+	dir := t.TempDir()
+
+	if err := runTimingAgentCycle(context.Background(), client, dir, state, io.Discard); err == nil {
+		t.Error("runTimingAgentCycle with a failing manifest poll: want an error, got nil")
+	}
+}
+
+// TestRunTimingAgentPropagatesFlagParseError covers runTimingAgent's own
+// flag-parsing error path (distinct from parseTimingAgentFlags' own tests,
+// which call it directly): a missing required flag must fail before any
+// client is even constructed.
+func TestRunTimingAgentPropagatesFlagParseError(t *testing.T) {
+	var out bytes.Buffer
+	err := runTimingAgent(context.Background(), []string{"--hub-url", "https://hub"}, &out)
+	if err == nil {
+		t.Fatal("runTimingAgent with missing --meet/--token: want an error, got nil")
+	}
+}
+
+// TestRunTimingAgentLoopsUntilContextCanceled covers runTimingAgent's
+// non-once branch (the ticker loop real long-running usage takes): with a
+// short poll interval and a context that expires shortly after, the agent
+// runs at least one full cycle and then shuts down cleanly on ctx.Done(),
+// rather than looping forever or erroring.
+func TestRunTimingAgentLoopsUntilContextCanceled(t *testing.T) {
+	hub := &fakeHub{t: t, wantToken: "secret", ppl: []byte("ppl"), sch: []byte("sch"), evt: []byte("evt")}
+	srv := hub.server()
+	defer srv.Close()
+	dir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	var out bytes.Buffer
+	err := runTimingAgent(ctx, []string{
+		"--hub-url", srv.URL, "--meet", "m1", "--token", "secret", "--watch-dir", dir,
+		"--poll-interval", "15ms",
+	}, &out)
+	if err != nil {
+		t.Fatalf("runTimingAgent (loop mode): %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "shutting down") {
+		t.Errorf("expected a shutdown message once the context expired, got:\n%s", out.String())
+	}
+	if hub.requests.Load() < 2 {
+		t.Errorf("expected at least two polls against the fake hub before shutdown, got %d", hub.requests.Load())
+	}
+}
+
 // TestRunTimingAgentCycleEndToEnd drives one full cycle (upload + poll)
 // against the fake hub, the same code path --once exercises.
 func TestRunTimingAgentCycleEndToEnd(t *testing.T) {

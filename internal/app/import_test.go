@@ -275,3 +275,134 @@ func TestCSVImportMissingRequiredColumnRejected(t *testing.T) {
 		t.Fatal("expected an error for a CSV missing required columns")
 	}
 }
+
+// TestCSVImportEmptyFileRejected covers readCSVRows' "no header row at all"
+// guard: a genuinely empty upload (not just zero data rows) is a distinct,
+// clearly-worded rejection rather than a zero-row/zero-accepted no-op.
+func TestCSVImportEmptyFileRejected(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	_, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(""))
+	if err == nil || !strings.Contains(err.Error(), "empty CSV file") {
+		t.Fatalf("err = %v, want an empty-CSV-file error", err)
+	}
+}
+
+// TestCSVImportMalformedSeedPerformanceRejected covers UC-004 #5-adjacent
+// ground the existing malformed-row test does not: a seed performance that
+// is present but not parseable as a mark (as opposed to simply missing),
+// against an event that has an entry standard configured (SYS-015) — the
+// same structural-rejection path SubmitIndividualEntry's standard-evaluation
+// failure takes, exercised here through the import pipeline.
+func TestCSVImportMalformedSeedPerformanceRejected(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	f.addEvent(t, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"U16 W"}, EntryStandard: "12.20",
+	})
+	csvBody := strings.Join([]string{
+		systemNativeCSVHeader,
+		systemNativeCSVRow("Anna", "Muster", "1995", "W", "LC Test", "", "100m/U16 W", "", "not-a-time"),
+	}, "\n")
+
+	report, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(csvBody))
+	if err != nil {
+		t.Fatalf("CommitCSVImport: %v", err)
+	}
+	if report.Accepted != 0 || report.Rejected != 1 {
+		t.Fatalf("report = %+v, want 0 accepted / 1 rejected", report)
+	}
+	if !strings.Contains(report.Rows[0].Reason, "invalid seed performance") {
+		t.Fatalf("reason = %q, want it to mention the invalid seed performance", report.Rows[0].Reason)
+	}
+}
+
+// TestCSVImportAddsLicenceToExistingNaturalKeyMatch covers a
+// resolveImportAthlete branch no existing test reaches: a first import
+// creates an athlete with no licence number, and a second import of the
+// same natural-key athlete (name/birth year/sex) that now carries a licence
+// number backfills it onto the existing record instead of creating a
+// duplicate or silently dropping the licence.
+func TestCSVImportAddsLicenceToExistingNaturalKeyMatch(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	first := strings.Join([]string{
+		systemNativeCSVHeader,
+		systemNativeCSVRow("Anna", "Muster", "1995", "W", "LC Test", "", "100m/Women", "", "12.85"),
+	}, "\n")
+	firstReport, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(first))
+	if err != nil {
+		t.Fatalf("first CommitCSVImport: %v", err)
+	}
+	if firstReport.Accepted != 1 {
+		t.Fatalf("first report = %+v, want 1 accepted", firstReport)
+	}
+	athleteID := firstReport.Rows[0].AthleteID
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), athleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if _, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); ok {
+		t.Fatal("athlete unexpectedly already carries a licence number")
+	}
+
+	second := strings.Join([]string{
+		systemNativeCSVHeader,
+		systemNativeCSVRow("Anna", "Muster", "1995", "W", "LC Test", "SA-9001", "100m/Women", "", "12.85"),
+	}, "\n")
+	secondReport, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(second))
+	if err != nil {
+		t.Fatalf("second CommitCSVImport: %v", err)
+	}
+	if secondReport.Accepted != 0 || secondReport.Updated != 1 {
+		t.Fatalf("second report = %+v, want 0 accepted / 1 updated (matched by natural key)", secondReport)
+	}
+	if secondReport.Rows[0].AthleteID != athleteID {
+		t.Fatalf("second import matched athlete %q, want the same athlete %q (no duplicate)", secondReport.Rows[0].AthleteID, athleteID)
+	}
+	athlete, err = store.GetAthlete(ctx, f.st.DB(), athleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete after second import: %v", err)
+	}
+	if id, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-9001" {
+		t.Fatalf("licence external id = (%q, %v), want (\"SA-9001\", true) backfilled onto the matched athlete", id, ok)
+	}
+}
+
+// TestSplitEventCodeEdgeCases covers splitEventCode's malformed-input
+// branches directly (UC-004 #3's "malformed event code" rejection reason).
+func TestSplitEventCodeEdgeCases(t *testing.T) {
+	cases := []struct {
+		code              string
+		wantDisc, wantCat string
+		wantOK            bool
+	}{
+		{"100m/Women", "100m", "Women", true},
+		{"100m", "", "", false},                   // no separator at all
+		{"/Women", "", "", false},                 // empty discipline segment
+		{"100m/", "", "", false},                  // empty category segment
+		{"", "", "", false},                       // empty string
+		{"ZoneLJ/U16/W", "ZoneLJ/U16", "W", true}, // splits on the LAST slash
+	}
+	for _, c := range cases {
+		disc, cat, ok := splitEventCode(c.code)
+		if ok != c.wantOK || (ok && (disc != c.wantDisc || cat != c.wantCat)) {
+			t.Errorf("splitEventCode(%q) = (%q, %q, %v), want (%q, %q, %v)", c.code, disc, cat, ok, c.wantDisc, c.wantCat, c.wantOK)
+		}
+	}
+}
+
+// TestContainsStringEdgeCases covers containsString's edge cases directly:
+// an empty list and a list with no match must both report false, not panic
+// or false-positive.
+func TestContainsStringEdgeCases(t *testing.T) {
+	if containsString(nil, "x") {
+		t.Error("containsString(nil, x) = true, want false")
+	}
+	if containsString([]string{"a", "b"}, "c") {
+		t.Error("containsString([a b], c) = true, want false")
+	}
+	if !containsString([]string{"a", "b"}, "b") {
+		t.Error("containsString([a b], b) = false, want true")
+	}
+}

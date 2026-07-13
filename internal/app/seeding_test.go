@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -67,6 +68,258 @@ func (f seedingFixture) confirmedEntry(t *testing.T, name, clubID, seed string) 
 		t.Fatalf("CreateEntry: %v", err)
 	}
 	return rec
+}
+
+// confirmedRelayEntry creates a relay team of legNames athletes in clubID
+// with a confirmed entry in the fixture's event, exercising the
+// entryClubID/entryDisplayName relay branches (seeding.go) that an
+// individual-only fixture never reaches.
+func (f seedingFixture) confirmedRelayEntry(t *testing.T, clubID string, legNames ...string) store.EntryRecord {
+	t.Helper()
+	ctx := context.Background()
+	var legIDs []string
+	for _, name := range legNames {
+		a, err := store.CreateAthlete(ctx, f.st.DB(), domain.Athlete{
+			FirstName: name, LastName: "Runner", BirthYear: 2009, Sex: domain.SexFemale, ClubIDs: []string{clubID},
+		})
+		if err != nil {
+			t.Fatalf("CreateAthlete: %v", err)
+		}
+		legIDs = append(legIDs, a.ID)
+	}
+	team, err := store.CreateRelayTeam(ctx, f.st.DB(), domain.RelayTeam{ClubID: clubID, Composition: legIDs})
+	if err != nil {
+		t.Fatalf("CreateRelayTeam: %v", err)
+	}
+	rec, err := store.CreateEntry(ctx, f.st.DB(), domain.Entry{
+		EventID: f.eventID, RelayTeamID: team.ID, Status: domain.EntryConfirmed,
+	})
+	if err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	return rec
+}
+
+// TestGenerateHeatsWithRelayEntries covers the relay branches of
+// entryClubID/entryDisplayName (seeding.go), which an individual-only
+// fixture never reaches: a relay event's heat sheet resolves each row's
+// display name to "<club> (relay)" and its club to the team's club.
+func TestGenerateHeatsWithRelayEntries(t *testing.T) {
+	f := newSeedingFixture(t, "4x100m")
+	ctx := context.Background()
+	club, err := store.CreateClub(ctx, f.st.DB(), domain.Club{Name: "LC Relay"})
+	if err != nil {
+		t.Fatalf("CreateClub: %v", err)
+	}
+	f.confirmedRelayEntry(t, club.ID, "Leg1", "Leg2", "Leg3", "Leg4")
+	f.confirmedRelayEntry(t, club.ID, "Leg5", "Leg6", "Leg7", "Leg8")
+
+	sheet, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
+		GenerateHeatsRequest{MaxHeatSize: 8})
+	if err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+	if len(sheet.Units) != 1 || len(sheet.Units[0].Rows) != 2 {
+		t.Fatalf("expected a single heat of 2 relay teams, got %+v", sheet.Units)
+	}
+	for _, row := range sheet.Units[0].Rows {
+		if row.ClubName != "LC Relay" {
+			t.Errorf("row.ClubName = %q, want LC Relay", row.ClubName)
+		}
+		if row.AthleteName != "LC Relay (relay)" {
+			t.Errorf("row.AthleteName = %q, want %q", row.AthleteName, "LC Relay (relay)")
+		}
+	}
+
+	// HeatSheetFor (the no-regeneration read path) resolves the same relay
+	// display data through buildHeatSheet.
+	reread, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	if len(reread.Units) != 1 || len(reread.Units[0].Rows) != 2 {
+		t.Fatalf("HeatSheetFor = %+v, want the same 2-row heat", reread.Units)
+	}
+}
+
+// TestPublicHeatSheetsListsOnlySeededEvents covers UC-008's public
+// start-list surface (SYS-070/074): an event whose round has been seeded
+// appears with its heat sheet; an event that exists but has never been
+// seeded is omitted entirely, not shown empty.
+func TestPublicHeatSheetsListsOnlySeededEvents(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	ctx := context.Background()
+	// A second event that is never seeded.
+	if _, err := f.meets.AddEvent(ctx, organizer, f.meetID, AddEventRequest{
+		DisciplineCode: "200m", CategoryCodes: []string{"U18 W"},
+	}); err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+
+	for i := 0; i < 4; i++ {
+		f.confirmedEntry(t, fmt.Sprintf("E%d", i), "", fmt.Sprintf("%d.%02d", 1100+i*5, 0))
+	}
+	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
+		GenerateHeatsRequest{MaxHeatSize: 8}); err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+
+	sheets, err := f.results.PublicHeatSheets(ctx, f.meetID)
+	if err != nil {
+		t.Fatalf("PublicHeatSheets: %v", err)
+	}
+	if len(sheets) != 1 {
+		t.Fatalf("PublicHeatSheets = %+v, want exactly one seeded event", sheets)
+	}
+	if sheets[0].EventID != f.eventID {
+		t.Errorf("seeded event = %q, want %q", sheets[0].EventID, f.eventID)
+	}
+	if len(sheets[0].Rounds) != 1 || len(sheets[0].Rounds[0].Units) != 1 {
+		t.Errorf("Rounds = %+v, want a single seeded round/unit", sheets[0].Rounds)
+	}
+}
+
+// TestGenerateHeatsRejectsUnknownRound and TestHeatSheetForRejectsUnknownRound
+// cover ErrRoundNotFound: a round id that does not belong to the event is
+// rejected rather than silently seeding/returning nothing.
+func TestGenerateHeatsRejectsUnknownRound(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	f.confirmedEntry(t, "Solo", "", "12.00")
+	if _, err := f.results.GenerateHeats(context.Background(), office, f.meetID, f.eventID, "no-such-round",
+		GenerateHeatsRequest{MaxHeatSize: 8}); !errors.Is(err, ErrRoundNotFound) {
+		t.Errorf("GenerateHeats(unknown round) = %v, want ErrRoundNotFound", err)
+	}
+}
+
+func TestHeatSheetForRejectsUnknownRound(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	if _, err := f.results.HeatSheetFor(context.Background(), office, f.meetID, f.eventID, "no-such-round"); !errors.Is(err, ErrRoundNotFound) {
+		t.Errorf("HeatSheetFor(unknown round) = %v, want ErrRoundNotFound", err)
+	}
+}
+
+// TestOverrideAssignmentRequiresOfficeCapability covers the SYS-090
+// least-privilege gate on manual heat/lane edits.
+func TestOverrideAssignmentRequiresOfficeCapability(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	entry := f.confirmedEntry(t, "Solo", "", "12.00")
+	ctx := context.Background()
+	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
+		GenerateHeatsRequest{MaxHeatSize: 8}); err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+	sheet, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	unauthorized := Session{AccountID: "01SUB", Role: RoleEntrySubmitter}
+	var forbidden ErrForbidden
+	if err := f.results.OverrideAssignment(ctx, unauthorized, f.meetID, f.eventID, f.roundID,
+		entry.ID, sheet.Units[0].UnitID, 1, sheet.Units[0].Rows[0].Version); !errors.As(err, &forbidden) {
+		t.Errorf("OverrideAssignment by an entry-submitter = %v, want ErrForbidden", err)
+	}
+}
+
+// TestOverrideAssignmentVersionConflict covers the optimistic-concurrency
+// failure path: overriding with a stale expectedVersion is rejected rather
+// than silently clobbering a concurrent edit.
+func TestOverrideAssignmentVersionConflict(t *testing.T) {
+	f := newSeedingFixture(t, "400m")
+	ctx := context.Background()
+	var entries []store.EntryRecord
+	for i := 0; i < 4; i++ {
+		entries = append(entries, f.confirmedEntry(t, fmt.Sprintf("F%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0)))
+	}
+	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
+		GenerateHeatsRequest{MaxHeatSize: 8, TrackLanes: 8}); err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+	sheet, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	target := sheet.Units[0].Rows[0]
+	staleVersion := target.Version + 1000
+
+	if err := f.results.OverrideAssignment(ctx, office, f.meetID, f.eventID, f.roundID,
+		target.EntryID, sheet.Units[0].UnitID, 2, staleVersion); !errors.Is(err, store.ErrVersionConflict) {
+		t.Errorf("OverrideAssignment with a stale version = %v, want store.ErrVersionConflict", err)
+	}
+}
+
+// TestOverrideAssignmentFirstManualPlacement covers OverrideAssignment's
+// insert branch: an entry that is confirmed for the round but has never
+// been seeded (GenerateHeats was never run) gets a brand-new manual
+// assignment row rather than updating a nonexistent one.
+func TestOverrideAssignmentFirstManualPlacement(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	entry := f.confirmedEntry(t, "Solo", "", "12.00")
+	ctx := context.Background()
+
+	units, err := store.EnsureRoundUnitCount(ctx, f.st.DB(), f.roundID, 1)
+	if err != nil {
+		t.Fatalf("EnsureRoundUnitCount: %v", err)
+	}
+
+	if err := f.results.OverrideAssignment(ctx, office, f.meetID, f.eventID, f.roundID,
+		entry.ID, units[0].ID, 3, 0); err != nil {
+		t.Fatalf("OverrideAssignment (first placement): %v", err)
+	}
+	sheet, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	if len(sheet.Units) != 1 || len(sheet.Units[0].Rows) != 1 {
+		t.Fatalf("sheet = %+v, want exactly the one manually-placed entry", sheet.Units)
+	}
+	row := sheet.Units[0].Rows[0]
+	if row.Lane != 3 || !row.ManualOverride {
+		t.Errorf("row = %+v, want lane 3 with ManualOverride true", row)
+	}
+}
+
+// TestOverrideAssignmentSwapsOccupiedLane covers UC-008 #5's "the operator
+// swaps two athletes": requesting a lane already held by a different entry
+// in the target unit swaps the two lanes instead of failing the unique-lane
+// constraint.
+func TestOverrideAssignmentSwapsOccupiedLane(t *testing.T) {
+	f := newSeedingFixture(t, "400m")
+	ctx := context.Background()
+	var entries []store.EntryRecord
+	for i := 0; i < 4; i++ {
+		entries = append(entries, f.confirmedEntry(t, fmt.Sprintf("G%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0)))
+	}
+	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
+		GenerateHeatsRequest{MaxHeatSize: 8, TrackLanes: 8}); err != nil {
+		t.Fatalf("GenerateHeats: %v", err)
+	}
+	sheet, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	unitID := sheet.Units[0].UnitID
+	rows := sheet.Units[0].Rows
+	mover, occupant := rows[0], rows[1]
+
+	if err := f.results.OverrideAssignment(ctx, office, f.meetID, f.eventID, f.roundID,
+		mover.EntryID, unitID, occupant.Lane, mover.Version); err != nil {
+		t.Fatalf("OverrideAssignment (swap): %v", err)
+	}
+
+	after, err := f.results.HeatSheetFor(ctx, office, f.meetID, f.eventID, f.roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	lanes := map[string]int{}
+	for _, row := range after.Units[0].Rows {
+		lanes[row.EntryID] = row.Lane
+	}
+	if lanes[mover.EntryID] != occupant.Lane {
+		t.Errorf("mover's lane = %d, want the occupant's original lane %d", lanes[mover.EntryID], occupant.Lane)
+	}
+	if lanes[occupant.EntryID] != mover.Lane {
+		t.Errorf("occupant's lane = %d, want the mover's original lane %d", lanes[occupant.EntryID], mover.Lane)
+	}
 }
 
 // TestGenerateHeatsSYS026UC008_1 reproduces UC-008 #1: 21 confirmed 100m

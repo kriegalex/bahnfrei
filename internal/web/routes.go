@@ -279,10 +279,18 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p := basePageData(r, s.cats)
 		p.Title = p.T("auth.login.title")
-		if errors.Is(err, app.ErrInvalidCredentials) {
+		switch {
+		case errors.Is(err, app.ErrInvalidCredentials):
 			p.FlashError = p.T("auth.login.error")
 			w.WriteHeader(http.StatusUnauthorized)
-		} else {
+		case errors.Is(err, app.ErrAccountDisabled):
+			// Correct credentials, but the account was disabled (SYS-091):
+			// distinguishable from ErrInvalidCredentials without disclosing
+			// anything to a guesser, since it only ever surfaces after a
+			// successful password check (see app.ErrAccountDisabled's doc).
+			p.FlashError = p.T("auth.login.disabled")
+			w.WriteHeader(http.StatusForbidden)
+		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		_ = loginPage(p).Render(r.Context(), w)

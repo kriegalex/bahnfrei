@@ -575,6 +575,237 @@ func TestListTimingImportBatchesAndTokens(t *testing.T) {
 	}
 }
 
+// TestImportTimingFileUnknownFormatRejected covers the format guard: neither
+// "lif" nor "csv" is rejected up front, before any row is touched.
+func TestImportTimingFileUnknownFormatRejected(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	_, err := f.results.ImportTimingFile(context.Background(), office, f.meetID, "x.xyz", "xyz", []byte("whatever"))
+	if err == nil || !strings.Contains(err.Error(), "unknown timing import format") {
+		t.Fatalf("err = %v, want an unknown-format error", err)
+	}
+}
+
+// TestImportTimingFileMalformedLIFRejected covers a .lif payload that is not
+// even valid line-oriented CSV (an unterminated quoted field) — a genuine
+// "the timing PC wrote a corrupt file" case, surfaced as a parse error, not a
+// panic or a silently-empty import.
+func TestImportTimingFileMalformedLIFRejected(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	data := []byte(`1,1,1,"unterminated`)
+	_, err := f.results.ImportTimingFile(context.Background(), office, f.meetID, "bad.lif", "lif", data)
+	if err == nil || !strings.Contains(err.Error(), `parse .lif file "bad.lif"`) {
+		t.Fatalf("err = %v, want a parse .lif file error", err)
+	}
+}
+
+// TestImportTimingFileMalformedCSVRejected covers a generic-CSV file whose
+// header line itself cannot be parsed (SYS-062 requires the exact documented
+// schema, and a corrupt header must fail loudly rather than misread columns).
+func TestImportTimingFileMalformedCSVRejected(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	data := []byte(`"unterminated`)
+	_, err := f.results.ImportTimingFile(context.Background(), office, f.meetID, "bad.csv", "csv", data)
+	if err == nil || !strings.Contains(err.Error(), `parse generic CSV file "bad.csv"`) {
+		t.Fatalf("err = %v, want a parse generic CSV file error", err)
+	}
+}
+
+// TestTimingExchangeUnknownMeetRejected covers the "meet must exist" guard
+// shared by every timing-exchange entry point: an unknown meetID is rejected
+// as store.ErrNotFound, not treated as an empty meet.
+func TestTimingExchangeUnknownMeetRejected(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	const ghostMeet = "no-such-meet"
+
+	if _, _, _, err := f.results.ExportTimingFiles(ctx, office, ghostMeet); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("ExportTimingFiles: err = %v, want store.ErrNotFound", err)
+	}
+	if _, err := f.results.ImportTimingFile(ctx, office, ghostMeet, "x.lif", "lif", f.lifFor(t, "1", "12.00")); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("ImportTimingFile: err = %v, want store.ErrNotFound", err)
+	}
+	if _, _, err := f.results.CreateTimingAgentToken(ctx, office, ghostMeet, "PC A"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("CreateTimingAgentToken: err = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestImportLIFMalformedMarkFails covers a real device-data failure: an
+// unparseable FAT mark (SYS-040's 0.01s-resolution encoding rejects it, not a
+// silent zero or a panic).
+func TestImportLIFMalformedMarkFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	data := f.lifFor(t, "1", "not-a-time")
+	_, err := f.results.ImportTimingFile(context.Background(), office, f.meetID, "bad-mark.lif", "lif", data)
+	if err == nil {
+		t.Fatal("expected an error importing an unparseable FAT mark")
+	}
+}
+
+// TestImportCSVMarkWithoutTimingMethodFails covers SYS-041's "a timing method
+// is required for a time": a generic-CSV row that carries a mark but neither
+// "manual" nor "electronic" in its timing column is rejected, not silently
+// guessed.
+func TestImportCSVMarkWithoutTimingMethodFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	_, _, evt, err := f.results.ExportTimingFiles(context.Background(), office, f.meetID)
+	if err != nil {
+		t.Fatalf("ExportTimingFiles: %v", err)
+	}
+	events, err := exchange.ParseEVT(evt)
+	if err != nil || len(events) == 0 {
+		t.Fatalf("ParseEVT: %v", err)
+	}
+	n := events[0]
+	rows := []exchange.GenericRow{{
+		EventNumber: n.Number, Round: n.Round, Heat: n.Heat, Bib: f.bibs[0], Lane: f.laneOf(t, f.athletes[0]),
+		Mark: "12.5", // Timing left blank
+	}}
+	data := exchange.EncodeCSV(rows)
+	_, err = f.results.ImportTimingFile(context.Background(), office, f.meetID, "no-timing.csv", "csv", data)
+	if err == nil || !strings.Contains(err.Error(), "timing method is required") {
+		t.Fatalf("err = %v, want the SYS-041 timing-method-required error", err)
+	}
+}
+
+// TestResolveTimingConflictUnknownConflictFails covers the not-found guard on
+// the conflict id itself.
+func TestResolveTimingConflictUnknownConflictFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	err := f.results.ResolveTimingConflict(context.Background(), office, f.meetID, "no-such-conflict", ResolveTimingConflictInput{Action: "discard"})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("err = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestResolveTimingConflictWrongMeetFails covers the cross-meet guard: a
+// conflict id that is real, but scoped to a different meet than the one the
+// request names, is rejected rather than resolved against the wrong meet.
+func TestResolveTimingConflictWrongMeetFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	_, _, evt, err := f.results.ExportTimingFiles(ctx, office, f.meetID)
+	if err != nil {
+		t.Fatalf("ExportTimingFiles: %v", err)
+	}
+	events, err := exchange.ParseEVT(evt)
+	if err != nil || len(events) == 0 {
+		t.Fatalf("ParseEVT: %v", err)
+	}
+	ev := events[0]
+	ev.Competitors = []exchange.CompetitorRow{{Place: "1", ID: "999999", Lane: 1, Time: "12.00"}}
+	data := exchange.EncodeLIF(ev)
+	if _, err := f.results.ImportTimingFile(ctx, office, f.meetID, "test.lif", "lif", data); err != nil {
+		t.Fatalf("ImportTimingFile: %v", err)
+	}
+	conflicts, err := f.results.ListTimingImportConflicts(ctx, office, f.meetID)
+	if err != nil || len(conflicts) != 1 {
+		t.Fatalf("conflicts = %+v (err %v)", conflicts, err)
+	}
+
+	err = f.results.ResolveTimingConflict(ctx, office, "a-different-meet", conflicts[0].ID, ResolveTimingConflictInput{Action: "discard"})
+	if err == nil || !strings.Contains(err.Error(), "does not belong to meet") {
+		t.Fatalf("err = %v, want a does-not-belong-to-meet error", err)
+	}
+}
+
+// TestResolveTimingConflictUnknownActionFails covers the action-vocabulary
+// guard: anything other than keep/discard/replace/merge is rejected.
+func TestResolveTimingConflictUnknownActionFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	data := f.lifFor(t, "1", "12.34")
+	save(t, f.results, f.meetID, ResultInput{DisciplineCode: "100m", AthleteID: f.athletes[0], Mark: "13.0", Timing: domain.TimingManual})
+	if _, err := f.results.ImportTimingFile(ctx, office, f.meetID, "test.lif", "lif", data); err != nil {
+		t.Fatalf("ImportTimingFile: %v", err)
+	}
+	conflicts, err := f.results.ListTimingImportConflicts(ctx, office, f.meetID)
+	if err != nil || len(conflicts) != 1 {
+		t.Fatalf("conflicts = %+v (err %v)", conflicts, err)
+	}
+	err = f.results.ResolveTimingConflict(ctx, office, f.meetID, conflicts[0].ID, ResolveTimingConflictInput{Action: "bogus"})
+	if err == nil || !strings.Contains(err.Error(), "unknown resolution action") {
+		t.Fatalf("err = %v, want an unknown-resolution-action error", err)
+	}
+}
+
+// TestResolveTimingConflictMergeFillsBlanksOnly covers the "merge" action
+// (never exercised by the existing keep/replace-only tests): an existing
+// DNS status with no mark, merged with an imported row that carries a mark
+// but no status, keeps the DNS (existing.Status wins) and the mark from the
+// import fills the previously-blank field — but since the merged row still
+// carries a non-none status, applyTimingRow never stores the mark (a DQ/DNS
+// carries no time), so the final result is DNS with no mark, not a mix of
+// both.
+func TestResolveTimingConflictMergeFillsBlanksOnly(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	save(t, f.results, f.meetID, ResultInput{DisciplineCode: "100m", AthleteID: f.athletes[0], Status: domain.StatusDNS})
+	data := f.lifFor(t, "1", "12.34")
+	if _, err := f.results.ImportTimingFile(ctx, office, f.meetID, "test.lif", "lif", data); err != nil {
+		t.Fatalf("ImportTimingFile: %v", err)
+	}
+	conflicts, err := f.results.ListTimingImportConflicts(ctx, office, f.meetID)
+	if err != nil || len(conflicts) != 1 || conflicts[0].Reason != "existing_manual_result" {
+		t.Fatalf("conflicts = %+v (err %v), want one existing_manual_result conflict", conflicts, err)
+	}
+
+	if err := f.results.ResolveTimingConflict(ctx, office, f.meetID, conflicts[0].ID, ResolveTimingConflictInput{Action: "merge"}); err != nil {
+		t.Fatalf("ResolveTimingConflict(merge): %v", err)
+	}
+	rec, err := store.GetResult(ctx, f.st.DB(), f.unitID, f.athletes[0])
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if rec.Status != domain.StatusDNS || rec.Mark != "" {
+		t.Fatalf("merged result = %+v, want DNS preserved with no mark", rec)
+	}
+}
+
+// TestRevokeTimingAgentTokenUnknownFails covers the not-found guard on the
+// token id.
+func TestRevokeTimingAgentTokenUnknownFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	if err := f.results.RevokeTimingAgentToken(context.Background(), office, f.meetID, "no-such-token"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("err = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestRevokeTimingAgentTokenWrongMeetFails covers the cross-meet guard: a
+// real token id scoped to a different meet than the request names.
+func TestRevokeTimingAgentTokenWrongMeetFails(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	_, tokenID, err := f.results.CreateTimingAgentToken(ctx, office, f.meetID, "PC A")
+	if err != nil {
+		t.Fatalf("CreateTimingAgentToken: %v", err)
+	}
+	err = f.results.RevokeTimingAgentToken(ctx, office, "a-different-meet", tokenID)
+	if err == nil || !strings.Contains(err.Error(), "does not belong to meet") {
+		t.Fatalf("err = %v, want a does-not-belong-to-meet error", err)
+	}
+}
+
+// TestListTimingImportHistoryRequiresOfficeCapability covers the office-only
+// gate on the read-only history/management views and on revocation, which
+// TestImportTimingFileRequiresOfficeCapability does not already cover.
+func TestListTimingImportHistoryRequiresOfficeCapability(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	var forbidden ErrForbidden
+	if _, err := f.results.ListTimingImportBatches(ctx, fieldOfficial, f.meetID); !errors.As(err, &forbidden) {
+		t.Errorf("ListTimingImportBatches: err = %v, want ErrForbidden", err)
+	}
+	if _, err := f.results.ListTimingImportConflicts(ctx, fieldOfficial, f.meetID); !errors.As(err, &forbidden) {
+		t.Errorf("ListTimingImportConflicts: err = %v, want ErrForbidden", err)
+	}
+	if _, err := f.results.ListTimingAgentTokens(ctx, fieldOfficial, f.meetID); !errors.As(err, &forbidden) {
+		t.Errorf("ListTimingAgentTokens: err = %v, want ErrForbidden", err)
+	}
+	if err := f.results.RevokeTimingAgentToken(ctx, fieldOfficial, f.meetID, "whatever"); !errors.As(err, &forbidden) {
+		t.Errorf("RevokeTimingAgentToken: err = %v, want ErrForbidden", err)
+	}
+}
+
 // TestImportGenericCSVManualTimingAndUnmappedStatus exercises the CSV
 // ingest branches a plain export/re-import round trip does not: an
 // explicit manual-timing mark, and a status string with no CR 25

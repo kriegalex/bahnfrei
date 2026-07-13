@@ -139,6 +139,121 @@ func TestOnlineEntryIndividualSYS011UC003_1(t *testing.T) {
 	}
 }
 
+// TestSubmitIndividualEntryValidatesAthleteInputSYS010 covers createAthlete's
+// input validation (SYS-010): a missing name, a missing/invalid birth year
+// and an invalid sex value are all rejected before anything is persisted.
+func TestSubmitIndividualEntryValidatesAthleteInputSYS010(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	base := IndividualEntryInput{EventID: f.eventID, FirstName: "Anna", LastName: "Muster", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50"}
+
+	t.Run("empty first name", func(t *testing.T) {
+		in := base
+		in.FirstName = "  "
+		if _, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, in); err == nil {
+			t.Error("expected an error for a blank first name")
+		}
+	})
+	t.Run("empty last name", func(t *testing.T) {
+		in := base
+		in.LastName = ""
+		if _, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, in); err == nil {
+			t.Error("expected an error for a blank last name")
+		}
+	})
+	t.Run("missing birth year", func(t *testing.T) {
+		in := base
+		in.BirthYear = 0
+		if _, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, in); err == nil {
+			t.Error("expected an error for a missing birth year")
+		}
+	})
+	t.Run("invalid sex", func(t *testing.T) {
+		in := base
+		in.Sex = domain.Sex("X")
+		if _, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, in); err == nil {
+			t.Error("expected an error for an invalid sex value")
+		}
+	})
+}
+
+// TestSubmitIndividualEntryUnknownMeet covers the not-found path: a meetID
+// that does not exist is refused rather than silently creating orphaned
+// data.
+func TestSubmitIndividualEntryUnknownMeet(t *testing.T) {
+	f := newEntryFixture(t)
+	if _, err := f.results.SubmitIndividualEntry(context.Background(), entrySubmitter, "no-such-meet", IndividualEntryInput{
+		EventID: f.eventID, FirstName: "Anna", LastName: "Muster", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+	}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("SubmitIndividualEntry(unknown meet) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestSubmitIndividualEntryRejectsEventFromDifferentMeet covers UC-003 #3's
+// request-forgery angle from a different direction than the deadline test:
+// an eventID that is real but belongs to a different meet must not be
+// usable to enter athletes into this meet.
+func TestSubmitIndividualEntryRejectsEventFromDifferentMeet(t *testing.T) {
+	f := newEntryFixture(t)
+	other := newEntryFixture(t)
+	if _, err := f.results.SubmitIndividualEntry(context.Background(), entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: other.eventID, FirstName: "Anna", LastName: "Muster", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+	}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("SubmitIndividualEntry with another meet's event = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestSubmitIndividualEntryRejectedWhenMeetNotPublished covers
+// validateEntryEvent's meet-status gate: a draft meet (never published)
+// refuses entries server-side even given a real event id.
+func TestSubmitIndividualEntryRejectedWhenMeetNotPublished(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	draft, err := meets.CreateMeet(ctx, organizer, ucMeetRequest())
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	ev, err := meets.AddEvent(ctx, organizer, draft.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"U16 W"},
+	})
+	if err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	if _, err := results.SubmitIndividualEntry(ctx, entrySubmitter, draft.ID, IndividualEntryInput{
+		EventID: ev.ID, FirstName: "Anna", LastName: "Muster", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+	}); !errors.Is(err, ErrEntriesClosed) {
+		t.Errorf("SubmitIndividualEntry on a draft meet = %v, want ErrEntriesClosed", err)
+	}
+}
+
+// TestSubmitIndividualEntryRejectedWhenEventClosed covers the event-status
+// (as opposed to meet-status or deadline) gate: an event explicitly closed
+// by the office is excluded from OpenEntryEvents and refuses a direct
+// SubmitIndividualEntry call naming it.
+func TestSubmitIndividualEntryRejectedWhenEventClosed(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	closedEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "200m", CategoryCodes: []string{"U16 W"}})
+	if _, err := f.st.DB().ExecContext(ctx, `UPDATE events SET status = 'closed' WHERE id = ?`, closedEventID); err != nil {
+		t.Fatalf("close event: %v", err)
+	}
+
+	opts, err := f.results.OpenEntryEvents(ctx, f.meetID)
+	if err != nil {
+		t.Fatalf("OpenEntryEvents: %v", err)
+	}
+	for _, o := range opts {
+		if o.EventID == closedEventID {
+			t.Fatal("OpenEntryEvents must not offer a closed event")
+		}
+	}
+	if _, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: closedEventID, FirstName: "Anna", LastName: "Muster", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "27.00",
+	}); !errors.Is(err, ErrEntriesClosed) {
+		t.Errorf("SubmitIndividualEntry on a closed event = %v, want ErrEntriesClosed", err)
+	}
+}
+
 // TestOnlineEntryClubBulkSYS011UC003_2 covers UC-003 #2: a club submitter
 // enters 15 athletes across 6 events in one bulk operation, and all 15
 // entries exist afterwards.
@@ -235,6 +350,38 @@ func TestOnlineEntryDeadlinePassedRejectedSYS011UC003_3(t *testing.T) {
 	}
 }
 
+// TestSubmitClubBulkEntriesDenialPaths covers SubmitClubBulkEntries' input
+// guards: an under-privileged actor, a missing club, an empty line list and
+// an unknown meet are all refused before any entry is written.
+func TestSubmitClubBulkEntriesDenialPaths(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	validLine := BulkEntryLine{FirstName: "A", LastName: "One", BirthYear: 2011, Sex: domain.SexFemale, EventID: f.eventID, SeedPerformance: "13.50"}
+
+	t.Run("requires role", func(t *testing.T) {
+		public := Session{Role: RolePublic}
+		var forbidden ErrForbidden
+		if _, err := f.results.SubmitClubBulkEntries(ctx, public, f.meetID, BulkEntryInput{Club: "LC Bulk", Lines: []BulkEntryLine{validLine}}); !errors.As(err, &forbidden) {
+			t.Errorf("SubmitClubBulkEntries by public = %v, want ErrForbidden", err)
+		}
+	})
+	t.Run("requires a club", func(t *testing.T) {
+		if _, err := f.results.SubmitClubBulkEntries(ctx, entrySubmitter, f.meetID, BulkEntryInput{Lines: []BulkEntryLine{validLine}}); err == nil {
+			t.Error("expected an error for a missing club")
+		}
+	})
+	t.Run("requires at least one line", func(t *testing.T) {
+		if _, err := f.results.SubmitClubBulkEntries(ctx, entrySubmitter, f.meetID, BulkEntryInput{Club: "LC Bulk"}); err == nil {
+			t.Error("expected an error for an empty line list")
+		}
+	})
+	t.Run("unknown meet", func(t *testing.T) {
+		if _, err := f.results.SubmitClubBulkEntries(ctx, entrySubmitter, "no-such-meet", BulkEntryInput{Club: "LC Bulk", Lines: []BulkEntryLine{validLine}}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("SubmitClubBulkEntries(unknown meet) = %v, want store.ErrNotFound", err)
+		}
+	})
+}
+
 // TestOnlineEntryRelaySYS012UC003_4 covers UC-003 #4: a club enters a team
 // of 4 named athletes in order plus 2 reserves; the ordered composition is
 // stored and can be revised before the deadline, but rejected after it.
@@ -304,6 +451,106 @@ func TestOnlineEntryRelaySYS012UC003_4(t *testing.T) {
 }
 
 func timePtr(t time.Time) *time.Time { return &t }
+
+// TestSubmitRelayEntryDenialPaths covers SubmitRelayEntry's input guards: an
+// under-privileged actor, a missing club, an empty composition and an
+// unknown meet are all refused.
+func TestSubmitRelayEntryDenialPaths(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	relayEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "4x100m", CategoryCodes: []string{"U16 W"}})
+	leg := RelayLegInput{FirstName: "L", LastName: "Runner", BirthYear: 2011, Sex: domain.SexFemale}
+
+	t.Run("requires role", func(t *testing.T) {
+		public := Session{Role: RolePublic}
+		var forbidden ErrForbidden
+		if _, err := f.results.SubmitRelayEntry(ctx, public, f.meetID, RelayEntryInput{EventID: relayEventID, Club: "LC Relay", Composition: []RelayLegInput{leg}}); !errors.As(err, &forbidden) {
+			t.Errorf("SubmitRelayEntry by public = %v, want ErrForbidden", err)
+		}
+	})
+	t.Run("requires a club", func(t *testing.T) {
+		if _, err := f.results.SubmitRelayEntry(ctx, entrySubmitter, f.meetID, RelayEntryInput{EventID: relayEventID, Composition: []RelayLegInput{leg}}); err == nil {
+			t.Error("expected an error for a missing club")
+		}
+	})
+	t.Run("requires a non-empty composition", func(t *testing.T) {
+		if _, err := f.results.SubmitRelayEntry(ctx, entrySubmitter, f.meetID, RelayEntryInput{EventID: relayEventID, Club: "LC Relay"}); err == nil {
+			t.Error("expected an error for an empty composition")
+		}
+	})
+	t.Run("unknown meet", func(t *testing.T) {
+		if _, err := f.results.SubmitRelayEntry(ctx, entrySubmitter, "no-such-meet", RelayEntryInput{EventID: relayEventID, Club: "LC Relay", Composition: []RelayLegInput{leg}}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("SubmitRelayEntry(unknown meet) = %v, want store.ErrNotFound", err)
+		}
+	})
+}
+
+// TestUpdateRelayCompositionDenialPaths covers UpdateRelayComposition's
+// guards beyond the deadline check already covered by
+// TestOnlineEntryRelaySYS012UC003_4: an under-privileged actor, an empty
+// composition, a non-relay entry, an unknown entry id, an entry belonging to
+// a different meet, and a stale optimistic-concurrency version.
+func TestUpdateRelayCompositionDenialPaths(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	relayEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "4x100m", CategoryCodes: []string{"U16 W"}})
+	leg := func(first string) RelayLegInput {
+		return RelayLegInput{FirstName: first, LastName: "Runner", BirthYear: 2011, Sex: domain.SexFemale}
+	}
+	detail, err := f.results.SubmitRelayEntry(ctx, entrySubmitter, f.meetID, RelayEntryInput{
+		EventID: relayEventID, Club: "LC Relay",
+		Composition: []RelayLegInput{leg("A"), leg("B"), leg("C"), leg("D")},
+	})
+	if err != nil {
+		t.Fatalf("SubmitRelayEntry: %v", err)
+	}
+
+	t.Run("requires role", func(t *testing.T) {
+		public := Session{Role: RolePublic}
+		var forbidden ErrForbidden
+		if _, err := f.results.UpdateRelayComposition(ctx, public, f.meetID, detail.ID, detail.RelayTeam.Version,
+			[]RelayLegInput{leg("X")}, nil); !errors.As(err, &forbidden) {
+			t.Errorf("UpdateRelayComposition by public = %v, want ErrForbidden", err)
+		}
+	})
+	t.Run("requires a non-empty composition", func(t *testing.T) {
+		if _, err := f.results.UpdateRelayComposition(ctx, entrySubmitter, f.meetID, detail.ID, detail.RelayTeam.Version,
+			nil, nil); err == nil {
+			t.Error("expected an error for an empty composition")
+		}
+	})
+	t.Run("unknown entry id", func(t *testing.T) {
+		if _, err := f.results.UpdateRelayComposition(ctx, entrySubmitter, f.meetID, "no-such-entry", 1,
+			[]RelayLegInput{leg("X")}, nil); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("UpdateRelayComposition(unknown entry) = %v, want store.ErrNotFound", err)
+		}
+	})
+	t.Run("non-relay entry", func(t *testing.T) {
+		individual, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+			EventID: f.eventID, FirstName: "Solo", LastName: "Runner", BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+		})
+		if err != nil {
+			t.Fatalf("SubmitIndividualEntry: %v", err)
+		}
+		if _, err := f.results.UpdateRelayComposition(ctx, entrySubmitter, f.meetID, individual.ID, individual.Version,
+			[]RelayLegInput{leg("X")}, nil); !errors.Is(err, ErrNotRelayEntry) {
+			t.Errorf("UpdateRelayComposition on an individual entry = %v, want ErrNotRelayEntry", err)
+		}
+	})
+	t.Run("entry belongs to a different meet", func(t *testing.T) {
+		other := newEntryFixture(t)
+		if _, err := f.results.UpdateRelayComposition(ctx, entrySubmitter, other.meetID, detail.ID, detail.RelayTeam.Version,
+			[]RelayLegInput{leg("X")}, nil); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("UpdateRelayComposition against the wrong meet = %v, want store.ErrNotFound", err)
+		}
+	})
+	t.Run("stale version is an optimistic-concurrency conflict", func(t *testing.T) {
+		if _, err := f.results.UpdateRelayComposition(ctx, entrySubmitter, f.meetID, detail.ID, detail.RelayTeam.Version+999,
+			[]RelayLegInput{leg("X"), leg("Y"), leg("Z"), leg("W")}, nil); !errors.Is(err, store.ErrVersionConflict) {
+			t.Errorf("UpdateRelayComposition with a stale version = %v, want store.ErrVersionConflict", err)
+		}
+	})
+}
 
 // TestOnlineEntryFailsStandardSYS015UC003_5 is the UC-003 #5 fixture: an
 // event with entry standard "12.20" (100 m) marks a "12.85" seed as failing
@@ -379,6 +626,83 @@ func TestSubmitEntryRequiresRoleSYS011(t *testing.T) {
 	}
 }
 
+// TestMyEntriesUnknownMeet and TestEntryExceptionsUnknownMeet cover the
+// not-found lookup path both read surfaces share; TestEntryExceptionsRequiresOfficeCapability
+// covers the SYS-090 least-privilege gate that distinguishes EntryExceptions
+// (office-only) from MyEntries (any submitter, over their own entries).
+func TestMyEntriesUnknownMeet(t *testing.T) {
+	f := newEntryFixture(t)
+	if _, err := f.results.MyEntries(context.Background(), entrySubmitter, "no-such-meet"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("MyEntries(unknown meet) = %v, want store.ErrNotFound", err)
+	}
+}
+
+func TestEntryExceptionsUnknownMeet(t *testing.T) {
+	f := newEntryFixture(t)
+	if _, err := f.results.EntryExceptions(context.Background(), office, "no-such-meet"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("EntryExceptions(unknown meet) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestMyEntriesIncludesRelayEntry covers enrichEntries' relay branch, which
+// the individual-only entry fixtures never reach: a submitted relay entry
+// shows up in MyEntries with its team composition/reserve names, club and
+// relay fee resolved.
+func TestMyEntriesIncludesRelayEntry(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	relayEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "4x100m", CategoryCodes: []string{"U16 W"}})
+	leg := func(first string) RelayLegInput {
+		return RelayLegInput{FirstName: first, LastName: "Runner", BirthYear: 2011, Sex: domain.SexFemale}
+	}
+	submitted, err := f.results.SubmitRelayEntry(ctx, entrySubmitter, f.meetID, RelayEntryInput{
+		EventID: relayEventID, Club: "LC Relay",
+		Composition: []RelayLegInput{leg("A"), leg("B"), leg("C"), leg("D")},
+		Reserves:    []RelayLegInput{leg("E")},
+	})
+	if err != nil {
+		t.Fatalf("SubmitRelayEntry: %v", err)
+	}
+
+	mine, err := f.results.MyEntries(ctx, entrySubmitter, f.meetID)
+	if err != nil {
+		t.Fatalf("MyEntries: %v", err)
+	}
+	if len(mine) != 1 || mine[0].ID != submitted.ID {
+		t.Fatalf("MyEntries = %+v, want exactly the submitted relay entry", mine)
+	}
+	got := mine[0]
+	if got.ClubName != "LC Relay" {
+		t.Errorf("ClubName = %q, want LC Relay", got.ClubName)
+	}
+	if got.RelayTeam == nil || len(got.RelayTeam.Composition) != 4 || len(got.RelayTeam.Reserves) != 1 {
+		t.Fatalf("RelayTeam = %+v, want 4 composition + 1 reserve names resolved", got.RelayTeam)
+	}
+	if got.RelayTeam.Composition[0] != "A Runner" {
+		t.Errorf("Composition[0] = %q, want %q", got.RelayTeam.Composition[0], "A Runner")
+	}
+
+	// Same relay-branch enrichment through the office-only EntryExceptions
+	// surface (only reached if the relay entry also fails standard — relay
+	// entries never carry FailsStandard, so it must be empty here, exercising
+	// the "no failing entries" early-return alongside individual coverage).
+	exceptions, err := f.results.EntryExceptions(ctx, office, f.meetID)
+	if err != nil {
+		t.Fatalf("EntryExceptions: %v", err)
+	}
+	if len(exceptions) != 0 {
+		t.Errorf("EntryExceptions = %+v, want none (relay entries never fail a seed standard)", exceptions)
+	}
+}
+
+func TestEntryExceptionsRequiresOfficeCapability(t *testing.T) {
+	f := newEntryFixture(t)
+	var forbidden ErrForbidden
+	if _, err := f.results.EntryExceptions(context.Background(), entrySubmitter, f.meetID); !errors.As(err, &forbidden) {
+		t.Errorf("EntryExceptions by an entry-submitter = %v, want ErrForbidden", err)
+	}
+}
+
 // TestBibAssignmentSYS018UC006_1 covers UC-006 #1: bibs assigned from a
 // starting number per club give every athlete exactly one unique bib.
 func TestBibAssignmentSYS018UC006_1(t *testing.T) {
@@ -450,6 +774,44 @@ func TestBibAssignmentDuplicateRejectedSYS018UC006_2(t *testing.T) {
 	if err := f.results.AssignBib(ctx, organizer, f.meetID, p2.ID, p2.Version, ""); !errors.Is(err, ErrBibRequired) {
 		t.Errorf("empty bib = %v, want ErrBibRequired", err)
 	}
+}
+
+// TestAssignBibUnknownParticipant covers the not-found lookup path: a
+// participantID that does not exist is refused rather than silently
+// creating a dangling bib assignment.
+func TestAssignBibUnknownParticipant(t *testing.T) {
+	f := newEntryFixture(t)
+	if err := f.results.AssignBib(context.Background(), organizer, f.meetID, "no-such-participant", 1, "42"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("AssignBib(unknown participant) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestBulkAssignBibsByClubDenialAndEdgePaths covers checkEntryLimit-adjacent
+// input guards on the bulk bib flow: a non-positive starting number is
+// rejected, and a club with no unbibbed participants assigns zero bibs
+// (not an error).
+func TestBulkAssignBibsByClubDenialAndEdgePaths(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	t.Run("requires a positive starting number", func(t *testing.T) {
+		if _, err := f.results.BulkAssignBibsByClub(ctx, organizer, f.meetID, "any-club", 0); err == nil {
+			t.Error("expected an error for a non-positive starting bib number")
+		}
+	})
+	t.Run("no unbibbed participants in the club: zero assigned, no error", func(t *testing.T) {
+		club, err := store.CreateClub(ctx, f.st.DB(), domain.Club{Name: "LC Empty"})
+		if err != nil {
+			t.Fatalf("CreateClub: %v", err)
+		}
+		n, err := f.results.BulkAssignBibsByClub(ctx, organizer, f.meetID, club.ID, 100)
+		if err != nil {
+			t.Fatalf("BulkAssignBibsByClub: %v", err)
+		}
+		if n != 0 {
+			t.Errorf("assigned = %d, want 0 for a club with no participants", n)
+		}
+	})
 }
 
 // TestFeeSummarySYS017UC006_3 covers UC-006 #3: per-club totals equal the

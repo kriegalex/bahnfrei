@@ -29,6 +29,7 @@
   "audit.empty": "Aucune action privilégiée consignée.",
   "audit.title": "Journal d'audit",
   "auth.logged_in_as": "Connecté en tant que {name}",
+  "auth.login.disabled": "Ce compte a été désactivé.",
   "auth.login.error": "Nom d'utilisateur ou mot de passe invalide.",
   "auth.login.password": "Mot de passe",
   "auth.login.submit": "Se connecter",

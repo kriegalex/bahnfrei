@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +175,100 @@ func TestExportAthleteDataSYS101UC024_1(t *testing.T) {
 	t.Run("deny: unknown athlete id", func(t *testing.T) {
 		if _, err := privacy.ExportAthleteData(ctx, office, "does-not-exist"); err == nil {
 			t.Fatal("expected an error for an unknown athlete id")
+		}
+	})
+}
+
+// TestExportAthleteDataIncludesClubsAndBirthDate covers two fields the
+// UC-024 #1 export shape carries but the roster-registration fixture never
+// exercises: the athlete's resolved club name(s) and a full birth date
+// (SYS-010's optional richer identity data, formatted YYYY-MM-DD).
+func TestExportAthleteDataIncludesClubsAndBirthDate(t *testing.T) {
+	_, _, st := newTestResults(t)
+	privacy := NewPrivacyService(st.DB())
+	ctx := context.Background()
+
+	club, err := store.CreateClub(ctx, st.DB(), domain.Club{Name: "LC Export"})
+	if err != nil {
+		t.Fatalf("CreateClub: %v", err)
+	}
+	birth := time.Date(1998, 5, 17, 0, 0, 0, 0, time.UTC)
+	a, err := store.CreateAthlete(ctx, st.DB(), domain.Athlete{
+		FirstName: "Cara", LastName: "Club", BirthYear: 1998, BirthDate: &birth,
+		Sex: domain.SexFemale, ClubIDs: []string{club.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateAthlete: %v", err)
+	}
+
+	export, err := privacy.ExportAthleteData(ctx, office, a.ID)
+	if err != nil {
+		t.Fatalf("ExportAthleteData: %v", err)
+	}
+	if len(export.Clubs) != 1 || export.Clubs[0] != "LC Export" {
+		t.Errorf("Clubs = %v, want [LC Export]", export.Clubs)
+	}
+	if export.BirthDate != "1998-05-17" {
+		t.Errorf("BirthDate = %q, want 1998-05-17", export.BirthDate)
+	}
+}
+
+// TestEraseAthleteUnknownAthlete covers the not-found lookup path: erasing
+// an athlete id that does not exist is refused, not silently a no-op.
+func TestEraseAthleteUnknownAthlete(t *testing.T) {
+	_, _, st := newTestResults(t)
+	privacy := NewPrivacyService(st.DB())
+	ctx := context.Background()
+
+	if err := privacy.EraseAthlete(ctx, office, "does-not-exist", "test"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("EraseAthlete(unknown athlete) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestExportAthleteDataUnknownAthleteReturnsNotFound double-checks
+// ExportAthleteData's own not-found path returns the store sentinel
+// specifically (not just "any error"), since that is what web handlers
+// switch on to render 404 vs 500.
+func TestExportAthleteDataUnknownAthleteReturnsNotFound(t *testing.T) {
+	_, _, st := newTestResults(t)
+	privacy := NewPrivacyService(st.DB())
+	ctx := context.Background()
+
+	if _, err := privacy.ExportAthleteData(ctx, office, "does-not-exist"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("ExportAthleteData(unknown athlete) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestPurgeExpiredDefaultsInvalidRetentionDays covers the "bad input"
+// guard in purge(): a non-positive retentionDays argument (0, or a caller
+// passing a negative number by mistake) falls back to DefaultRetentionDays
+// rather than computing a nonsensical cutoff (e.g. in the future, or
+// purging everything).
+func TestPurgeExpiredDefaultsInvalidRetentionDays(t *testing.T) {
+	_, _, st := newTestResults(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	privacy := NewPrivacyService(st.DB()).WithClock(func() time.Time { return now })
+
+	wantCutoff := now.AddDate(0, 0, -DefaultRetentionDays)
+
+	t.Run("zero falls back to the default", func(t *testing.T) {
+		report, err := privacy.PurgeExpired(ctx, admin, 0)
+		if err != nil {
+			t.Fatalf("PurgeExpired(0): %v", err)
+		}
+		if !report.Cutoff.Equal(wantCutoff) {
+			t.Errorf("Cutoff = %v, want %v (the DefaultRetentionDays fallback)", report.Cutoff, wantCutoff)
+		}
+	})
+
+	t.Run("negative also falls back to the default", func(t *testing.T) {
+		report, err := privacy.PurgeExpired(ctx, admin, -30)
+		if err != nil {
+			t.Fatalf("PurgeExpired(-30): %v", err)
+		}
+		if !report.Cutoff.Equal(wantCutoff) {
+			t.Errorf("Cutoff = %v, want %v (the DefaultRetentionDays fallback)", report.Cutoff, wantCutoff)
 		}
 	})
 }

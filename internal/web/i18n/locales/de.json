@@ -29,6 +29,7 @@
   "audit.empty": "Keine protokollierten privilegierten Aktionen.",
   "audit.title": "Audit-Protokoll",
   "auth.logged_in_as": "Angemeldet als {name}",
+  "auth.login.disabled": "Dieses Konto wurde deaktiviert.",
   "auth.login.error": "Benutzername oder Passwort ungültig.",
   "auth.login.password": "Passwort",
   "auth.login.submit": "Anmelden",

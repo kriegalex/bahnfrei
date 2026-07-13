@@ -29,6 +29,7 @@
   "audit.empty": "[Kéíné prótókóllíértén prívílégíértén Áktíónén. ~~~]",
   "audit.title": "[Áúdít-Prótókóll ~~~]",
   "auth.logged_in_as": "[Ángéméldét áls {name} ~~~]",
+  "auth.login.disabled": "[Díésés Kóntó wúrdé déáktívíért. ~~~]",
   "auth.login.error": "[Bénútzérnámé ódér Pásswórt úngültíg. ~~~]",
   "auth.login.password": "[Pásswórt ~~~]",
   "auth.login.submit": "[Ánméldén ~~~]",

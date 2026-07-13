@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 )
@@ -40,6 +41,78 @@ func TestAssignTimingUnitNumbersIsIdempotentSYS060(t *testing.T) {
 	}
 	if got.EventNumber != 1 || got.RoundNumber != 1 || got.HeatNumber != 1 {
 		t.Fatalf("got %+v, want 1/1/1", got)
+	}
+}
+
+// TestListRoundUnitsReturnsScheduleSYS060 covers ListRoundUnits' scheduled/
+// unscheduled decode branches (0018_timing_exchange.sql's numbering reuses
+// this same ordering): a unit UpdateUnitSchedule has stamped decodes its
+// ScheduledAt/Location, and one that was never scheduled comes back zero-
+// valued rather than erroring.
+func TestListRoundUnitsReturnsScheduleSYS060(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	round, unit := seedingFixtureRound(t, s)
+	unscheduled, err := CreateUnit(ctx, s.DB(), domain.Unit{RoundID: round.ID})
+	if err != nil {
+		t.Fatalf("CreateUnit: %v", err)
+	}
+
+	when := time.Date(2027, 6, 12, 9, 30, 0, 0, time.UTC)
+	if _, err := UpdateUnitSchedule(ctx, s.DB(), unit.ID, unit.Version, when, "Bahn 1"); err != nil {
+		t.Fatalf("UpdateUnitSchedule: %v", err)
+	}
+
+	units, err := ListRoundUnits(ctx, s.DB(), round.ID)
+	if err != nil {
+		t.Fatalf("ListRoundUnits: %v", err)
+	}
+	if len(units) != 2 {
+		t.Fatalf("got %d units, want 2", len(units))
+	}
+	byID := map[string]UnitRecord{}
+	for _, u := range units {
+		byID[u.ID] = u
+	}
+	scheduled := byID[unit.ID]
+	if !scheduled.ScheduledAt.Equal(when) || scheduled.Location != "Bahn 1" {
+		t.Errorf("scheduled unit = %+v, want ScheduledAt=%v Location=Bahn 1", scheduled, when)
+	}
+	if got := byID[unscheduled.ID]; !got.ScheduledAt.IsZero() || got.Location != "" {
+		t.Errorf("never-scheduled unit = %+v, want zero ScheduledAt and empty Location", got)
+	}
+}
+
+// TestGetTimingImportBatchUnknownIDSYS061 covers scanTimingImportBatch's
+// not-found branch directly.
+func TestGetTimingImportBatchUnknownIDSYS061(t *testing.T) {
+	s := openTest(t)
+	if _, err := GetTimingImportBatch(context.Background(), s.DB(), "does-not-exist"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetTimingImportBatch(unknown) err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestCreateTimingAgentTokenDuplicateHashADR006 covers
+// CreateTimingAgentToken's isUniqueViolation branch: token_hash is UNIQUE
+// (0018_timing_exchange.sql) so a hash collision — astronomically unlikely
+// for a real random token, but exercised here directly — is reported as
+// ErrDuplicateTimingAgentToken, not a generic SQL error the caller cannot
+// distinguish from any other failure.
+func TestCreateTimingAgentTokenDuplicateHashADR006(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	meet := testMeet(t, s)
+	hash := sha256Hex("colliding-token")
+
+	if _, err := CreateTimingAgentToken(ctx, s.DB(), TimingAgentToken{
+		MeetID: meet.ID, Label: "first", TokenHash: hash, CreatedBy: "org-account",
+	}); err != nil {
+		t.Fatalf("CreateTimingAgentToken (first): %v", err)
+	}
+	if _, err := CreateTimingAgentToken(ctx, s.DB(), TimingAgentToken{
+		MeetID: meet.ID, Label: "second", TokenHash: hash, CreatedBy: "org-account",
+	}); !errors.Is(err, ErrDuplicateTimingAgentToken) {
+		t.Errorf("CreateTimingAgentToken (duplicate hash) err = %v, want ErrDuplicateTimingAgentToken", err)
 	}
 }
 

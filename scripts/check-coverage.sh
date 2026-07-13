@@ -3,7 +3,9 @@
 # Copyright (c) 2026 Bahnfrei contributors
 #
 # Enforces the SYS-140 coverage gates on a Go cover profile:
-#   >=90% for domain logic (internal/domain/...), >=80% overall.
+#   >=90% for domain logic (internal/domain/...), >=83% overall
+#   (overall floor ratcheted 80->83 at TASK-033; keep in lockstep with
+#   SYS-140 in docs/requirements/system-requirements.md).
 # Go's cover tooling measures statement coverage; that is the agreed
 # verification method for SYS-140 (see traceability-matrix.md).
 # A package group with zero statements is skipped (pre-implementation
@@ -52,8 +54,8 @@ END {
         print "overall coverage: no statements yet - gate skipped (bootstrap)"
     } else {
         pct = 100 * covered / total
-        printf "overall coverage: %.1f%% (gate: >=80%%)\n", pct
-        if (pct < 80) fail = 1
+        printf "overall coverage: %.1f%% (gate: >=83%%)\n", pct
+        if (pct < 83) fail = 1
     }
     if (fail) { print "coverage gate FAILED (SYS-140)"; exit 1 }
     print "coverage gate OK"
