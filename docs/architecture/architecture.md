@@ -43,10 +43,10 @@ by external modules), the executable under `cmd/bahnfrei/`.
 | Package | Responsibility | Key SYS |
 |---------|----------------|---------|
 | `domain/` | Pure domain: entities (SyRS §2), rule engines — category resolver, seeding (TR20), progression, scoring (WA tables, UKC), countback, eligibility, wind legality, records flagging. **No I/O.** Fixture suites per engine (SYS-142) | 005, 014, 026–031, 040–053 |
-| `app/` | Use-case services orchestrating domain + storage + audit; authorization checks (SYS-090); result-confirm flow with provenance | 046, 047, 090 |
+| `app/` | Use-case services orchestrating domain + storage + audit; authorization checks (SYS-090); result-confirm flow with provenance; omx/v1 full-meet export/import orchestration, ≥10-operator concurrency | 046, 047, 083, 090 |
 | `store/` | SQLite persistence, migrations, optimistic versioning, audit log, backup, retention jobs (ADR-004) | 081, 084, 101, 102 |
 | `sync/` | Offline-capture wire protocol (checkout/replay contract, ADR-004 §8 — server half in `app`/`web`); *later*: publication queue dispatcher (venue) and applier (hub), entries-snapshot pull | 082, 085–087 |
-| `exchange/` | omx/v1 schema (ADR-005), CSV import/export, Alabus mapping profile, Lynx file adapters + directory watcher (ADR-006) | 013, 060–062, 073 |
+| `exchange/` | omx/v1 schema (ADR-005; published JSON Schema + minimal in-repo validator, `docs/schemas/omx-v1.md`), CSV import/export, Alabus mapping profile, Lynx file adapters + directory watcher (ADR-006) | 013, 060–062, 073, 144 |
 | `web/` | HTTP handlers, SSR templates, HTMX endpoints, SSE, i18n rendering, public pages incl. unofficial-results labeling (SYS-076), WCAG-conformant markup | 070–076, 110–114 |
 | `pdf/` | Printable documents | 072 |
 | `cli/` | Startup, role selection, quickstart bootstrap, backup/restore commands | 131, 084 |

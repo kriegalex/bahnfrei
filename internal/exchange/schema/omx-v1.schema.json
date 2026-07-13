@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bahnfrei.example/schemas/omx-v1.schema.json",
+  "title": "omx/v1 — Open Meet eXchange, version 1",
+  "description": "Full-meet interchange document (ADR-005, SYS-073, SYS-144). Foreign keys are the entities' own identifiers within THIS document; a consumer re-importing the document assigns its own storage identifiers, so equivalence across a round-trip is judged by content, not literal id equality. Versioning policy: this is major version 1 of the omx schema family. Within v1, new OPTIONAL fields may be added to any object without a version bump (forward-compatible, additive-only) — validators/parsers MUST ignore unrecognized properties. Any change that removes/renames a field, changes a field's type, or makes a previously-optional field required is a BREAKING change and MUST ship as omx/v2 with its own schema document; omx/v1 documents remain readable by v1-aware tooling for at least one full MVP release cycle after a v2 ships (deprecation policy, SYS-144).",
+  "type": "object",
+  "required": ["schemaVersion", "exportedAt", "meet", "athletes", "events", "rounds", "units", "results"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["omx/v1"] },
+    "exportedAt": { "type": "string" },
+    "meet": { "$ref": "#/$defs/Meet" },
+    "sessions": { "type": "array", "items": { "$ref": "#/$defs/Session" } },
+    "clubs": { "type": "array", "items": { "$ref": "#/$defs/Club" } },
+    "athletes": { "type": "array", "items": { "$ref": "#/$defs/Athlete" } },
+    "relayTeams": { "type": "array", "items": { "$ref": "#/$defs/RelayTeam" } },
+    "events": { "type": "array", "items": { "$ref": "#/$defs/Event" } },
+    "rounds": { "type": "array", "items": { "$ref": "#/$defs/Round" } },
+    "units": { "type": "array", "items": { "$ref": "#/$defs/Unit" } },
+    "entries": { "type": "array", "items": { "$ref": "#/$defs/Entry" } },
+    "unitAssignments": { "type": "array", "items": { "$ref": "#/$defs/UnitAssignment" } },
+    "results": { "type": "array", "items": { "$ref": "#/$defs/Result" } }
+  },
+  "$defs": {
+    "Meet": {
+      "type": "object",
+      "required": ["id", "name", "venue", "startDate", "endDate", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "venue": { "type": "string" },
+        "homologationRef": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "organizer": { "type": "string" },
+        "tier": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "published", "live", "closed", "archived"] },
+        "categorySchemeId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "scoringTableId": { "type": "string" },
+        "resultsPositioning": { "type": "string", "enum": ["", "federation_official", "primary"] },
+        "officialSourceName": { "type": "string" },
+        "officialSourceUrl": { "type": "string" },
+        "externalIds": { "type": "object" },
+        "entryFeeCents": { "type": "integer" },
+        "relayFeeCents": { "type": "integer" }
+      }
+    },
+    "Session": {
+      "type": "object",
+      "required": ["id", "day", "label"],
+      "properties": {
+        "id": { "type": "string" },
+        "day": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "Club": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "externalIds": { "type": "object" }
+      }
+    },
+    "Athlete": {
+      "type": "object",
+      "required": ["id", "lastName", "birthYear", "sex"],
+      "properties": {
+        "id": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "birthDate": { "type": ["string", "null"] },
+        "birthYear": { "type": "integer" },
+        "sex": { "type": "string", "enum": ["M", "W"] },
+        "nationality": { "type": "string" },
+        "clubIds": { "type": "array", "items": { "type": "string" } },
+        "externalIds": { "type": "object" },
+        "paraClasses": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "RelayTeam": {
+      "type": "object",
+      "required": ["id", "clubId", "composition"],
+      "properties": {
+        "id": { "type": "string" },
+        "clubId": { "type": "string" },
+        "composition": { "type": "array", "items": { "type": "string" } },
+        "reserves": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Event": {
+      "type": "object",
+      "required": ["id", "disciplineCode", "categoryCodes", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "disciplineCode": { "type": "string" },
+        "categoryCodes": { "type": "array", "items": { "type": "string" } },
+        "entryStandard": { "type": "string" },
+        "entryDeadline": { "type": ["string", "null"] },
+        "status": { "type": "string", "enum": ["draft", "published", "closed"] },
+        "entryLimit": { "type": "integer" }
+      }
+    },
+    "Round": {
+      "type": "object",
+      "required": ["id", "eventId", "kind", "seq"],
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "kind": { "type": "string", "enum": ["qualification", "semifinal", "final"] },
+        "seq": { "type": "integer" }
+      }
+    },
+    "Unit": {
+      "type": "object",
+      "required": ["id", "roundId"],
+      "properties": {
+        "id": { "type": "string" },
+        "roundId": { "type": "string" },
+        "scheduledAt": { "type": ["string", "null"] },
+        "location": { "type": "string" },
+        "announcedAt": { "type": ["string", "null"] },
+        "announcementSeq": { "type": "integer" },
+        "wind": { "type": ["number", "null"] }
+      }
+    },
+    "Entry": {
+      "type": "object",
+      "required": ["id", "eventId", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "athleteId": { "type": "string" },
+        "relayTeamId": { "type": "string" },
+        "seedPerformance": { "type": "string" },
+        "status": { "type": "string", "enum": ["entered", "confirmed", "scratched", "dns"] },
+        "source": { "type": "string", "enum": ["online", "import", "manual", ""] },
+        "startedUp": { "type": "boolean" },
+        "startedDown": { "type": "boolean" },
+        "failsStandard": { "type": "boolean" }
+      }
+    },
+    "UnitAssignment": {
+      "type": "object",
+      "required": ["id", "unitId", "entryId"],
+      "properties": {
+        "id": { "type": "string" },
+        "unitId": { "type": "string" },
+        "entryId": { "type": "string" },
+        "seedRank": { "type": "integer" },
+        "lane": { "type": "integer" },
+        "qualification": { "type": "string" },
+        "manualOverride": { "type": "boolean" }
+      }
+    },
+    "Result": {
+      "type": "object",
+      "required": ["id", "unitId", "athleteId", "recordFlags"],
+      "properties": {
+        "id": { "type": "string" },
+        "unitId": { "type": "string" },
+        "athleteId": { "type": "string" },
+        "lane": { "type": "integer" },
+        "mark": { "type": "string" },
+        "timing": { "type": "string", "enum": ["", "manual", "electronic"] },
+        "wind": { "type": ["number", "null"] },
+        "status": { "type": "string" },
+        "statusDetail": { "type": "string" },
+        "points": { "type": ["integer", "null"] },
+        "placing": { "type": ["integer", "null"] },
+        "recordFlags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "e.g. PB/SB/NR/MR (D6.1). Populated empty until TASK-022 (records & mixed-category fields) lands the record/best-flag computation; the field itself is part of v1 from the start so that landing is additive, not a schema bump."
+        },
+        "source": { "type": "string", "enum": ["", "manual", "import_lif", "import_csv"] }
+      }
+    }
+  }
+}

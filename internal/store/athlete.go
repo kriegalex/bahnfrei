@@ -45,6 +45,27 @@ func CreateClub(ctx context.Context, db DBTX, c domain.Club) (ClubRecord, error)
 	return ClubRecord{Club: c, Version: 1}, nil
 }
 
+// GetClub looks a club up by ID (the omx/v1 full-meet export's club
+// enumeration, TASK-025 — every other club lookup in this file is by name
+// or by a batch of ids-to-names, neither of which returns the full record
+// incl. ExternalIDs a document needs).
+func GetClub(ctx context.Context, db DBTX, id string) (ClubRecord, error) {
+	var c ClubRecord
+	var ext string
+	err := db.QueryRowContext(ctx, `SELECT id, name, external_ids, version
+		FROM clubs WHERE id = ?`, id).Scan(&c.ID, &c.Name, &ext, &c.Version)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ClubRecord{}, ErrNotFound
+	case err != nil:
+		return ClubRecord{}, err
+	}
+	if err := json.Unmarshal([]byte(ext), &c.ExternalIDs); err != nil {
+		return ClubRecord{}, fmt.Errorf("club %s: bad external ids: %w", c.ID, err)
+	}
+	return c, nil
+}
+
 // GetClubByName looks a club up by its unique name.
 func GetClubByName(ctx context.Context, db DBTX, name string) (ClubRecord, error) {
 	var c ClubRecord

@@ -175,3 +175,100 @@ func TestSaveResultUpsertAndListing(t *testing.T) {
 		t.Error("SaveResult without unit/athlete: want error")
 	}
 }
+
+// TestSaveResultOptimisticConflictSurfaced proves SYS-083/UC-021 #2 at the
+// result-entity level: two sessions both read version 1, the first save
+// wins, and the second's stale expectation is rejected with the row
+// currently stored — never a silent last-write-wins.
+func TestSaveResultOptimisticConflictSurfaced(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	_, unitID, athleteID := ukcFixture(t, s)
+
+	first, err := SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: athleteID, Mark: "8.42",
+	}, domain.TimingElectronic, "manual", 0)
+	if err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if first.Version != 1 {
+		t.Fatalf("first version = %d, want 1", first.Version)
+	}
+
+	// Session A, still holding version 1, saves successfully.
+	sessionA, err := SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: athleteID, Mark: "8.40",
+	}, domain.TimingElectronic, "manual", 1)
+	if err != nil {
+		t.Fatalf("session A save: %v", err)
+	}
+	if sessionA.Version != 2 || sessionA.Mark != "8.40" {
+		t.Errorf("session A result = %+v", sessionA)
+	}
+
+	// Session B, which ALSO read version 1 (before A committed), now
+	// saves against the same stale expectation — this must surface a
+	// conflict carrying B's own attempt is rejected and the row currently
+	// stored (A's write) is returned, not silently overwritten.
+	sessionB, err := SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: athleteID, Mark: "8.55",
+	}, domain.TimingElectronic, "manual", 1)
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("session B save = %v, want ErrVersionConflict", err)
+	}
+	if sessionB.Mark != "8.40" || sessionB.Version != 2 {
+		t.Errorf("conflict must carry the currently-stored row (A's write): %+v", sessionB)
+	}
+
+	// The stored row is never silently overwritten by B's lost write.
+	final, err := GetResult(ctx, s.DB(), unitID, athleteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Mark != "8.40" {
+		t.Errorf("final stored mark = %q, want 8.40 (B's write must not have applied)", final.Mark)
+	}
+
+	// A brand-new (never-saved) result also conflicts under a positive
+	// expectedVersion — never silently created as if it were the first
+	// save (unknown-row case surfaces ErrVersionConflict via ErrNotFound
+	// wrapping, distinguishable from a real conflict by the caller).
+	if _, err := SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: "nobody",
+	}, domain.TimingNone, "manual", 1); err == nil {
+		t.Error("SaveResultOptimistic on an unknown row with expectedVersion>0: want error")
+	}
+}
+
+// TestSaveResultOptimisticConcurrentFirstSaveConflicts proves the
+// expectedVersion==0 "first save" path also detects a race: two sessions
+// racing to capture a result NEITHER has seen yet must not both succeed
+// (the second's insert hits the (unit,athlete) UNIQUE index and surfaces a
+// conflict rather than silently overwriting the first's write raw).
+func TestSaveResultOptimisticConcurrentFirstSaveConflicts(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	_, unitID, athleteID := ukcFixture(t, s)
+
+	first, err := SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: athleteID, Mark: "10.10",
+	}, domain.TimingElectronic, "manual", 0)
+	if err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+
+	_, err = SaveResultOptimistic(ctx, s.DB(), domain.Result{
+		UnitID: unitID, AthleteID: athleteID, Mark: "10.20",
+	}, domain.TimingElectronic, "manual", 0)
+	if !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("second concurrent first-save = %v, want ErrVersionConflict", err)
+	}
+
+	final, err := GetResult(ctx, s.DB(), unitID, athleteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Mark != "10.10" || final.ID != first.ID {
+		t.Errorf("final = %+v, want the first save untouched", final)
+	}
+}

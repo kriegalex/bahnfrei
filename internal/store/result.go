@@ -80,6 +80,87 @@ func SaveResultWithSource(ctx context.Context, db DBTX, r domain.Result, timing 
 	return GetResult(ctx, db, r.UnitID, r.AthleteID)
 }
 
+// SaveResultOptimistic is SaveResultWithSource under an explicit
+// optimistic-concurrency check (SYS-083, UC-021 #2), mirroring
+// SaveAttempt's pattern: expectedVersion 0 inserts a brand-new result for
+// (unit, athlete) — a concurrent first save from another session still
+// conflicts via the table's UNIQUE(unit_id, athlete_id) index rather than
+// silently coalescing two independent captures; a positive expectedVersion
+// re-saves an existing result only if it has not moved on since the
+// caller read it. A stale expectation returns ErrVersionConflict together
+// with the row currently stored, so the caller can surface both versions
+// instead of last-write-wins. Unlike SaveResult/SaveResultWithSource
+// (blind upsert — capture flows intentionally re-submit as marks are
+// corrected before announcement, SYS-041), this is the entry point for
+// callers that DO want the conflict surfaced: two office sessions racing
+// to correct the same settled result.
+func SaveResultOptimistic(ctx context.Context, db DBTX, r domain.Result, timing domain.Timing, source string, expectedVersion int64) (ResultRecord, error) {
+	if r.UnitID == "" || r.AthleteID == "" {
+		return ResultRecord{}, fmt.Errorf("result: unit id and athlete id are required")
+	}
+	flags, err := json.Marshal(orEmptySlice(r.RecordFlags))
+	if err != nil {
+		return ResultRecord{}, fmt.Errorf("save result: %w", err)
+	}
+
+	if expectedVersion > 0 {
+		id := resultID(ctx, db, r.UnitID, r.AthleteID)
+		newVersion, err := OptimisticUpdate(ctx, db, "results", id, expectedVersion,
+			Set{Column: "mark", Value: r.Mark},
+			Set{Column: "timing", Value: string(timing)},
+			Set{Column: "status", Value: string(r.Status)},
+			Set{Column: "status_detail", Value: r.StatusDetail},
+			Set{Column: "points", Value: r.Points},
+			Set{Column: "wind", Value: r.Wind},
+			Set{Column: "lane", Value: r.Lane},
+			Set{Column: "placing", Value: r.Placing},
+			Set{Column: "record_flags", Value: string(flags)},
+			Set{Column: "source", Value: source})
+		if err != nil {
+			return resultConflict(ctx, db, r.UnitID, r.AthleteID, err)
+		}
+		rec, err := GetResult(ctx, db, r.UnitID, r.AthleteID)
+		if err != nil {
+			return ResultRecord{}, err
+		}
+		rec.Version = newVersion
+		return rec, nil
+	}
+
+	r.ID = NewID()
+	_, err = db.ExecContext(ctx, `INSERT INTO results
+		(id, unit_id, athlete_id, mark, timing, status, status_detail, points, wind, lane, placing, record_flags, source, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		r.ID, r.UnitID, r.AthleteID, r.Mark, string(timing), string(r.Status),
+		r.StatusDetail, r.Points, r.Wind, r.Lane, r.Placing, string(flags), source)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return resultConflict(ctx, db, r.UnitID, r.AthleteID, ErrVersionConflict)
+		}
+		return ResultRecord{}, fmt.Errorf("save result unit %s athlete %s: %w", r.UnitID, r.AthleteID, err)
+	}
+	return GetResult(ctx, db, r.UnitID, r.AthleteID)
+}
+
+// resultID resolves the row id of (unit, athlete); "" when absent —
+// OptimisticUpdate then reports ErrNotFound.
+func resultID(ctx context.Context, db DBTX, unitID, athleteID string) string {
+	var id string
+	_ = db.QueryRowContext(ctx, `SELECT id FROM results
+		WHERE unit_id = ? AND athlete_id = ?`, unitID, athleteID).Scan(&id)
+	return id
+}
+
+// resultConflict decorates a version-conflict error with the result
+// currently stored, so callers can show both versions (UC-021 #2).
+func resultConflict(ctx context.Context, db DBTX, unitID, athleteID string, cause error) (ResultRecord, error) {
+	current, err := GetResult(ctx, db, unitID, athleteID)
+	if err != nil {
+		return ResultRecord{}, cause
+	}
+	return current, fmt.Errorf("result unit %s athlete %s: %w", unitID, athleteID, cause)
+}
+
 // GetResult returns the settled result for (unit, athlete).
 func GetResult(ctx context.Context, db DBTX, unitID, athleteID string) (ResultRecord, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, unit_id, athlete_id, mark, timing,

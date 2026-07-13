@@ -35,6 +35,22 @@ func (e *AttemptConflictError) Error() string {
 
 func (e *AttemptConflictError) Unwrap() error { return ErrConflict }
 
+// ResultConflictError reports a concurrent settled-result edit (UC-021
+// #2): the caller's write did not apply and Current is what another
+// session stored — both versions must be shown, never silently merged
+// (SYS-083). Surfaced by SaveTrackResult only when the caller opts into
+// optimistic checking via TrackResultInput.ExpectedVersion.
+type ResultConflictError struct {
+	Current store.ResultRecord
+}
+
+func (e *ResultConflictError) Error() string {
+	return fmt.Sprintf("result was edited concurrently (stored: mark=%q status=%q, version %d)",
+		e.Current.Mark, e.Current.Status, e.Current.Version)
+}
+
+func (e *ResultConflictError) Unwrap() error { return ErrConflict }
+
 // CaptureConfig is a horizontal field event's series shape (SYS-042:
 // "the configured trial count and field-cut after round 3").
 type CaptureConfig struct {
@@ -676,6 +692,17 @@ type TrackResultInput struct {
 	Timing       domain.Timing
 	Status       domain.QualificationStatus
 	StatusDetail string
+	// ExpectedVersion enables optimistic-concurrency checking (SYS-083,
+	// UC-021 #2) instead of the default blind upsert: nil preserves the
+	// original "capture flows re-submit as marks are corrected" semantics
+	// every pre-existing call site relies on (repeated in-session
+	// corrections before announcement never conflict with themselves); a
+	// non-nil value requires the stored result — if any — to still be at
+	// that version, returning *ResultConflictError with both the caller's
+	// attempted values and the currently stored row otherwise. Two
+	// concurrent office sessions racing to save the same athlete's same
+	// result is the scenario this exists for.
+	ExpectedVersion *int64
 }
 
 // SaveTrackResult captures one track result on a unit (UC-010 subset for
@@ -762,9 +789,20 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	rec, err := store.SaveResult(ctx, tx, result, timing)
-	if err != nil {
-		return store.ResultRecord{}, err
+	var rec store.ResultRecord
+	if in.ExpectedVersion != nil {
+		rec, err = store.SaveResultOptimistic(ctx, tx, result, timing, "manual", *in.ExpectedVersion)
+		if err != nil {
+			if errors.Is(err, store.ErrVersionConflict) {
+				return rec, &ResultConflictError{Current: rec}
+			}
+			return store.ResultRecord{}, err
+		}
+	} else {
+		rec, err = store.SaveResult(ctx, tx, result, timing)
+		if err != nil {
+			return store.ResultRecord{}, err
+		}
 	}
 	after, _ := json.Marshal(map[string]any{
 		"mark": rec.Mark, "timing": timing, "status": in.Status,
