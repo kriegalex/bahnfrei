@@ -208,9 +208,9 @@ templ entriesPage(p PageData, v entriesView) {
 												<summary>{ p.T("entries.relay.edit") }</summary>
 												for _, i := range v.RelayLegRows {
 													<div class="session-row">
-														<input type="text" name={ "edit_leg_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") }/>
-														<input type="text" name={ "edit_leg_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") }/>
-														<input type="number" name={ "edit_leg_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") }/>
+														<input type="text" name={ "edit_leg_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") } aria-label={ p.T("roster.first_name") }/>
+														<input type="text" name={ "edit_leg_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") } aria-label={ p.T("roster.last_name") }/>
+														<input type="number" name={ "edit_leg_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") } aria-label={ p.T("roster.birth_year") }/>
 														<select name={ "edit_leg_sex_" + intToStr(int64(i)) }>
 															<option value="W">W</option>
 															<option value="M">M</option>
@@ -223,9 +223,9 @@ templ entriesPage(p PageData, v entriesView) {
 												}
 												for _, i := range v.RelayReserveRow {
 													<div class="session-row">
-														<input type="text" name={ "edit_reserve_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") }/>
-														<input type="text" name={ "edit_reserve_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") }/>
-														<input type="number" name={ "edit_reserve_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") }/>
+														<input type="text" name={ "edit_reserve_first_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.first_name") } aria-label={ p.T("roster.first_name") }/>
+														<input type="text" name={ "edit_reserve_last_name_" + intToStr(int64(i)) } placeholder={ p.T("roster.last_name") } aria-label={ p.T("roster.last_name") }/>
+														<input type="number" name={ "edit_reserve_birth_year_" + intToStr(int64(i)) } min="1900" placeholder={ p.T("roster.birth_year") } aria-label={ p.T("roster.birth_year") }/>
 														<select name={ "edit_reserve_sex_" + intToStr(int64(i)) }>
 															<option value="W">W</option>
 															<option value="M">M</option>

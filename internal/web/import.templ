@@ -117,7 +117,7 @@ templ eligibilityExceptionsPage(p PageData, v eligibilityView) {
 										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/eligibility/override") } method="post" class="inline-form">
 											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 											<input type="hidden" name="version" value={ row.Version }/>
-											<input type="text" name="reason" placeholder={ p.T("eligibility.override_reason") } required?={ true }/>
+											<input type="text" name="reason" placeholder={ p.T("eligibility.override_reason") } aria-label={ p.T("eligibility.override_reason") } required?={ true }/>
 											<button type="submit">{ p.T("eligibility.override") }</button>
 										</form>
 									}

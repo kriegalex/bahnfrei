@@ -59,12 +59,15 @@ templ timingPage(p PageData, v timingView) {
 						</p>
 						<form action={ templ.URL("/meets/" + v.MeetID + "/timing/conflicts/" + c.ID + "/resolve") } method="post" class="inline-form">
 							<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-							<select name="action">
-								<option value="keep">{ p.T("timing.conflicts.action.keep") }</option>
-								<option value="replace">{ p.T("timing.conflicts.action.replace") }</option>
-								<option value="merge">{ p.T("timing.conflicts.action.merge") }</option>
-								<option value="discard">{ p.T("timing.conflicts.action.discard") }</option>
-							</select>
+							<label>
+								{ p.T("timing.conflicts.action_label") }
+								<select name="action">
+									<option value="keep">{ p.T("timing.conflicts.action.keep") }</option>
+									<option value="replace">{ p.T("timing.conflicts.action.replace") }</option>
+									<option value="merge">{ p.T("timing.conflicts.action.merge") }</option>
+									<option value="discard">{ p.T("timing.conflicts.action.discard") }</option>
+								</select>
+							</label>
 							if c.Reason == "unknown_bib" {
 								<label>
 									{ p.T("timing.conflicts.reassign") }
@@ -87,10 +90,10 @@ templ timingPage(p PageData, v timingView) {
 										<option value="NM">NM</option>
 									</select>
 								</label>
-								<input type="text" name="override_status_detail" placeholder={ p.T("timing.conflicts.status_detail_placeholder") }/>
+								<input type="text" name="override_status_detail" placeholder={ p.T("timing.conflicts.status_detail_placeholder") } aria-label={ p.T("timing.conflicts.status_detail_placeholder") }/>
 							}
-							<input type="text" name="reason" placeholder={ p.T("timing.conflicts.reason_placeholder") }/>
-							<input type="text" name="escalation" placeholder={ p.T("timing.conflicts.escalation_placeholder") }/>
+							<input type="text" name="reason" placeholder={ p.T("timing.conflicts.reason_placeholder") } aria-label={ p.T("timing.conflicts.reason_placeholder") }/>
+							<input type="text" name="escalation" placeholder={ p.T("timing.conflicts.escalation_placeholder") } aria-label={ p.T("timing.conflicts.escalation_placeholder") }/>
 							<button type="submit">{ p.T("timing.conflicts.resolve") }</button>
 						</form>
 					</div>

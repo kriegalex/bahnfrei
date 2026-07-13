@@ -74,6 +74,10 @@ real binary — per-test server on a temp SQLite DB, seeded through the product'
   timezone handling; announcement timestamps recorded in `app` (SYS-047).
 - **Error handling:** confirmed-write semantics — the UI shows success only after durable
   commit (SYS-081).
+- **Design system:** one documented token set + component inventory (SYS-116) all `web/`
+  templates consume — `docs/architecture/design-system.md` (TASK-032); CI-enforced
+  (`scripts/check-style-tokens.sh`) and audited per release
+  (`docs/requirements/usability-audit-checklist.md`, SYS-117).
 
 ## 5. Verification strategy (maps to SYS-140…143)
 

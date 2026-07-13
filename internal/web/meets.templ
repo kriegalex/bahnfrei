@@ -319,8 +319,8 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 									<form action={ templ.URL("/meets/" + d.ID + "/units/" + u.UnitID + "/schedule") } method="post" class="inline-form">
 										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 										<input type="hidden" name="version" value={ intToStr(u.Version) }/>
-										<input type="datetime-local" name="scheduled_at" value={ u.When } required?={ true }/>
-										<input type="text" name="location" value={ u.Location } placeholder={ p.T("timetable.location") }/>
+										<input type="datetime-local" name="scheduled_at" value={ u.When } aria-label={ p.T("timetable.scheduled_at") } required?={ true }/>
+										<input type="text" name="location" value={ u.Location } placeholder={ p.T("timetable.location") } aria-label={ p.T("timetable.location") }/>
 										<button type="submit">{ p.T("timetable.schedule") }</button>
 									</form>
 								</td>

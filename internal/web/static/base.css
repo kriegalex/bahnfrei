@@ -1,26 +1,24 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Copyright (c) 2026 Bahnfrei contributors */
 
-/* Minimal base styles for the server shell (TASK-005): legible on a
-   360px-wide phone outdoors (SYS-113), visible focus rings for
-   keyboard-only operation (SYS-114), no framework dependency. Meet/domain
-   pages layer their own styles on top in later tasks. */
-
-:root {
-  color-scheme: light dark;
-  --fg: #111;
-  --bg: #fff;
-  --accent: #1a4d8f;
-}
+/* Base styles for the server shell (TASK-005; consolidated onto design
+   tokens by TASK-032, STR-045/SYS-116): legible on a 360px-wide phone
+   outdoors (SYS-113), visible focus rings for keyboard-only operation
+   (SYS-114), no framework dependency. Meet/domain pages layer their own
+   styles on top in later tasks. Every value below reads from a token
+   declared in tokens.css (loaded first, see layout.templ) — no raw color,
+   font-size, spacing or radius literal belongs in this file; the CI
+   style-conformance check (scripts/check-style-tokens.sh) enforces that.
+   Component descriptions and states: docs/architecture/design-system.md. */
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  color: var(--fg);
-  background: var(--bg);
-  line-height: 1.4;
+  font-family: var(--font-family-base);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  line-height: var(--line-height-base);
 }
 
 .skip-link {
@@ -29,67 +27,77 @@ body {
   top: 0;
 }
 .skip-link:focus {
-  left: 0.5rem;
-  top: 0.5rem;
+  left: var(--space-2);
+  top: var(--space-2);
   z-index: 100;
-  background: var(--bg);
-  padding: 0.5rem 1rem;
+  background: var(--color-bg);
+  padding: var(--space-2) var(--space-4);
 }
 
 header nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #8884;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .inline-form { display: inline; }
 
 main {
-  padding: 1rem;
+  padding: var(--space-4);
   max-width: 60rem;
   margin: 0 auto;
 }
 
 .error {
-  color: #a30000;
-  font-weight: bold;
+  color: var(--color-danger-fg);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Hint text (SYS-117: a field's format/unit/bound constraint stays
+   visible on-screen, at most one short sentence) — visually distinct
+   from its label (smaller, muted) per GOV.UK Design System "Hint text". */
+.hint {
+  color: var(--color-fg);
+  opacity: 0.75;
+  font-size: var(--font-size-sm);
+  margin: var(--space-1) 0 var(--space-2);
 }
 
 /* Offline-capture indicator (UC-034; SYS-087): unobtrusive by default,
    clearly coloured when offline or syncing. */
 .offline-status {
   display: inline-block;
-  padding: 0.25rem 0.6rem;
-  margin: 0.25rem 0;
-  border-radius: 0.4rem;
-  font-size: 0.9rem;
-  background: #e6f4ea;
-  color: #14532d;
+  padding: var(--space-1) 0.6rem;
+  margin: var(--space-1) 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
 }
 .offline-status[data-state="offline"] {
-  background: #fff4e5;
-  color: #7a3d00;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
 }
 .offline-status[data-state="syncing"] {
-  background: #e5efff;
-  color: #003a7a;
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
 }
 .offline-notice {
-  margin: 0.25rem 0;
-  color: #7a3d00;
-  font-size: 0.9rem;
+  margin: var(--space-1) 0;
+  color: var(--color-warning-fg);
+  font-size: var(--font-size-sm);
 }
 
 /* Office blip-tolerance banner (UC-034 #7; SYS-087). */
 .offline-banner {
-  background: #7a3d00;
-  color: #fff;
-  padding: 0.5rem 1rem;
+  background: var(--color-warning-strong-bg);
+  color: var(--color-warning-strong-fg);
+  padding: var(--space-2) var(--space-4);
   text-align: center;
-  font-weight: bold;
+  font-weight: var(--font-weight-bold);
 }
 .offline-banner[hidden] { display: none; }
 
@@ -102,17 +110,54 @@ main {
 
 /* SYS-076 unofficial-results label on public pages. */
 .unofficial-label {
-  background: #fff4e5;
-  color: #7a3d00;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.4rem;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
 }
 
 a, button, input, select {
-  font-size: 1rem;
+  font-size: var(--font-size-base);
 }
 
-a:focus, button:focus, input:focus, select:focus {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+/* Disabled state (SYS-116: every interactive component documents a
+   disabled state, even where no current screen triggers one yet). */
+a[aria-disabled="true"], button:disabled, input:disabled, select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Hover / active states (SYS-116: default/hover/active are documented
+   states for every interactive component, not just focus/disabled). */
+button:not(:disabled):hover, a:not([aria-disabled="true"]):hover {
+  opacity: 0.85;
+}
+button:not(:disabled):active, a:not([aria-disabled="true"]):active {
+  opacity: 0.7;
+}
+
+/* Visible focus indicator (SYS-114): every interactive element gets the
+   same ring from the same token, so the UC-038 #2 keyboard-walk e2e can
+   assert one rule instead of re-deriving colors per component. */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Inline field-validation error convention (SYS-117, UC-038 #4): a field
+   marked invalid gets a colored border and its paired message uses
+   .field-error, both token-driven — the same convention TASK-031's
+   contextual-help component and any future form pass are expected to
+   reuse rather than re-invent. Not yet wired into every existing form
+   (see docs/delivery/usability-audit-2026-07.md); this is the documented
+   target shape. */
+input[aria-invalid="true"], select[aria-invalid="true"] {
+  border: 1px solid var(--color-danger-fg);
+  outline-color: var(--color-danger-fg);
+}
+.field-error {
+  color: var(--color-danger-fg);
+  font-size: var(--font-size-sm);
+  margin: var(--space-1) 0;
 }
