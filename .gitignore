@@ -12,6 +12,7 @@
 # test & coverage output
 coverage.out
 coverage.html
+*.test
 
 # TS islands toolchain (added in TASK-005)
 node_modules/
@@ -29,3 +30,4 @@ node_modules/
 
 # claude code session artifacts
 .claude/scheduled_tasks.lock
+.claude/worktrees/
