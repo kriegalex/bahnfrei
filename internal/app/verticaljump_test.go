@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
@@ -269,6 +270,250 @@ func TestVerticalCaptureRespectsAnnouncementGuardUC015(t *testing.T) {
 	})
 	if !errors.Is(err, ErrCorrectionRequired) {
 		t.Fatalf("capture after announcement = %v, want ErrCorrectionRequired", err)
+	}
+}
+
+// TestUnitDiscipline checks the web layer's cheap discipline pre-check
+// (TASK-021): it resolves the unit's discipline on a real unit, and returns
+// a not-found error for a unit id that does not belong to the meet.
+func TestUnitDiscipline(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, unitID := verticalMeet(t, meets)
+
+	disc, err := results.UnitDiscipline(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitDiscipline: %v", err)
+	}
+	if disc.Code != "HJ" {
+		t.Errorf("discipline code = %q, want HJ", disc.Code)
+	}
+
+	if _, err := results.UnitDiscipline(ctx, rec.ID, "no-such-unit"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("UnitDiscipline(unknown unit) = %v, want store.ErrNotFound", err)
+	}
+}
+
+// TestVerticalTrialConflictErrorMessageAndUnwrap covers
+// VerticalTrialConflictError's Error() formatting and its Unwrap() to
+// ErrConflict — exercised through errors.Is/errors.As the way a caller
+// actually consumes it, plus a direct %v format check (D5.2 display, height
+// and trial and version all present in the message).
+func TestVerticalTrialConflictErrorMessageAndUnwrap(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, unitID := verticalMeet(t, meets)
+	athleteID := registerAthlete(t, results, rec.ID, "Anna", "Muster", domain.SexFemale, 1998)
+	if _, err := results.SetVerticalHeights(ctx, office, rec.ID, unitID, VerticalHeightsInput{
+		Heights: []string{"1.60"},
+	}); err != nil {
+		t.Fatalf("SetVerticalHeights: %v", err)
+	}
+	vTrial(t, results, rec.ID, unitID, athleteID, 0, 1, domain.StatusO)
+
+	_, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+		AthleteID: athleteID, HeightIdx: 0, Seq: 1, Kind: domain.StatusX,
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("SaveVerticalTrial conflict = %v, want it to unwrap to ErrConflict", err)
+	}
+	var conflict *VerticalTrialConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("expected *VerticalTrialConflictError, got %T", err)
+	}
+	msg := conflict.Error()
+	if !strings.Contains(msg, "height 0") || !strings.Contains(msg, "trial 1") || !strings.Contains(msg, "version 1") {
+		t.Errorf("Error() = %q, want it to mention height 0, trial 1 and version 1", msg)
+	}
+	if !strings.Contains(msg, conflict.Current.Display()) {
+		t.Errorf("Error() = %q, want it to include the stored trial's display %q", msg, conflict.Current.Display())
+	}
+}
+
+// TestSetVerticalHeightsRejectsNonVerticalUnit and
+// TestSetVerticalHeightsRejectsEmptyHeights cover the two denial paths
+// SetVerticalHeights checks before touching storage: a unit whose
+// discipline isn't a vertical-jump family, and an empty heights list
+// (SYS-043 requires at least one).
+func TestSetVerticalHeightsRejectsNonVerticalUnit(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Non-Vertical Meet", Venue: "Fribourg",
+		StartDate: ukcDay(), EndDate: ukcDay(),
+		CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	if _, err := meets.AddEvent(ctx, organizer, rec.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"Men", "Women"},
+	}); err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	detail, err := meets.Meet(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Meet: %v", err)
+	}
+	var unitID string
+	for _, u := range detail.Units {
+		if u.DisciplineCode == "100m" {
+			unitID = u.UnitID
+		}
+	}
+	if unitID == "" {
+		t.Fatal("meet has no 100m unit")
+	}
+
+	if _, err := results.SetVerticalHeights(ctx, office, rec.ID, unitID, VerticalHeightsInput{
+		Heights: []string{"1.60"},
+	}); err == nil {
+		t.Error("expected an error configuring vertical heights on a non-vertical unit")
+	}
+}
+
+func TestSetVerticalHeightsRejectsEmptyHeights(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, unitID := verticalMeet(t, meets)
+
+	if _, err := results.SetVerticalHeights(ctx, office, rec.ID, unitID, VerticalHeightsInput{
+		Heights: nil,
+	}); err == nil {
+		t.Error("expected an error for an empty heights list (SYS-043)")
+	}
+}
+
+// TestSaveVerticalTrialDenialPaths covers several of SaveVerticalTrial's
+// input-validation denial paths in one pass: an athlete not registered as a
+// meet participant, a height index outside the configured progression, and
+// an invalid trial (bad sequence number / unrecognized kind) rejected by
+// domain.VerticalTrial.Validate.
+func TestSaveVerticalTrialDenialPaths(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, unitID := verticalMeet(t, meets)
+	athleteID := registerAthlete(t, results, rec.ID, "Anna", "Muster", domain.SexFemale, 1998)
+	if _, err := results.SetVerticalHeights(ctx, office, rec.ID, unitID, VerticalHeightsInput{
+		Heights: []string{"1.60", "1.65"},
+	}); err != nil {
+		t.Fatalf("SetVerticalHeights: %v", err)
+	}
+
+	t.Run("unregistered athlete", func(t *testing.T) {
+		_, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+			AthleteID: "no-such-athlete", HeightIdx: 0, Seq: 1, Kind: domain.StatusO,
+		})
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("SaveVerticalTrial for an unregistered athlete = %v, want store.ErrNotFound", err)
+		}
+	})
+
+	t.Run("height index outside the configured progression", func(t *testing.T) {
+		_, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+			AthleteID: athleteID, HeightIdx: 5, Seq: 1, Kind: domain.StatusO,
+		})
+		if err == nil {
+			t.Error("expected an error for a height index outside the 2-height progression")
+		}
+	})
+
+	t.Run("invalid trial number", func(t *testing.T) {
+		_, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+			AthleteID: athleteID, HeightIdx: 0, Seq: 4, Kind: domain.StatusO,
+		})
+		if err == nil {
+			t.Error("expected an error for trial sequence 4 (only 1-3 are legal, TR26.3)")
+		}
+	})
+
+	t.Run("invalid trial kind", func(t *testing.T) {
+		_, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+			AthleteID: athleteID, HeightIdx: 0, Seq: 1, Kind: domain.QualificationStatus("Q"),
+		})
+		if err == nil {
+			t.Error("expected an error for an unrecognized trial kind")
+		}
+	})
+}
+
+// TestSaveVerticalTrialRejectsNonVerticalUnit covers the family guard on
+// the capture path itself (mirrors SetVerticalHeights' equivalent check).
+func TestSaveVerticalTrialRejectsNonVerticalUnit(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Non-Vertical Meet 2", Venue: "Fribourg",
+		StartDate: ukcDay(), EndDate: ukcDay(),
+		CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	if _, err := meets.AddEvent(ctx, organizer, rec.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"Men", "Women"},
+	}); err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	detail, err := meets.Meet(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Meet: %v", err)
+	}
+	var unitID string
+	for _, u := range detail.Units {
+		if u.DisciplineCode == "100m" {
+			unitID = u.UnitID
+			if err := store.AssignFieldOfficialUnit(ctx, meets.db, fieldOfficial.AccountID, rec.ID, u.UnitID); err != nil {
+				t.Fatalf("AssignFieldOfficialUnit: %v", err)
+			}
+		}
+	}
+	if unitID == "" {
+		t.Fatal("meet has no 100m unit")
+	}
+	athleteID := registerAthlete(t, results, rec.ID, "Anna", "Muster", domain.SexFemale, 1998)
+
+	if _, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+		AthleteID: athleteID, HeightIdx: 0, Seq: 1, Kind: domain.StatusO,
+	}); err == nil {
+		t.Error("expected an error capturing a vertical trial on a non-vertical unit")
+	}
+}
+
+// TestVerticalCaptureRejectsNonVerticalUnit covers VerticalCapture's own
+// family guard (the read-side view assembly).
+func TestVerticalCaptureRejectsNonVerticalUnit(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Non-Vertical Meet 3", Venue: "Fribourg",
+		StartDate: ukcDay(), EndDate: ukcDay(),
+		CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	if _, err := meets.AddEvent(ctx, organizer, rec.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"Men", "Women"},
+	}); err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	detail, err := meets.Meet(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Meet: %v", err)
+	}
+	var unitID string
+	for _, u := range detail.Units {
+		if u.DisciplineCode == "100m" {
+			unitID = u.UnitID
+		}
+	}
+	if unitID == "" {
+		t.Fatal("meet has no 100m unit")
+	}
+
+	if _, err := results.VerticalCapture(ctx, rec.ID, unitID); err == nil {
+		t.Error("expected an error assembling a vertical capture view for a non-vertical unit")
 	}
 }
 
