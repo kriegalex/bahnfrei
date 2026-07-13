@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
+	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/exchange"
 )
 
@@ -334,6 +335,202 @@ func TestAgentAPIExportAndImportWeb(t *testing.T) {
 	}
 	if csvSummary.Applied != 1 || csvSummary.Conflicts != 0 {
 		t.Fatalf("csv summary = %+v, want 1 applied / 0 conflicts", csvSummary)
+	}
+}
+
+// TestParseQualificationStatusSYS061 covers parseQualificationStatus's full
+// switch directly: the resolve form's fixed vocabulary maps through, and
+// anything else (including a blank submission) falls back to StatusNone
+// rather than accepting an arbitrary operator-supplied status string.
+func TestParseQualificationStatusSYS061(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want domain.QualificationStatus
+	}{
+		{"DNS", domain.QualificationStatus("DNS")}, {"DNF", domain.QualificationStatus("DNF")},
+		{"DQ", domain.QualificationStatus("DQ")}, {"NM", domain.QualificationStatus("NM")},
+		{"", domain.StatusNone}, {"Q", domain.StatusNone}, {"garbage", domain.StatusNone},
+	} {
+		if got := parseQualificationStatus(tc.in); got != tc.want {
+			t.Errorf("parseQualificationStatus(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestTimingUnknownIDsRedirectOrNotFoundWeb covers the office timing-exchange
+// surface's error-mapping branches for unknown ids: an unresolvable conflict
+// or agent-token id redirects back with a flash (never a 500), and an
+// unknown meet id on the export/token-issuance routes surfaces the shared
+// 404.
+func TestTimingUnknownIDsRedirectOrNotFoundWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	timingPageURL := base + "/meets/" + meetID + "/timing"
+
+	resolveResp := postForm(t, client, timingPageURL, timingPageURL+"/conflicts/does-not-exist/resolve", url.Values{"action": {"discard"}})
+	_ = bodyString(t, resolveResp)
+	if resolveResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("resolve an unknown conflict = %d, want 303", resolveResp.StatusCode)
+	}
+	if !strings.Contains(resolveResp.Header.Get("Location"), "err=resolve") {
+		t.Errorf("redirect location = %q, want err=resolve", resolveResp.Header.Get("Location"))
+	}
+
+	revokeResp := postForm(t, client, timingPageURL, timingPageURL+"/agents/does-not-exist/revoke", url.Values{})
+	_ = bodyString(t, revokeResp)
+	if revokeResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("revoke an unknown agent token = %d, want 303", revokeResp.StatusCode)
+	}
+	if !strings.Contains(revokeResp.Header.Get("Location"), "err=revoke") {
+		t.Errorf("redirect location = %q, want err=revoke", revokeResp.Header.Get("Location"))
+	}
+
+	for _, path := range []string{
+		"/meets/does-not-exist/timing/export/ppl", "/meets/does-not-exist/timing/export/sch",
+		"/meets/does-not-exist/timing/export/evt",
+	} {
+		resp := mustGet(t, client, base+path)
+		_ = bodyString(t, resp)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, resp.StatusCode)
+		}
+	}
+	// NOTE: unlike its ppl/sch/evt siblings, handleTimingExportCSV's
+	// ExportGenericCSV never checks the meet exists (internal/app/exchange.go
+	// ExportGenericCSV skips the store.GetMeet check ExportTimingFiles has) —
+	// an unknown meet id here 200s with a header-only CSV instead of 404.
+	// Captured as current behaviour, not asserted as desirable; see the
+	// final report.
+	csvResp := mustGet(t, client, base+"/meets/does-not-exist/timing/export/csv")
+	csvBody := bodyString(t, csvResp)
+	if csvResp.StatusCode != http.StatusOK {
+		t.Errorf("GET export/csv for an unknown meet = %d, want 200 (current behaviour)", csvResp.StatusCode)
+	}
+	if strings.Count(csvBody, "\n") > 1 {
+		t.Errorf("export/csv for an unknown meet should carry only its header row, got: %q", csvBody)
+	}
+
+	tokenResp := postForm(t, client, timingPageURL, base+"/meets/does-not-exist/timing/agents", url.Values{"label": {"x"}})
+	_ = bodyString(t, tokenResp)
+	if tokenResp.StatusCode != http.StatusNotFound {
+		t.Errorf("issue an agent token for an unknown meet = %d, want 404", tokenResp.StatusCode)
+	}
+}
+
+// TestTimingImportSubmitErrorPathsWeb covers handleTimingImportSubmit's two
+// non-happy-path branches: a submission with no file at all never reaches
+// ImportTimingFile (the "upload" flash), and a file the declared format
+// cannot parse is rejected with the "invalid" flash — neither ever queues a
+// batch.
+func TestTimingImportSubmitErrorPathsWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	timingPageURL := base + "/meets/" + meetID + "/timing"
+
+	// No "file" field at all: r.FormFile fails before ImportTimingFile runs.
+	token := csrfTokenFrom(t, bodyString(t, mustGet(t, client, timingPageURL)))
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	_ = w.WriteField("csrf_token", token)
+	_ = w.WriteField("format", "lif")
+	_ = w.Close()
+	req, err := http.NewRequest(http.MethodPost, timingPageURL+"/import", &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noFileBody := bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("import with no file = %d, want 200 (re-rendered with a flash)", resp.StatusCode)
+	}
+	if !strings.Contains(noFileBody, "gelesen") && !strings.Contains(noFileBody, "lire") {
+		t.Errorf("import with no file should show the upload-error flash: %s", noFileBody)
+	}
+
+	// A file the declared format cannot parse at all: an unterminated
+	// quoted CSV field the .lif line-scanner rejects outright (a bare "not
+	// LIF-shaped" line still parses as a permissive one-column header, so
+	// this is the reliable way to make ParseLIF itself fail).
+	badResp := postMultipartFile(t, client, timingPageURL, timingPageURL+"/import", map[string]string{"format": "lif"}, "file", "garbage.lif", []byte(`1,"unterminated`))
+	badBody := bodyString(t, badResp)
+	if badResp.StatusCode != http.StatusOK {
+		t.Fatalf("import unparseable .lif = %d, want 200 (re-rendered with a flash)", badResp.StatusCode)
+	}
+	if !strings.Contains(badBody, "verarbeitet") && !strings.Contains(badBody, "traité") {
+		t.Errorf("import of an unparseable file should show the invalid-file flash: %s", badBody)
+	}
+
+	batches, err := deps.results.ListTimingImportBatches(context.Background(), webOffice, meetID)
+	if err != nil {
+		t.Fatalf("ListTimingImportBatches: %v", err)
+	}
+	if len(batches) != 0 {
+		t.Errorf("neither failed import should have queued a batch, got %d", len(batches))
+	}
+}
+
+// TestAgentImportAndExportErrorPathsWeb covers the timing-agent HTTP API's
+// non-happy-path branches: an over-budget upload is rejected with 413 before
+// ever reaching ImportTimingFile, a file that fails to parse comes back as a
+// 422 JSON error body (not silently dropped), and an unknown export kind
+// after successful Bearer auth is a 404.
+func TestAgentImportAndExportErrorPathsWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	plaintext, _, err := deps.results.CreateTimingAgentToken(context.Background(), webOffice, meetID, "timing PC")
+	if err != nil {
+		t.Fatalf("CreateTimingAgentToken: %v", err)
+	}
+
+	// Over the maxAgentUploadBytes budget: rejected before ImportTimingFile.
+	oversized := bytes.Repeat([]byte("x"), maxAgentUploadBytes+1)
+	req, _ := http.NewRequest(http.MethodPost, base+"/agent/v1/meets/"+meetID+"/lif", bytes.NewReader(oversized))
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized agent upload = %d, want 413", resp.StatusCode)
+	}
+
+	// A well-under-budget file the .lif parser rejects outright.
+	badReq, _ := http.NewRequest(http.MethodPost, base+"/agent/v1/meets/"+meetID+"/lif", strings.NewReader(`1,"unterminated`))
+	badReq.Header.Set("Authorization", "Bearer "+plaintext)
+	badResp, err := client.Do(badReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	badBody := bodyString(t, badResp)
+	if badResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("agent upload of an unparseable .lif = %d, want 422:\n%s", badResp.StatusCode, badBody)
+	}
+	var errBody map[string]string
+	if err := json.Unmarshal([]byte(badBody), &errBody); err != nil || errBody["error"] == "" {
+		t.Errorf("422 response should carry a JSON error message, got: %s", badBody)
+	}
+
+	// An unknown export kind, correctly authenticated.
+	kindReq, _ := http.NewRequest(http.MethodGet, base+"/agent/v1/meets/"+meetID+"/exports/xyz", nil)
+	kindReq.Header.Set("Authorization", "Bearer "+plaintext)
+	kindResp, err := client.Do(kindReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bodyString(t, kindResp)
+	if kindResp.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown export kind = %d, want 404", kindResp.StatusCode)
 	}
 }
 

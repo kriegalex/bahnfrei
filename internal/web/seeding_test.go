@@ -299,6 +299,95 @@ func TestPublicStartListShowsHeatsAndLanesSYS026SYS027(t *testing.T) {
 	}
 }
 
+// TestManualAdvanceRecordsCodeSYS029UC009_2Web drives handleManualAdvance
+// (0% baseline coverage) over real HTTP: an office operator's manual
+// referee/jury/draw decision (UC-009 #2) is recorded on the target entry's
+// assignment; an illegal code and an unknown entry id are both handled as
+// the fire-and-forget redirect the handler implements (it discards
+// ManualAdvance's error deliberately — see seeding.go) without ever
+// recording anything illegal or crashing.
+func TestManualAdvanceRecordsCodeSYS029UC009_2Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 4)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{"max_heat_size": {"4"}, "track_lanes": {"0"}})
+	_ = genResp.Body.Close()
+
+	ctx := context.Background()
+	sheet, err := deps.results.HeatSheetFor(ctx, webOffice, meetID, eventID, roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	entryID := sheet.Units[0].Rows[0].EntryID
+	otherEntry := sheet.Units[0].Rows[1].EntryID
+
+	manualURL := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/manual-advance"
+	resp := postForm(t, client, seedingPage, manualURL, url.Values{"entry_id": {entryID}, "code": {"Q"}})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("manual advance = %d, want 303", resp.StatusCode)
+	}
+
+	qualificationOf := func(id string) domain.QualificationStatus {
+		t.Helper()
+		updated, err := deps.results.HeatSheetFor(ctx, webOffice, meetID, eventID, roundID)
+		if err != nil {
+			t.Fatalf("HeatSheetFor: %v", err)
+		}
+		for _, u := range updated.Units {
+			for _, row := range u.Rows {
+				if row.EntryID == id {
+					return row.Qualification
+				}
+			}
+		}
+		t.Fatalf("entry %s not found in heat sheet", id)
+		return ""
+	}
+	if got := qualificationOf(entryID); got != domain.StatusQ {
+		t.Fatalf("qualification after manual advance = %q, want Q", got)
+	}
+
+	// An illegal code (not one of Q/q/qR/qJ/qD) is rejected by ManualAdvance,
+	// but the handler discards that error and still redirects — nothing
+	// illegal must ever land on the assignment.
+	badResp := postForm(t, client, seedingPage, manualURL, url.Values{"entry_id": {otherEntry}, "code": {"DNS"}})
+	_ = badResp.Body.Close()
+	if badResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("manual advance with an illegal code = %d, want 303", badResp.StatusCode)
+	}
+	if got := qualificationOf(otherEntry); got != domain.StatusNone {
+		t.Errorf("illegal manual-advance code must not be recorded, got %q", got)
+	}
+
+	// An unknown entry id (never seeded in this round) is also a
+	// fire-and-forget 303 — the handler never surfaces ManualAdvance's
+	// "entry is not seeded" error to the operator.
+	unknownResp := postForm(t, client, seedingPage, manualURL, url.Values{"entry_id": {"does-not-exist"}, "code": {"Q"}})
+	_ = unknownResp.Body.Close()
+	if unknownResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("manual advance for an unknown entry = %d, want 303", unknownResp.StatusCode)
+	}
+}
+
+// TestSeedingUnknownEventOrRoundIs404Web covers the seedingView error
+// mapping (handleSeeding/handleSeedingGenerate's shared read path): a
+// syntactically fine but nonexistent event/round id within a real meet
+// surfaces the shared 404.
+func TestSeedingUnknownEventOrRoundIs404Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _, _ := seededMeetFixture(t, deps, client, base, 1)
+
+	resp := mustGet(t, client, base+"/meets/"+meetID+"/events/does-not-exist/rounds/does-not-exist/seeding")
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET seeding for an unknown event/round = %d, want 404", resp.StatusCode)
+	}
+}
+
 // TestSeedingRequiresOfficeCapabilityHTTP is a denial/edge-path test:
 // anonymous requests to the check-in/seeding surfaces are refused
 // (SYS-090).

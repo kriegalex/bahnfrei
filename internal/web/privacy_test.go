@@ -6,6 +6,8 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -230,5 +232,128 @@ func TestRetentionPurgeOverHTTPSYS102UC024_3(t *testing.T) {
 	body := bodyString(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("purge = %d, want 200: %s", resp.StatusCode, body)
+	}
+}
+
+// TestPrivacyExportUnknownAthleteReturns404 covers renderPrivacyError's
+// app.ErrAthleteNotFound branch: handlePrivacyExport never scopes the
+// athlete lookup to the meetID in the URL (CapPrivacyActions is instance-
+// wide for the office role, unlike the per-event field-official scoping
+// TASK-013 added elsewhere), so the adversarial case worth pinning here is
+// simply an athlete ID that does not exist at all.
+func TestPrivacyExportUnknownAthleteReturns404(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+
+	resp := mustGet(t, client, base+"/meets/"+meetID+"/privacy/does-not-exist/export")
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("export unknown athlete = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestPrivacyEraseAlreadyAnonymizedRedirectsWithError covers the
+// ErrAthleteAnonymized error path handlePrivacyErase falls into (redirect
+// with "invalid" flash, rendered on the very next fetch) — a repeat erase
+// request must not silently succeed or crash, since the office UI's erase
+// button remains clickable on an already-anonymized row until the page is
+// refreshed.
+func TestPrivacyEraseAlreadyAnonymizedRedirectsWithError(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	registerRosterParticipant(t, client, base, meetID, nil)
+
+	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
+	athleteID := athleteIDFromPrivacyPage(t, privacyBody)
+
+	first := postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"subject request"}})
+	_ = first.Body.Close()
+	if first.StatusCode != http.StatusSeeOther {
+		t.Fatalf("first erase = %d, want 303", first.StatusCode)
+	}
+
+	second := postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"repeat request"}})
+	_ = second.Body.Close()
+	if second.StatusCode != http.StatusSeeOther {
+		t.Fatalf("repeat erase = %d, want 303", second.StatusCode)
+	}
+	if loc := second.Header.Get("Location"); loc != "/meets/"+meetID+"/privacy?err=invalid" {
+		t.Errorf("repeat erase Location = %q, want .../privacy?err=invalid", loc)
+	}
+	errBody := bodyString(t, mustGet(t, client, base+second.Header.Get("Location")))
+	if !strings.Contains(errBody, "nicht ausgeführt") {
+		t.Errorf("repeat erase should render the localized error message: %s", errBody)
+	}
+}
+
+// TestPrivacyConsentToggleUnknownAthleteRedirectsError covers
+// handlePrivacyConsentToggle's error branch: ResultsService.SetConsent
+// fails for an athlete ID that does not exist, and the handler must
+// redirect with the "invalid" flash rather than error out.
+func TestPrivacyConsentToggleUnknownAthleteRedirectsError(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+
+	resp := postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/does-not-exist/consent", url.Values{"withdrawn": {"true"}})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("consent toggle on unknown athlete = %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/meets/"+meetID+"/privacy?err=invalid" {
+		t.Errorf("consent toggle on unknown athlete Location = %q, want .../privacy?err=invalid", loc)
+	}
+}
+
+// TestPrivacyRoutesServe404WhenPrivacyServiceUnwired covers the s.privacy
+// == nil defensive branch in handlePrivacyExport/handlePrivacyErase/
+// handleRetentionPurge: a Server built without SetPrivacy (a deployment
+// mode or wiring bug) must serve 404 rather than nil-dereference-panic.
+func TestPrivacyRoutesServe404WhenPrivacyServiceUnwired(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	// Rebuild a Server against the same app-layer deps but skip SetPrivacy.
+	cfg := Config{Addr: "127.0.0.1:0", TLS: TLSConfig{Mode: TLSModeLocal}, AppVersion: "test"}
+	bareServer := New(cfg, deps.auth, deps.sessions, deps.meets, deps.results, deps.backup, deps.cats, deps.bus)
+	srv := httptest.NewServer(bareServer.routes())
+	defer srv.Close()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	base := srv.URL
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	registerRosterParticipant(t, client, base, meetID, nil)
+	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
+	athleteID := athleteIDFromPrivacyPage(t, privacyBody)
+
+	resp := mustGet(t, client, base+"/meets/"+meetID+"/privacy/"+athleteID+"/export")
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("export with no privacy service wired = %d, want 404", resp.StatusCode)
+	}
+
+	resp = postForm(t, client, base+"/meets/"+meetID+"/privacy",
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"x"}})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("erase with no privacy service wired = %d, want 404", resp.StatusCode)
+	}
+
+	resp = postForm(t, client, base+"/admin/privacy", base+"/admin/privacy/purge", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("retention purge with no privacy service wired = %d, want 404", resp.StatusCode)
 	}
 }

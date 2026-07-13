@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/kriegalex/bahnfrei/internal/domain"
 )
 
 // verticalCaptureFixture creates a standalone HJ meet with two athletes and
@@ -153,5 +155,225 @@ func TestVerticalHeightsConfigureIsOfficeOnlyWebSYS043(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("anonymous configure heights = %d, want 403", resp.StatusCode)
+	}
+}
+
+// TestVerticalDisplayAndParseVerticalValueSYS043 covers the grid notation's
+// two pure mapping functions directly: every stored trial kind renders its
+// single-letter cell, an unrecognized/empty kind renders blank, and
+// parseVerticalValue accepts the D5.2 vocabulary case-insensitively (both
+// pass-mark spellings) while rejecting anything else.
+func TestVerticalDisplayAndParseVerticalValueSYS043(t *testing.T) {
+	for _, tc := range []struct {
+		kind domain.QualificationStatus
+		want string
+	}{
+		{domain.StatusO, "o"}, {domain.StatusX, "x"}, {domain.StatusPass, "-"},
+		{domain.StatusR, "r"}, {domain.StatusNone, ""}, {domain.StatusQ, ""},
+	} {
+		if got := verticalDisplay(tc.kind); got != tc.want {
+			t.Errorf("verticalDisplay(%q) = %q, want %q", tc.kind, got, tc.want)
+		}
+	}
+
+	for _, tc := range []struct {
+		in       string
+		wantKind domain.QualificationStatus
+		wantOK   bool
+	}{
+		{"o", domain.StatusO, true}, {"O", domain.StatusO, true},
+		{"x", domain.StatusX, true}, {"X", domain.StatusX, true},
+		{"-", domain.StatusPass, true}, {"–", domain.StatusPass, true},
+		{"r", domain.StatusR, true}, {" R ", domain.StatusR, true},
+		{"", "", false}, {"q", "", false}, {"garbage", "", false},
+	} {
+		kind, ok := parseVerticalValue(tc.in)
+		if kind != tc.wantKind || ok != tc.wantOK {
+			t.Errorf("parseVerticalValue(%q) = (%q, %v), want (%q, %v)", tc.in, kind, ok, tc.wantKind, tc.wantOK)
+		}
+	}
+}
+
+// TestNextHeightHintEdgeCasesSYS043 covers nextHeightHint's two "no
+// suggestion" branches alongside its two known-discipline increments: an
+// unknown discipline code (no WA default increment) and an unparseable
+// last-configured height both yield no hint rather than a garbage one.
+func TestNextHeightHintEdgeCasesSYS043(t *testing.T) {
+	if got := nextHeightHint("1.70", "HJ"); got != "1.73" {
+		t.Errorf("nextHeightHint(1.70, HJ) = %q, want 1.73", got)
+	}
+	if got := nextHeightHint("4.50", "PV"); got != "4.60" {
+		t.Errorf("nextHeightHint(4.50, PV) = %q, want 4.60", got)
+	}
+	if got := nextHeightHint("1.70", "LJ"); got != "" {
+		t.Errorf("nextHeightHint for a non-vertical discipline = %q, want \"\"", got)
+	}
+	if got := nextHeightHint("not-a-height", "HJ"); got != "" {
+		t.Errorf("nextHeightHint with an unparseable height = %q, want \"\"", got)
+	}
+}
+
+// TestVerticalCaptureUnknownUnitIs404Web covers the shared verticalCaptureView
+// error mapping (reused by the unit page, its standings fragment and the PDF
+// capture sheet): a syntactically fine but nonexistent unit id within a real
+// meet surfaces the app's not-found error, not a crash or a blank 200.
+func TestVerticalCaptureUnknownUnitIs404Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := verticalCaptureFixture(t, client, base)
+	badUnitURL := base + "/meets/" + meetID + "/capture/does-not-exist"
+
+	for _, path := range []string{"", "/standings", "/sheet.pdf"} {
+		resp := mustGet(t, client, badUnitURL+path)
+		_ = bodyString(t, resp)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", badUnitURL+path, resp.StatusCode)
+		}
+	}
+}
+
+// TestVerticalCaptureTrialInvalidValueWeb covers handleCaptureVerticalTrial's
+// parseVerticalValue failure branch: a garbage grid value never reaches
+// SaveVerticalTrial and instead re-renders the grid with a 422 and a
+// localized "invalid" flash (mirrors the horizontal-attempt grid's
+// equivalent behaviour).
+func TestVerticalCaptureTrialInvalidValueWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+	var athlete string
+	for _, id := range athletes {
+		athlete = id
+		break
+	}
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {athlete}, "height": {"0"}, "seq": {"1"}, "value": {"maybe"}, "version": {"0"},
+	})
+	invalidBody := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("garbage trial value = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(invalidBody, `name="heights"`) && !strings.Contains(invalidBody, "1.60") {
+		t.Errorf("re-rendered grid missing after invalid value: %s", invalidBody)
+	}
+}
+
+// TestVerticalCaptureTrialUnitNotAssignedWeb covers handleCaptureVerticalTrial's
+// app.ErrUnitNotAssigned branch (SYS-090's per-event scoping, UC-022 #1): a
+// field-official account never assigned to this meet's units is refused
+// with the shared 403 page, not a capture-grid error banner.
+func TestVerticalCaptureTrialUnitNotAssignedWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+
+	createAccountWeb(t, client, base, "unassigned-fo", "field_official")
+	logout(t, client, base)
+	login(t, client, base, "unassigned-fo", "s3cret-passphrase")
+
+	// The GET itself is already denied (CheckUnitAccess in handleCaptureUnit),
+	// so which athlete id is posted below is irrelevant — SaveVerticalTrial's
+	// authorizeCaptureAccess must refuse before ever looking one up. postForm
+	// still finds a CSRF token on the 403 page: layout() embeds the logout
+	// form's hidden field regardless of status code.
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {"irrelevant-athlete-id"}, "height": {"0"}, "seq": {"1"}, "value": {"o"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("unassigned field official's vertical-trial POST = %d, want 403 (SYS-090)", resp.StatusCode)
+	}
+}
+
+// TestVerticalCaptureTrialCorrectionRequiredWeb covers
+// handleCaptureVerticalTrial's app.ErrCorrectionRequired branch: once a
+// unit's results are announced (SYS-046/047), a further trial write is
+// refused with the "use the correction flow" flash rather than silently
+// mutating an announced result.
+func TestVerticalCaptureTrialCorrectionRequiredWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+	first := athletes["1"]
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {first}, "height": {"0"}, "seq": {"1"}, "value": {"o"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("save trial = %d, want 303", resp.StatusCode)
+	}
+
+	announceResp := postForm(t, client, unitURL, unitURL+"/announce", url.Values{})
+	_ = bodyString(t, announceResp)
+	if announceResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("announce = %d, want 303", announceResp.StatusCode)
+	}
+
+	second := athletes["2"]
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {second}, "height": {"0"}, "seq": {"1"}, "value": {"o"}, "version": {"0"},
+	})
+	correctionBody := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("trial write after announce = %d, want 422 (correction required)", resp.StatusCode)
+	}
+	if !strings.Contains(correctionBody, "1.60") {
+		t.Errorf("correction-required page should still render the grid: %s", correctionBody)
+	}
+}
+
+// TestVerticalCaptureSheetPDFWeb covers handleVerticalCaptureSheetPDF (0%
+// baseline coverage): its own height-column PDF, distinct from
+// captureSheetDocument's trial-column shape for horizontal/track units.
+func TestVerticalCaptureSheetPDFWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60", "1.65"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+
+	pdfResp := mustGet(t, client, unitURL+"/sheet.pdf")
+	defer func() { _ = pdfResp.Body.Close() }()
+	if pdfResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET vertical sheet.pdf = %d, want 200", pdfResp.StatusCode)
+	}
+	if ct := pdfResp.Header.Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+	data := bodyString(t, pdfResp)
+	if !strings.HasPrefix(data, "%PDF") {
+		t.Error("downloaded body does not look like a PDF")
+	}
+
+	anon := mustGet(t, &http.Client{}, unitURL+"/sheet.pdf")
+	_ = anon.Body.Close()
+	if anon.StatusCode != http.StatusForbidden {
+		t.Errorf("anonymous vertical sheet.pdf GET = %d, want 403 (SYS-090)", anon.StatusCode)
 	}
 }

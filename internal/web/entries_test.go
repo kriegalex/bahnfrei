@@ -5,10 +5,14 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/kriegalex/bahnfrei/internal/app"
 )
 
 // publishMeetWeb drives the publish action on a freshly created meet — its
@@ -516,5 +520,254 @@ func TestBibsPDFDownloadSYS018UC006_1Web(t *testing.T) {
 	_ = anon.Body.Close()
 	if anon.StatusCode != http.StatusForbidden {
 		t.Errorf("anonymous bibs.pdf GET = %d, want 403 (SYS-090)", anon.StatusCode)
+	}
+}
+
+// TestJoinStringsCentsToCHFAndChfToCents covers entries.go's pure rendering
+// helpers directly: the "–" empty-list placeholder (never a blank cell),
+// CHF cent formatting including the negative-amount sign, and cent parsing's
+// comma-decimal acceptance, blank-is-zero convention and reject-on-garbage
+// error path.
+func TestJoinStringsCentsToCHFAndChfToCents(t *testing.T) {
+	if got := joinStrings(nil); got != "–" {
+		t.Errorf("joinStrings(nil) = %q, want \"–\"", got)
+	}
+	if got := joinStrings([]string{"Anna", "Beat"}); got != "Anna, Beat" {
+		t.Errorf("joinStrings = %q, want \"Anna, Beat\"", got)
+	}
+
+	if got := centsToCHF(0); got != "0.00" {
+		t.Errorf("centsToCHF(0) = %q, want 0.00", got)
+	}
+	if got := centsToCHF(1234); got != "12.34" {
+		t.Errorf("centsToCHF(1234) = %q, want 12.34", got)
+	}
+	if got := centsToCHF(-150); got != "-1.50" {
+		t.Errorf("centsToCHF(-150) = %q, want -1.50", got)
+	}
+
+	if got, err := chfToCents(""); err != nil || got != 0 {
+		t.Errorf("chfToCents(\"\") = (%d, %v), want (0, nil)", got, err)
+	}
+	if got, err := chfToCents("12,50"); err != nil || got != 1250 {
+		t.Errorf("chfToCents(12,50) = (%d, %v), want (1250, nil)", got, err)
+	}
+	if got, err := chfToCents(" 9.5 "); err != nil || got != 950 {
+		t.Errorf("chfToCents(\" 9.5 \") = (%d, %v), want (950, nil)", got, err)
+	}
+	if _, err := chfToCents("not-a-number"); err == nil {
+		t.Error("chfToCents(\"not-a-number\") = nil error, want an error")
+	}
+}
+
+// TestEntryFlashKeyMapsKnownErrors covers entryFlashKey's full switch: every
+// sentinel entry-submission error maps to its own "entries.error.*" suffix,
+// and anything else falls back to "invalid" rather than leaking a raw
+// Go error string into the redirect (SYS-011/012/015).
+func TestEntryFlashKeyMapsKnownErrors(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{app.ErrEntryDeadlinePassed, "deadline"},
+		{app.ErrEntryLimitReached, "limit"},
+		{app.ErrSeedPerformanceRequired, "seed_required"},
+		{app.ErrDuplicateEntry, "duplicate"},
+		{app.ErrEntriesClosed, "closed"},
+		{app.ErrNotRelayEntry, "not_relay"},
+		{app.ErrConflict, "conflict"},
+		{errors.New("some other failure"), "invalid"},
+	} {
+		if got := entryFlashKey(tc.err); got != tc.want {
+			t.Errorf("entryFlashKey(%v) = %q, want %q", tc.err, got, tc.want)
+		}
+	}
+}
+
+// TestBibFlashKeyMapsKnownErrors mirrors TestEntryFlashKeyMapsKnownErrors for
+// bibFlashKey's smaller switch (SYS-018).
+func TestBibFlashKeyMapsKnownErrors(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{app.ErrBibRequired, "required"},
+		{app.ErrDuplicateParticipant, "duplicate"},
+		{app.ErrConflict, "conflict"},
+		{errors.New("some other failure"), "invalid"},
+	} {
+		if got := bibFlashKey(tc.err); got != tc.want {
+			t.Errorf("bibFlashKey(%v) = %q, want %q", tc.err, got, tc.want)
+		}
+	}
+}
+
+// TestEntriesAndBibsUnknownMeetIs404Web covers handleEntries'/handleBibs'
+// error-mapping branch through entriesView/bibsView: a syntactically fine
+// but nonexistent meet id surfaces the shared 404, not a 500 or a blank page.
+func TestEntriesAndBibsUnknownMeetIs404Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	for _, path := range []string{"/meets/does-not-exist/entries", "/meets/does-not-exist/bibs"} {
+		resp := mustGet(t, client, base+path)
+		_ = bodyString(t, resp)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, resp.StatusCode)
+		}
+	}
+}
+
+// TestEntriesFlashErrorQueryParamWeb covers handleEntries' "?err=" flash
+// rendering branch (the redirect target every entry-submission error lands
+// on).
+func TestEntriesFlashErrorQueryParamWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/entries?err=duplicate"))
+	if !strings.Contains(body, "gemeldet") && !strings.Contains(body, "déjà") {
+		t.Errorf("entries page with ?err=duplicate should render a localized flash: %s", body)
+	}
+}
+
+// TestOnlineEntryRelayEmptyCompositionRejectedWeb covers
+// handleEntryRelaySubmit's error path: a relay entry with no leg rows at all
+// is rejected server-side (a malformed/forged submission, not a client-side-
+// only validation), redirecting with a flash rather than creating a
+// zero-athlete team.
+func TestOnlineEntryRelayEmptyCompositionRejectedWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"4x100m"}, "categories": {"U16 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	page := base + "/meets/" + meetID + "/entries"
+	relayEventID := mustEventID(t, deps, meetID, "4x100m")
+
+	resp = postForm(t, client, page, page+"/relay", url.Values{
+		"relay_event": {relayEventID}, "relay_club": {"LC Empty"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("empty-composition relay submit = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "err=invalid") {
+		t.Errorf("redirect location = %q, want err=invalid", resp.Header.Get("Location"))
+	}
+	body := bodyString(t, mustGet(t, client, page))
+	if strings.Contains(body, "LC Empty") {
+		t.Error("no relay entry should have been created with an empty composition")
+	}
+}
+
+// TestEntryRelayCompositionUpdateUnknownEntryWeb covers
+// handleEntryRelayCompositionUpdate's error path with an entry id the
+// submission form never offered (a forged path segment): store.GetEntry's
+// not-found surfaces as a redirect-with-flash, matching the deadline-forgery
+// pattern already proven for individual entries.
+func TestEntryRelayCompositionUpdateUnknownEntryWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, page+"/does-not-exist/relay-composition", url.Values{
+		"relay_version":         {"0"},
+		"edit_leg_first_name_0": {"X"}, "edit_leg_last_name_0": {"Y"}, "edit_leg_birth_year_0": {"2011"}, "edit_leg_sex_0": {"W"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("relay-composition update for an unknown entry = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "err=") {
+		t.Errorf("redirect location = %q, want an err= flash", resp.Header.Get("Location"))
+	}
+}
+
+// TestBibAssignEmptyBibRejectedWeb covers handleBibAssign's ErrBibRequired
+// branch (bibFlashKey "required"): submitting a blank bib value is refused,
+// not silently cleared.
+func TestBibAssignEmptyBibRejectedWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	entriesPage := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, entriesPage, entriesPage+"/individual", url.Values{
+		"event": {eventID}, "first_name": {"Anna"}, "last_name": {"Muster"},
+		"birth_year": {"2011"}, "sex": {"W"}, "club": {"LC Empty Bib"}, "seed": {"13.50"},
+	})
+	_ = resp.Body.Close()
+
+	logout(t, client, base)
+	login(t, client, base, "admin", "s3cret-passphrase")
+	bibsPage := base + "/meets/" + meetID + "/bibs"
+	body := bodyString(t, mustGet(t, client, bibsPage))
+	// The fixture registers exactly one participant (no bib assigned yet),
+	// so its per-row assignment form is the only one on the page —
+	// bibRowFrom's "><" marker is ambiguous against adjacent HTML tags in
+	// general, so extract the row directly instead.
+	re := regexp.MustCompile(`(?s)/bibs/([0-9A-Z]{20,30})" method="post".*?name="version" value="(\d+)"`)
+	m := re.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("bibs page has no per-row assignment form: %s", body)
+	}
+	participantID, version := m[1], m[2]
+	resp = postForm(t, client, bibsPage, bibsPage+"/"+participantID, url.Values{"bib": {"   "}, "version": {version}})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("empty bib assign = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "err=required") {
+		t.Errorf("redirect location = %q, want err=required", resp.Header.Get("Location"))
+	}
+}
+
+// TestBibBulkAssignNonPositiveStartRejectedWeb covers handleBibBulkAssign's
+// error path: a non-positive starting bib number (a blank/zero "start"
+// field) is rejected rather than silently assigning bib "0".
+func TestBibBulkAssignNonPositiveStartRejectedWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	entriesPage := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, entriesPage, entriesPage+"/individual", url.Values{
+		"event": {eventID}, "first_name": {"Anna"}, "last_name": {"Muster"},
+		"birth_year": {"2011"}, "sex": {"W"}, "club": {"LC Zero Start"}, "seed": {"13.50"},
+	})
+	_ = resp.Body.Close()
+
+	logout(t, client, base)
+	login(t, client, base, "admin", "s3cret-passphrase")
+	bibsPage := base + "/meets/" + meetID + "/bibs"
+	body := bodyString(t, mustGet(t, client, bibsPage))
+	clubID := clubIDFromBibsPage(t, body, "LC Zero Start")
+
+	resp = postForm(t, client, bibsPage, bibsPage+"/bulk", url.Values{"club": {clubID}, "start": {"0"}})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("bulk bib assign with start=0 = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "err=invalid") {
+		t.Errorf("redirect location = %q, want err=invalid", resp.Header.Get("Location"))
 	}
 }
