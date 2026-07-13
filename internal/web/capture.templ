@@ -276,8 +276,10 @@ templ windForm(p PageData, v captureView) {
 		<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 		<label>
 			{ p.T("capture.wind") }
-			<input type="text" name="wind" size="4" value={ v.CurrentWind } aria-label={ p.T("capture.wind") }/>
+			<input type="text" name="wind" size="4" value={ v.CurrentWind } aria-label={ p.T("capture.wind") } aria-describedby="capture-wind-hint"/>
 		</label>
+		@helpIcon(p, "capture.wind")
+		<p class="hint" id="capture-wind-hint">{ p.T("capture.hint.wind") }</p>
 		<button type="submit">{ p.T("capture.wind.save") }</button>
 	</form>
 }

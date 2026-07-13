@@ -79,8 +79,9 @@ templ rosterPage(p PageData, v rosterView) {
 			</label>
 			<label>
 				{ p.T("roster.birth_year") }
-				<input type="number" name="birth_year" min="1900" max="2100" required?={ true }/>
+				<input type="number" name="birth_year" min="1900" max="2100" required?={ true } aria-describedby="roster-birth-year-hint"/>
 			</label>
+			<p class="hint" id="roster-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
 			<label>
 				{ p.T("roster.sex") }
 				<select name="sex">
@@ -100,6 +101,7 @@ templ rosterPage(p PageData, v rosterView) {
 				<input type="checkbox" name="publication_withdrawn" value="true"/>
 				{ p.T("roster.publication_withdrawn") }
 			</label>
+			@helpIcon(p, "publication_withdrawn")
 			<button type="submit">{ p.T("roster.submit") }</button>
 		</form>
 	}

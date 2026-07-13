@@ -56,7 +56,8 @@ have. The gallery fixture page (§4) renders one live instance of every row.
 | Checkbox | `input[type=checkbox]` | default, focus-visible (ring), disabled | Consent/withdrawal flags, bulk-entry rows |
 | Select | `select` | default, focus-visible (ring), disabled | Locale switcher, template/round pickers, bulk rows |
 | Fieldset/legend | `fieldset`/`legend` | default (browser-native grouping box) | Grouped inputs (e.g. relay leg composition) |
-| Hint text | `.hint` | default (muted, smaller) | Any field needing a visible constraint (SYS-117) — not yet adopted everywhere, see the usability-audit findings |
+| Hint text | `.hint` | default (muted, smaller) | Any field needing a visible constraint (SYS-117) — adopted for hard format/unit/bound constraints by the TASK-031 hint pass (each hint `aria-describedby`-associated with its input; residual gaps in OQ-076) |
+| Contextual-help icon + popup | `.help` wrapper: `.help-trigger` (button) + `.help-popup` (`role="tooltip"`) | trigger: default, hover, focus-visible (ring), active, `aria-expanded` open/close; popup: hidden (default), open | TASK-031 (SYS-115, UC-037): every input in the help registry (`internal/web/help.go`); markup `help.templ`, behavior `/static/help.js` (hover + focus + click/tap open; SC 1.4.13 Escape-dismiss/hoverable/persistent) — trigger uses `--color-accent`/`--color-accent-fg`, popup `--color-bg`/`--color-fg`/`--color-border` + `--radius-sm` per §5 |
 | Inline field error | `.field-error` + `input[aria-invalid="true"]`/`select[aria-invalid="true"]` | error only (n/a default/hover/active) | Documented convention; the gallery page is its first real usage — see `docs/delivery/usability-audit-2026-07.md` finding U-1 for adoption status across existing forms |
 | Table + wide-table scroll wrapper | `table`, `.table-scroll` (`tabindex="0"`) | default, focus-visible (ring, on the scroll wrapper) | Timetables, start lists, results, standings, roster, audit log |
 | Offline-capture status badge | `.offline-status[data-state]` | online/default, offline, syncing (three distinct colors) | Field capture (UC-034; SYS-087) |
@@ -113,6 +114,11 @@ consumers close UC-038 #2's loop:
   keystroke, to avoid a false failure from this quirk.
 
 ## 5. Consuming this for TASK-031 (contextual help component)
+
+*(Status: implemented — TASK-031 followed this section as written: `help.templ`/`help.js` consume
+only the tokens named below, the component is registered in §2's inventory and on the gallery page
+(`#help-gallery-example`, covered by the keyboard walk), and its dedicated SC 1.4.13 behavior e2e
+is `e2e/tests/contextual-help-UC037.spec.ts`. Kept as guidance for the next component author.)*
 
 TASK-031's help-icon component should be born token-conformant, not retrofitted:
 

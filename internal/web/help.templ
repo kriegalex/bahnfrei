@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// helpIcon is the reusable contextual-help component (TASK-031, SYS-115,
+// UC-037): a "?" trigger button next to a field's label that reveals a
+// short localized explanation on pointer hover, keyboard focus, and
+// click/tap (never hover-only — SYS-113), with the WCAG 2.2 SC 1.4.13
+// behaviors (Escape-dismissible without moving focus, hoverable,
+// persistent) driven by the static /static/help.js island — the CSP
+// (middleware.go) forbids inline scripts.
+//
+// Assistive-technology association (UC-037 #4): the trigger is a real
+// <button> (keyboard-focusable, accessible name from help.trigger_label)
+// and references the popup content via aria-describedby, per the W3C APG
+// tooltip pattern — a screen reader announces the help text as the
+// trigger's description on focus, whether or not the popup is visually
+// open (hidden elements referenced by aria-describedby still contribute
+// to the accessible description per the AccName computation). The popup
+// carries role="tooltip" and aria-expanded on the trigger tracks the
+// visual state for the click/tap "toggletip" mode. The field's own hard
+// constraints stay in permanently visible `.hint` text associated with
+// the input via ITS aria-describedby (SYS-115: required information never
+// lives only inside the popup), so the input-side description channel is
+// not overloaded with supplementary prose.
+//
+// Placement convention (load-bearing for the UC-037 #1 coverage test):
+// render @helpIcon immediately AFTER the closing </label> of the field it
+// explains — never inside the label (a button inside a label garbles the
+// label's accessible name and its click-forwarding). help_test.go
+// mechanically pairs each rendered icon with the nearest preceding
+// non-hidden input/select in document order and checks the pair against
+// the registry (help.go).
+//
+// key must be a helpRegistry Key; the popup text is the "help.<key>"
+// catalog entry (DE/FR complete, SYS-110).
+templ helpIcon(p PageData, key string) {
+	<span class="help" data-help-key={ key }>
+		<button
+			type="button"
+			class="help-trigger"
+			aria-expanded="false"
+			aria-describedby={ helpContentID(key) }
+			aria-label={ p.T("help.trigger_label") }
+		>?</button>
+		<span role="tooltip" id={ helpContentID(key) } class="help-popup" hidden>
+			{ p.T(helpTextKey(key)) }
+		</span>
+	</span>
+}

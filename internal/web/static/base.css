@@ -161,3 +161,46 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   font-size: var(--font-size-sm);
   margin: var(--space-1) 0;
 }
+
+/* Contextual-help icon + popup (TASK-031, SYS-115, UC-037; component
+   markup in help.templ, behavior in /static/help.js). The popup is a DOM
+   child of the .help wrapper so the pointer can travel from the trigger
+   onto the content without leaving the wrapper (WCAG 2.2 SC 1.4.13
+   "hoverable"). The trigger's focus ring comes from the shared
+   :focus-visible rule above (design-system.md §5). */
+.help {
+  position: relative;
+  display: inline-block;
+  margin: 0 var(--space-1);
+}
+.help-trigger {
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: help;
+}
+.help-popup {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  width: max-content;
+  max-width: 18rem;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--font-size-sm);
+  font-weight: normal;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 var(--space-1) var(--space-2) var(--color-border);
+}
+.help-popup[hidden] { display: none; }

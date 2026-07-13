@@ -40,6 +40,7 @@ func TestDesignGalleryRendersEveryInventoriedComponentSYS116UC038_2(t *testing.T
 		"gallery-input-disabled",
 		"gallery-input-invalid",
 		"gallery-input-invalid-error",
+		"help-gallery-example",
 		"gallery-status-online",
 		"gallery-status-offline",
 		"gallery-status-syncing",
