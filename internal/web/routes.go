@@ -6,6 +6,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
 	"github.com/kriegalex/bahnfrei/internal/web/i18n"
@@ -243,9 +244,11 @@ func (s *Server) routes() http.Handler {
 
 	var h http.Handler = mux
 	h = csrfMiddleware()(h)
+	// Bound the request body before CSRF parses it (see limitRequestBody).
+	h = limitRequestBody(maxRequestBodyBytes)(h)
 	h = sessionMiddleware(s.sess)(h)
 	h = localeMiddleware(s.cats)(h)
-	h = securityHeaders(h)
+	h = s.securityHeaders(h)
 	return h
 }
 
@@ -275,12 +278,30 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
+	// Anti-automation gate (SYS-092, ASVS L2 V2.2.1): once an IP has burned
+	// its failed-attempt budget, reject before spending an argon2id verify.
+	// The generic "invalid credentials" message is reused deliberately so a
+	// throttled response discloses nothing about account existence.
+	ip := clientIP(r)
+	if s.loginLimiter.blocked(ip) {
+		p := basePageData(r, s.cats)
+		p.Title = p.T("auth.login.title")
+		p.FlashError = p.T("auth.login.error")
+		w.Header().Set("Retry-After", strconv.Itoa(int(loginFailWindow.Seconds())))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = loginPage(p).Render(r.Context(), w)
+		return
+	}
+
 	session, err := s.auth.Login(r.Context(), username, password)
 	if err != nil {
 		p := basePageData(r, s.cats)
 		p.Title = p.T("auth.login.title")
 		switch {
 		case errors.Is(err, app.ErrInvalidCredentials):
+			// Only bad credentials count toward the brute-force budget; a
+			// disabled account (correct password) does not.
+			s.loginLimiter.fail(ip)
 			p.FlashError = p.T("auth.login.error")
 			w.WriteHeader(http.StatusUnauthorized)
 		case errors.Is(err, app.ErrAccountDisabled):
@@ -296,6 +317,9 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		_ = loginPage(p).Render(r.Context(), w)
 		return
 	}
+
+	// Successful login clears the failure counter for this source.
+	s.loginLimiter.reset(ip)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,

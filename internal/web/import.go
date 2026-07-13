@@ -105,6 +105,9 @@ func (s *Server) handleEntriesImportSubmit(w http.ResponseWriter, r *http.Reques
 	p.Title = detail.Name + " — " + p.T("import.title")
 	v := entriesImportView{MeetID: detail.ID, MeetName: detail.Name, Profiles: importProfileOptions()}
 
+	// The global request-body cap (limitRequestBody, middleware.go) already
+	// bounds the upload before the CSRF middleware parses it; this argument is
+	// only the in-memory-vs-tempfile threshold.
 	if err := r.ParseMultipartForm(maxImportUploadBytes); err != nil {
 		p.FlashError = p.T("import.error.upload")
 		_ = entriesImportPage(p, v).Render(r.Context(), w)
