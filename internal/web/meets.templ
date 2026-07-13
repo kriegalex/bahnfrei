@@ -77,12 +77,32 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 			<input type="hidden" name="version" value={ intToStr(f.Version) }/>
 			<label>
 				{ p.T("meet.field.name") }
-				<input type="text" name="name" value={ f.Name } required?={ true }/>
+				<input
+					type="text"
+					name="name"
+					value={ f.Name }
+					required?={ true }
+					if f.Errors.Has("name") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("name") }
+					}
+				/>
 			</label>
+			@fieldError("name", f.Errors)
 			<label>
 				{ p.T("meet.field.venue") }
-				<input type="text" name="venue" value={ f.Venue } required?={ true }/>
+				<input
+					type="text"
+					name="venue"
+					value={ f.Venue }
+					required?={ true }
+					if f.Errors.Has("venue") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("venue") }
+					}
+				/>
 			</label>
+			@fieldError("venue", f.Errors)
 			<label>
 				{ p.T("meet.field.homologation") }
 				<input type="text" name="homologation_ref" value={ f.HomologationRef }/>
@@ -90,13 +110,35 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 			@helpIcon(p, "meet.homologation")
 			<label>
 				{ p.T("meet.field.start_date") }
-				<input type="date" name="start_date" value={ f.StartDate } required?={ true }/>
+				<input
+					type="date"
+					name="start_date"
+					value={ f.StartDate }
+					required?={ true }
+					if f.Errors.Has("start_date") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("start_date") }
+					}
+				/>
 			</label>
+			@fieldError("start_date", f.Errors)
 			<label>
 				{ p.T("meet.field.end_date") }
-				<input type="date" name="end_date" value={ f.EndDate } required?={ true } aria-describedby="meet-end-date-hint"/>
+				<input
+					type="date"
+					name="end_date"
+					value={ f.EndDate }
+					required?={ true }
+					if f.Errors.Has("end_date") {
+						aria-invalid="true"
+						aria-describedby={ "meet-end-date-hint " + fieldErrorID("end_date") }
+					} else {
+						aria-describedby="meet-end-date-hint"
+					}
+				/>
 			</label>
 			<p class="hint" id="meet-end-date-hint">{ p.T("meet.hint.end_date") }</p>
+			@fieldError("end_date", f.Errors)
 			<label>
 				{ p.T("meet.field.tier") }
 				<select name="tier">

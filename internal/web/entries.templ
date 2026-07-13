@@ -23,27 +23,84 @@ templ entriesPage(p PageData, v entriesView) {
 					{ p.T("entries.event") }
 					<select name="event">
 						for _, ev := range v.Events {
-							<option value={ ev.ID }>{ ev.Label }</option>
+							<option value={ ev.ID } selected?={ ev.ID == v.IndividualForm.Event }>{ ev.Label }</option>
 						}
 					</select>
 				</label>
-				<label>{ p.T("roster.first_name") } <input type="text" name="first_name" required?={ true }/></label>
-				<label>{ p.T("roster.last_name") } <input type="text" name="last_name" required?={ true }/></label>
-				<label>{ p.T("roster.birth_year") } <input type="number" name="birth_year" min="1900" required?={ true } aria-describedby="entries-birth-year-hint"/></label>
+				<label>
+					{ p.T("roster.first_name") }
+					<input
+						type="text"
+						name="first_name"
+						value={ v.IndividualForm.FirstName }
+						required?={ true }
+						if v.IndividualForm.Errors.Has("first_name") {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID("first_name") }
+						}
+					/>
+				</label>
+				@fieldError("first_name", v.IndividualForm.Errors)
+				<label>
+					{ p.T("roster.last_name") }
+					<input
+						type="text"
+						name="last_name"
+						value={ v.IndividualForm.LastName }
+						required?={ true }
+						if v.IndividualForm.Errors.Has("last_name") {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID("last_name") }
+						}
+					/>
+				</label>
+				@fieldError("last_name", v.IndividualForm.Errors)
+				<label>
+					{ p.T("roster.birth_year") }
+					<input
+						type="number"
+						name="birth_year"
+						min="1900"
+						value={ v.IndividualForm.BirthYear }
+						required?={ true }
+						if v.IndividualForm.Errors.Has("birth_year") {
+							aria-invalid="true"
+							aria-describedby={ "entries-birth-year-hint " + fieldErrorID("birth_year") }
+						} else {
+							aria-describedby="entries-birth-year-hint"
+						}
+					/>
+				</label>
 				<p class="hint" id="entries-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
+				@fieldError("birth_year", v.IndividualForm.Errors)
 				<label>
 					{ p.T("roster.sex") }
 					<select name="sex">
-						<option value="W">{ p.T("roster.sex") } W</option>
-						<option value="M">{ p.T("roster.sex") } M</option>
+						<option value="W" selected?={ v.IndividualForm.Sex == "W" }>{ p.T("roster.sex") } W</option>
+						<option value="M" selected?={ v.IndividualForm.Sex == "M" }>{ p.T("roster.sex") } M</option>
 					</select>
 				</label>
-				<label>{ p.T("roster.club") } <input type="text" name="club"/></label>
-				<label>{ p.T("entries.seed") } <input type="text" name="seed" required?={ true } aria-describedby="entries-seed-hint"/></label>
+				<label>{ p.T("roster.club") } <input type="text" name="club" value={ v.IndividualForm.Club }/></label>
+				<label>
+					{ p.T("entries.seed") }
+					<input
+						type="text"
+						name="seed"
+						value={ v.IndividualForm.Seed }
+						required?={ true }
+						if v.IndividualForm.Errors.Has("seed") {
+							aria-invalid="true"
+							aria-describedby={ "entries-seed-hint " + fieldErrorID("seed") }
+						} else {
+							aria-describedby="entries-seed-hint"
+						}
+					/>
+				</label>
 				@helpIcon(p, "entries.seed")
 				<p class="hint" id="entries-seed-hint">{ p.T("entries.hint.seed") }</p>
+				@fieldError("seed", v.IndividualForm.Errors)
 				<label>
-					<input type="checkbox" name="publication_withdrawn" value="true"/>
+					<input type="checkbox" name="publication_withdrawn" value="true" checked?={ v.IndividualForm.PublicationWithdrawn }/>
 					{ p.T("roster.publication_withdrawn") }
 				</label>
 				@helpIcon(p, "publication_withdrawn")

@@ -179,6 +179,60 @@ func TestMeetCreationUC001_2(t *testing.T) {
 	_ = bodyString(t, resp)
 }
 
+// TestMeetCreateFieldErrorsOQ075UC038_4 covers UC-038 #4's "meet setup"
+// representative form with the usability audit's own literal repro case
+// (usability-audit-2026-07.md H9/F3): an end date before the start date.
+// The fix must name the offending field, state what to fix, and preserve
+// every other submitted value — not just a page-level "could not be saved"
+// flash.
+func TestMeetCreateFieldErrorsOQ075UC038_4(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	resp := postForm(t, client, base+"/meets/new", base+"/meets", url.Values{
+		"name": {"Abendmeeting Uster"}, "venue": {"Stadion Buchholz"},
+		"start_date": {"2027-06-13"}, "end_date": {"2027-06-12"}, // end before start
+		"tier": {"C-Meeting"}, "scheme": {"swiss-athletics"},
+	})
+	body := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("end-before-start create = %d, want 422: %s", resp.StatusCode, body)
+	}
+	for _, want := range []string{
+		`aria-invalid="true"`,
+		`id="end_date-error"`,
+		// the valid fields must survive the re-render (preserved input).
+		`value="Abendmeeting Uster"`,
+		`value="Stadion Buchholz"`,
+		`value="2027-06-13"`,
+		`value="2027-06-12"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("re-rendered meet form missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, `id="name-error"`) {
+		t.Error("name field has no error and must not render a field-error paragraph")
+	}
+
+	// A second case: name and venue both blank, dates fine — both required
+	// fields get their own inline error, not a shared generic one.
+	resp2 := postForm(t, client, base+"/meets/new", base+"/meets", url.Values{
+		"name": {""}, "venue": {""}, "start_date": {"2027-06-12"}, "end_date": {"2027-06-13"},
+		"tier": {"C-Meeting"}, "scheme": {"swiss-athletics"},
+	})
+	body2 := bodyString(t, resp2)
+	if resp2.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("blank name/venue create = %d, want 422: %s", resp2.StatusCode, body2)
+	}
+	for _, want := range []string{`id="name-error"`, `id="venue-error"`} {
+		if !strings.Contains(body2, want) {
+			t.Errorf("re-rendered meet form missing %q: %s", want, body2)
+		}
+	}
+}
+
 // addEvent posts one add-event form on the meet page.
 func addEvent(t *testing.T, client *http.Client, base, meetID string, values url.Values) *http.Response {
 	t.Helper()

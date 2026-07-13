@@ -285,7 +285,10 @@ func TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
 		t.Error("blocked capture must explain a correction is required")
 	}
 
-	// A correction without a reason is rejected.
+	// A correction without a reason is rejected — OQ-075/UC-038 #4: the
+	// error must name the "reason" field on this athlete's row (not just a
+	// page-level flash) and the row's just-typed time must survive the
+	// re-render.
 	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
 		"athlete": {athletes["101"]}, "time": {"9.20"}, "timing": {"manual"},
 	})
@@ -295,6 +298,16 @@ func TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
 	}
 	if !strings.Contains(noReason, "erfordert einen Grund") {
 		t.Error("correction-without-reason error must be shown")
+	}
+	reasonFieldID := "reason-" + athletes["101"]
+	for _, want := range []string{
+		`aria-invalid="true"`,
+		`id="` + reasonFieldID + `-error"`,
+		`value="9.20"`, // the rejected row's submitted time is preserved
+	} {
+		if !strings.Contains(noReason, want) {
+			t.Errorf("correction-without-reason re-render missing %q: %s", want, noReason)
+		}
 	}
 
 	// A reasoned correction succeeds and re-announces.
