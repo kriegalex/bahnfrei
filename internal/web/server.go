@@ -39,6 +39,9 @@ type Server struct {
 	cats    i18n.Catalogs
 	bus     *Bus
 	httpSrv *http.Server
+	// loginLimiter throttles brute-force login attempts (SYS-092, ASVS L2
+	// V2.2.1). See internal/web/ratelimit.go.
+	loginLimiter *loginRateLimiter
 }
 
 // SetPrivacy wires the TASK-023 data-subject-rights/retention service
@@ -57,7 +60,8 @@ func (s *Server) SetPrivacy(p *app.PrivacyService) *Server {
 // timetable events on it, UC-001 #4/SYS-071). backup wires the one-action
 // instance backup (SYS-084, UC-020 #3).
 func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, results *app.ResultsService, backup *app.BackupService, cats i18n.Catalogs, bus *Bus) *Server {
-	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, results: results, backup: backup, cats: cats, bus: bus}
+	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, results: results, backup: backup, cats: cats, bus: bus,
+		loginLimiter: newLoginRateLimiter(loginFailLimit, loginFailWindow)}
 	// Every committed capture write fans out to the meet's SSE topic — the
 	// capture and (later) public live pages refresh from it (UC-011 #4,
 	// SYS-071).

@@ -61,6 +61,11 @@ func sessionMiddleware(sessions *app.SessionManager) func(http.Handler) http.Han
 			if c, err := r.Cookie(sessionCookieName); err == nil {
 				if s, err := sessions.Lookup(c.Value); err == nil {
 					ctx = context.WithValue(ctx, ctxKeySession, s)
+					// Authenticated responses can carry personal data
+					// (athlete PII, exports); keep them out of shared and
+					// browser caches (SYS-092, ASVS L2 V8.2.1 / nFADP data
+					// minimization). A later handler is free to override.
+					w.Header().Set("Cache-Control", "no-store")
 				}
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -165,6 +170,34 @@ func csrfMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
+// maxRequestBodyBytes is the hard ceiling on any single request body
+// (SYS-092, ASVS L2 V12.1.1: bound request/upload size to prevent memory- or
+// disk-exhaustion DoS). It sits comfortably above the largest legitimate
+// upload — a 5 MiB timing/import file plus its multipart envelope
+// (maxImportUploadBytes / maxTimingUploadBytes) — and below anything a
+// well-behaved client would ever send.
+const maxRequestBodyBytes = 8 << 20
+
+// limitRequestBody caps every request body at max. It MUST sit outside the
+// CSRF middleware in the chain: checkCSRF reads the token via r.FormValue,
+// which parses the whole multipart body (up to Go's 32 MiB default) — so
+// without this cap in front, an oversized upload is fully buffered before any
+// handler runs, defeating a per-handler MaxBytesReader entirely. Honest
+// clients (browsers, the timing agent) send Content-Length and get a clean
+// 413; chunked or mis-declared bodies are still bounded by the wrapped reader.
+func limitRequestBody(max int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > max {
+				http.Error(w, "request entity too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func isStateChanging(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -213,14 +246,24 @@ func ensureCSRFCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 // securityHeaders sets the small set of response headers appropriate for a
 // server-rendered, HTMX-enhanced app with no third-party origins (every
 // asset is embedded, ADR-003) — a conservative CSP, clickjacking and MIME
-// sniffing protections.
-func securityHeaders(next http.Handler) http.Handler {
+// sniffing protections (SYS-092, ASVS L2 V14.4).
+//
+// HSTS is sent ONLY in ACME mode. In venue-local mode the certificate is
+// self-signed, so operators reach the hub past a browser trust prompt;
+// HSTS would forbid that click-through and lock the venue out of its own
+// system (a self-inflicted DoS). TLSModeOff serves plaintext, where HSTS is
+// meaningless. So HSTS is correct only where a publicly-trusted cert exists.
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	hsts := s.cfg.TLS.Mode == TLSModeACME
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'")
+		if hsts {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

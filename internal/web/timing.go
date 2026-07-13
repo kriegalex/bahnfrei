@@ -194,6 +194,9 @@ func (s *Server) handleTimingImportSubmit(w http.ResponseWriter, r *http.Request
 	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("timing.title")
 
+	// The global request-body cap (limitRequestBody, middleware.go) already
+	// bounds the upload before the CSRF middleware parses it; this argument is
+	// only the in-memory-vs-tempfile threshold.
 	if err := r.ParseMultipartForm(maxTimingUploadBytes); err != nil {
 		v.ImportError = p.T("timing.import.error.upload")
 		_ = timingPage(p, v).Render(r.Context(), w)
