@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
+	"github.com/kriegalex/bahnfrei/internal/exchange"
 	"github.com/kriegalex/bahnfrei/internal/store"
 )
 
@@ -72,6 +73,69 @@ func TestExportOMXDocumentAvailableImmediatelyAtCloseSYS073UC027_3(t *testing.T)
 	}
 	if doc.Meet.Status != string(domain.MeetClosed) {
 		t.Errorf("exported meet status = %q, want closed", doc.Meet.Status)
+	}
+}
+
+// TestOMXRoundTripCarriesComputedRecordFlagsSYS049SYS073 closes OQ-058's
+// merge reconciliation between TASK-022 and TASK-025: a record flag
+// actually computed by the SYS-049 evaluator (not a synthetic placeholder
+// string, which is all the property generator asserts) survives the full
+// omx/v1 pipeline — schema validation of the populated field included —
+// and re-imports verbatim into a fresh system that has no record list
+// wired (import must carry flags as data, never recompute them).
+func TestOMXRoundTripCarriesComputedRecordFlagsSYS049SYS073(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := plainMeet(t, meets)
+	unitID := addTrackEvent(t, meets, rec.ID, "100m", []string{"U18 W"})
+	grantCapture(t, results, rec.ID, unitID)
+	results.SetRecordLists(exampleU18WMeetingRecordList(rec.ID))
+	if err := results.SetMeetRecordLists(ctx, organizer, rec.ID, []string{"test-mr"}); err != nil {
+		t.Fatalf("SetMeetRecordLists: %v", err)
+	}
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2010, Sex: domain.SexFemale, Bib: "1",
+	})
+	wind(t, results, rec.ID, unitID, 1.1)
+	saved, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, unitID, TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "11.85", Timing: domain.TimingElectronic,
+	})
+	if err != nil {
+		t.Fatalf("SaveTrackResult: %v", err)
+	}
+	if len(saved.RecordFlags) != 1 || saved.RecordFlags[0] != "MR" {
+		t.Fatalf("evaluator flags = %v, want [MR] (fixture drifted from UC-016 #1)", saved.RecordFlags)
+	}
+
+	doc, err := results.ExportOMXDocument(ctx, office, rec.ID)
+	if err != nil {
+		t.Fatalf("ExportOMXDocument: %v", err)
+	}
+	if len(doc.Results) != 1 || len(doc.Results[0].RecordFlags) != 1 || doc.Results[0].RecordFlags[0] != "MR" {
+		t.Fatalf("exported results = %+v, want one result carrying the computed MR flag", doc.Results)
+	}
+	encoded, err := exchange.EncodeOMX(doc)
+	if err != nil {
+		t.Fatalf("EncodeOMX: %v", err)
+	}
+	if err := exchange.ValidateOMXSchema(encoded); err != nil {
+		t.Fatalf("populated recordFlags failed schema validation: %v", err)
+	}
+
+	dst := openFreshStore(t)
+	newMeetID, err := ImportOMXDocument(ctx, dst.DB(), doc)
+	if err != nil {
+		t.Fatalf("ImportOMXDocument: %v", err)
+	}
+	imported, err := store.ListMeetResults(ctx, dst.DB(), newMeetID)
+	if err != nil {
+		t.Fatalf("ListMeetResults(reimported): %v", err)
+	}
+	if len(imported) != 1 {
+		t.Fatalf("imported results = %+v, want exactly one", imported)
+	}
+	if len(imported[0].RecordFlags) != 1 || imported[0].RecordFlags[0] != "MR" {
+		t.Errorf("reimported flags = %v, want [MR] carried verbatim", imported[0].RecordFlags)
 	}
 }
 
