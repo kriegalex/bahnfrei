@@ -66,7 +66,8 @@ is still merged slice-by-slice (one PR per UC where practical).
 |---|---|---|---|---|---|
 | TASK-026 | Security hardening: OWASP ASVS L2 checklist pass, threat-model review, dependency posture | SYS-092 | M2 | **Opus** | M |
 | TASK-027 | Performance & recovery: SYS-120-class benchmarks, 2-minute recovery drill (SYS-130), egress-blocked public-asset check (SYS-105), 2,000-concurrent-viewer public-results load test (UC-017 #4, SYS-122) | SYS-120/121/130/105/122 | M2 | Sonnet | M |
-| TASK-028 | Release 0.1: per-OS artifacts + container image, quickstart + operator runbook (network-kit page per ADR-002 v2), support matrix, defect policy, release process | SYS-131/132/143/146 | TASK-026/027 | Sonnet | M |
+| TASK-028 | Release 0.1: per-OS artifacts + container image, quickstart + operator runbook (network-kit page per ADR-002 v2; operator privacy docs per SYS-104 incl. pseudonymization-vs-anonymization framing, privacy-review-task-023 #3), support matrix, defect policy, release process | SYS-131/132/143/146, SYS-104 | TASK-026/027/030 | Sonnet | M |
+| TASK-030 | Operator keyboard-only efficiency: keyboard-only E2E pass of check-in/result-entry/status flows and bulk multi-athlete operations (matrix gap found at M2 review — SYS-114 had no owning TASK) | SYS-114; UC-007/UC-010 flows | M2 | Sonnet | S |
 
 ## Later (not scheduled; triggers noted)
 
