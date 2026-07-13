@@ -59,11 +59,13 @@ templ privacyPage(p PageData, v privacyView) {
 												<button type="submit">{ p.T("privacy.action.withdraw") }</button>
 											</form>
 										}
-										<form action={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/erase") } method="post" class="inline-form">
-											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-											<input type="hidden" name="reason" value={ p.T("privacy.erase.default_reason") }/>
-											<button type="submit">{ p.T("privacy.action.erase") }</button>
-										</form>
+										// OQ-074 (TASK-034): erasure is
+										// irreversible and unrecoverable, so
+										// beyond the confirm step every other
+										// destructive action gets, this one
+										// also requires typing the athlete's
+										// bib (confirm.go's eraseConfirmView).
+										<a href={ templ.URL("/meets/" + v.MeetID + "/privacy/" + row.AthleteID + "/erase/confirm") } class="button">{ p.T("privacy.action.erase") }</a>
 									} else {
 										{ p.T("privacy.status.anonymized") }
 									}
@@ -86,9 +88,12 @@ templ retentionPurgePage(p PageData, v retentionPurgeView) {
 		if v.HasRun {
 			<p>{ p.T("privacy.retention.result", "athletes", intToStr(int64(v.LastRunAthletes)), "audit", intToStr(int64(v.LastRunAuditRows))) }</p>
 		}
-		<form action="/admin/privacy/purge" method="post">
-			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<button type="submit">{ p.T("privacy.retention.action") }</button>
-		</form>
+		// OQ-074 (TASK-034): the purge is instance-wide and unrecoverable,
+		// so — like athlete erasure — it requires typing a literal
+		// confirmation token (confirm.go's retentionPurgeConfirmView) on
+		// top of the confirm step every destructive action gets.
+		<p>
+			<a href="/admin/privacy/purge/confirm" class="button">{ p.T("privacy.retention.action") }</a>
+		</p>
 	}
 }

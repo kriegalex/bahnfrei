@@ -290,6 +290,58 @@ func TestLocaleSwitchIgnoresUnknownLocale(t *testing.T) {
 	}
 }
 
+// TestSameOriginRedirectTargetOQ079 pins sameOriginRedirectTarget's guard
+// logic directly: only an empty/root-relative Referer or one whose host
+// matches the current request is honored; anything else (a different host,
+// a protocol-relative "//" URL, or a malformed value) falls back to "/".
+func TestSameOriginRedirectTargetOQ079(t *testing.T) {
+	cases := []struct {
+		name    string
+		referer string
+		host    string
+		want    string
+	}{
+		{"empty referer", "", "bahnfrei.example", "/"},
+		{"root relative", "/meets/123", "bahnfrei.example", "/meets/123"},
+		{"protocol relative rejected", "//evil.example/phish", "bahnfrei.example", "/"},
+		{"same host absolute accepted", "https://bahnfrei.example/meets/123?x=1", "bahnfrei.example", "https://bahnfrei.example/meets/123?x=1"},
+		{"different host rejected", "https://evil.example/phish", "bahnfrei.example", "/"},
+		{"malformed url rejected", "https://evil.example/\x7f", "bahnfrei.example", "/"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sameOriginRedirectTarget(tc.referer, tc.host); got != tc.want {
+				t.Errorf("sameOriginRedirectTarget(%q, %q) = %q, want %q", tc.referer, tc.host, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestLocaleSwitchRejectsOffOriginRefererOQ079 exercises the guard through
+// the real handler: a crafted off-origin Referer header must never survive
+// into the redirect Location.
+func TestLocaleSwitchRejectsOffOriginRefererOQ079(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+
+	req, err := http.NewRequest(http.MethodGet, base+"/locale?lang=fr", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Referer", "https://evil.example/phish")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("GET /locale with off-origin Referer = %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Errorf("redirect Location = %q, want %q (off-origin Referer must not survive)", loc, "/")
+	}
+}
+
 func TestLogoutClearsSession(t *testing.T) {
 	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
 	client, base := newTestClient(t, deps)

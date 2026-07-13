@@ -200,8 +200,12 @@ func TestPrivacyEraseOverHTTPSYS101UC024_2(t *testing.T) {
 	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
 	athleteID := athleteIDFromPrivacyPage(t, privacyBody)
 
+	// OQ-074 (TASK-034): erasure requires the confirm sub-page's typed
+	// confirmation (the athlete's bib, "1" here per registerRosterParticipant)
+	// in addition to the reason.
 	resp := postForm(t, client, base+"/meets/"+meetID+"/privacy",
-		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"subject request"}})
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase",
+		url.Values{"reason": {"subject request"}, "confirm_text": {"1"}})
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("erase = %d, want 303", resp.StatusCode)
@@ -228,7 +232,9 @@ func TestRetentionPurgeOverHTTPSYS102UC024_3(t *testing.T) {
 		t.Errorf("retention-purge form should surface the configured retention period: %s", form)
 	}
 
-	resp := postForm(t, client, base+"/admin/privacy", base+"/admin/privacy/purge", url.Values{})
+	// OQ-074 (TASK-034): the purge requires the confirm sub-page's fixed
+	// typed-confirmation token in addition to the plain confirm step.
+	resp := postForm(t, client, base+"/admin/privacy", base+"/admin/privacy/purge", url.Values{"confirm_text": {"PURGE"}})
 	body := bodyString(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("purge = %d, want 200: %s", resp.StatusCode, body)
@@ -270,15 +276,24 @@ func TestPrivacyEraseAlreadyAnonymizedRedirectsWithError(t *testing.T) {
 	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
 	athleteID := athleteIDFromPrivacyPage(t, privacyBody)
 
+	// OQ-074 (TASK-034): erasure requires the confirm sub-page's typed
+	// confirmation (the athlete's bib, "1" here per registerRosterParticipant).
 	first := postForm(t, client, base+"/meets/"+meetID+"/privacy",
-		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"subject request"}})
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase",
+		url.Values{"reason": {"subject request"}, "confirm_text": {"1"}})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusSeeOther {
 		t.Fatalf("first erase = %d, want 303", first.StatusCode)
 	}
 
+	// The second attempt targets an already-anonymized athlete. Erasure
+	// only touches the athletes table, never the participant/bib
+	// relationship, so the bib "1" (and therefore the confirm token) is
+	// unchanged — the request reaches EraseAthlete, which is what exercises
+	// the ErrAthleteAnonymized redirect this test pins.
 	second := postForm(t, client, base+"/meets/"+meetID+"/privacy",
-		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase", url.Values{"reason": {"repeat request"}})
+		base+"/meets/"+meetID+"/privacy/"+athleteID+"/erase",
+		url.Values{"reason": {"repeat request"}, "confirm_text": {"1"}})
 	_ = second.Body.Close()
 	if second.StatusCode != http.StatusSeeOther {
 		t.Fatalf("repeat erase = %d, want 303", second.StatusCode)

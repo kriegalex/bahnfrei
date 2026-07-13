@@ -243,11 +243,14 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			</form>
 		}
 		if !d.Archived {
-			<form action={ templ.URL("/meets/" + d.ID + "/archive") } method="post" class="inline-form">
-				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<input type="hidden" name="version" value={ intToStr(d.Version) }/>
-				<button type="submit">{ p.T("meet.archive") }</button>
-			</form>
+			// OQ-074 (TASK-034): archive is destructive-enough (no unarchive
+			// action exists) to warrant a confirm step, but reversible-in-
+			// severity compared to erasure/purge, so a plain GET confirm
+			// sub-page (confirm.go/confirm.templ) suffices — no typed
+			// confirmation.
+			<p>
+				<a href={ templ.URL("/meets/" + d.ID + "/archive/confirm") } class="button">{ p.T("meet.archive") }</a>
+			</p>
 		}
 		<h2>{ p.T("meet.field.sessions") }</h2>
 		if len(d.Sessions) == 0 {

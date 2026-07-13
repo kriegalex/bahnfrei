@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// confirmPage is the shared OQ-074 destructive-action confirmation
+// sub-page (see confirm.go's package doc for the CSP rationale and the
+// friction-level rationale). Every one of the four destructive actions
+// (athlete erasure, account disable, meet archive, retention purge) renders
+// through this one template so the pattern stays visually and structurally
+// identical across all of them.
+templ confirmPage(p PageData, v confirmView) {
+	@layout(p) {
+		<h1>{ v.Title }</h1>
+		<p class="error" role="alert">{ v.Description }</p>
+		<form action={ templ.URL(v.FormAction) } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			for _, h := range v.Hidden {
+				<input type="hidden" name={ h.Name } value={ h.Value }/>
+			}
+			if v.TypedConfirm != "" {
+				<label>
+					{ v.TypedConfirmLabel }
+					<input
+						type="text"
+						name={ v.TypedConfirmField }
+						autocomplete="off"
+						required?={ true }
+						if v.FieldErr != "" {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID(v.TypedConfirmField) }
+						}
+					/>
+				</label>
+				if v.FieldErr != "" {
+					<p class="field-error" id={ fieldErrorID(v.TypedConfirmField) } role="alert">{ v.FieldErr }</p>
+				}
+			}
+			<button type="submit">{ v.ConfirmLabel }</button>
+			<a href={ templ.URL(v.CancelHref) }>{ p.T("confirm.cancel") }</a>
+		</form>
+	}
+}

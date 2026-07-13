@@ -6,7 +6,9 @@ package web
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
 	"github.com/kriegalex/bahnfrei/internal/web/i18n"
@@ -56,9 +58,15 @@ func (s *Server) routes() http.Handler {
 	// instance-admin, the same tier as backup — a whole-instance,
 	// irreversible action.
 	mux.HandleFunc("GET /admin/privacy", admin(s.handleRetentionPurgeForm))
+	// OQ-074 (TASK-034): a GET confirm sub-page in front of the purge POST,
+	// with a typed-confirmation token (defense-in-depth on this
+	// irreversible, instance-wide action per the ASVS review's note).
+	mux.HandleFunc("GET /admin/privacy/purge/confirm", admin(s.handleRetentionPurgeConfirm))
 	mux.HandleFunc("POST /admin/privacy/purge", admin(s.handleRetentionPurge))
 	mux.HandleFunc("POST /admin/accounts", admin(s.handleAccountCreate))
 	mux.HandleFunc("POST /admin/accounts/{id}/enable", admin(s.handleAccountEnable))
+	// OQ-074: plain GET confirm sub-page (reversible action — enable exists).
+	mux.HandleFunc("GET /admin/accounts/{id}/disable/confirm", admin(s.handleAccountDisableConfirm))
 	mux.HandleFunc("POST /admin/accounts/{id}/disable", admin(s.handleAccountDisable))
 	mux.HandleFunc("POST /admin/accounts/{id}/role", admin(s.handleAccountRoleChange))
 
@@ -74,6 +82,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}", organize(s.handleMeetDetail))
 	mux.HandleFunc("GET /meets/{id}/edit", organize(s.handleMeetEditForm))
 	mux.HandleFunc("POST /meets/{id}/edit", organize(s.handleMeetEditSubmit))
+	// OQ-074: plain GET confirm sub-page (a status change, not data
+	// destruction — no typed confirmation).
+	mux.HandleFunc("GET /meets/{id}/archive/confirm", organize(s.handleMeetArchiveConfirm))
 	mux.HandleFunc("POST /meets/{id}/archive", organize(s.handleMeetArchive))
 	mux.HandleFunc("POST /meets/{id}/publish", organize(s.handleMeetPublish))
 	mux.HandleFunc("POST /meets/{id}/events", organize(s.handleEventCreate))
@@ -120,6 +131,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/privacy", office(s.handlePrivacyList))
 	mux.HandleFunc("POST /meets/{id}/privacy/{athlete}/consent", office(s.handlePrivacyConsentToggle))
 	mux.HandleFunc("GET /meets/{id}/privacy/{athlete}/export", office(s.handlePrivacyExport))
+	// OQ-074: a GET confirm sub-page with a typed-confirmation token (type
+	// the athlete's bib) in front of the erase POST — the strongest
+	// friction of the four destructive actions, matching the ASVS review's
+	// defense-in-depth note on this irreversible-and-unrecoverable action.
+	mux.HandleFunc("GET /meets/{id}/privacy/{athlete}/erase/confirm", office(s.handlePrivacyEraseConfirm))
 	mux.HandleFunc("POST /meets/{id}/privacy/{athlete}/erase", office(s.handlePrivacyErase))
 
 	// CSV entry import & eligibility exceptions (TASK-017, UC-004/UC-005,
@@ -364,11 +380,31 @@ func (s *Server) handleLocaleSwitch(w http.ResponseWriter, r *http.Request) {
 			Secure:   r.TLS != nil,
 		})
 	}
-	dest := r.Header.Get("Referer")
-	if dest == "" {
-		dest = "/"
+	http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther)
+}
+
+// sameOriginRedirectTarget closes OQ-079: redirecting to the raw Referer
+// header after a locale switch can send the browser to an absolute
+// off-origin URL if the Referer happens to name one. Assessed low severity —
+// the value comes from the victim's own browser-set header, never an
+// attacker-supplied query parameter, so it was never a practical phishing
+// primitive — but a same-origin/relative-only guard closes it cheaply:
+// accept the Referer only when it is root-relative (a single leading "/",
+// not "//" which browsers treat as protocol-relative/off-origin) or when its
+// host matches the current request's host; anything else — a different
+// host, a malformed URL, or an empty header — falls back to "/".
+func sameOriginRedirectTarget(referer, host string) string {
+	if referer == "" {
+		return "/"
 	}
-	http.Redirect(w, r, dest, http.StatusSeeOther)
+	if strings.HasPrefix(referer, "/") && !strings.HasPrefix(referer, "//") {
+		return referer
+	}
+	u, err := url.Parse(referer)
+	if err != nil || u.Host == "" || !strings.EqualFold(u.Host, host) {
+		return "/"
+	}
+	return referer
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
