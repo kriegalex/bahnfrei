@@ -50,8 +50,10 @@ templ verticalHeightsForm(p PageData, v verticalCaptureView) {
 		if len(v.Heights) == 0 {
 			<label>
 				{ p.T("capture.vertical.configure_heights") }
-				<input type="text" name="heights" placeholder="1.60, 1.65, 1.70, ..." aria-label={ p.T("capture.vertical.configure_heights") }/>
+				<input type="text" name="heights" placeholder="1.60, 1.65, 1.70, ..." aria-label={ p.T("capture.vertical.configure_heights") } aria-describedby="vertical-heights-hint"/>
 			</label>
+			@helpIcon(p, "capture.vertical.heights")
+			<p class="hint" id="vertical-heights-hint">{ p.T("capture.vertical.hint.heights") }</p>
 			<button type="submit">{ p.T("capture.save") }</button>
 		} else {
 			for _, h := range v.Heights {
@@ -59,8 +61,10 @@ templ verticalHeightsForm(p PageData, v verticalCaptureView) {
 			}
 			<label>
 				{ p.T("capture.vertical.add_height") }
-				<input type="text" name="add_height" value={ v.NextHeightHint } size="6" aria-label={ p.T("capture.vertical.add_height") }/>
+				<input type="text" name="add_height" value={ v.NextHeightHint } size="6" aria-label={ p.T("capture.vertical.add_height") } aria-describedby="vertical-add-height-hint"/>
 			</label>
+			@helpIcon(p, "capture.vertical.add_height")
+			<p class="hint" id="vertical-add-height-hint">{ p.T("capture.vertical.hint.heights") }</p>
 			<button type="submit">{ p.T("capture.save") }</button>
 		}
 	</form>

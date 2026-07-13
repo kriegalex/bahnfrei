@@ -22,8 +22,9 @@ templ setupPage(p PageData) {
 			</label>
 			<label>
 				{ p.T("setup.password") }
-				<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8"/>
+				<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8" aria-describedby="setup-password-hint"/>
 			</label>
+			<p class="hint" id="setup-password-hint">{ p.T("setup.hint.password") }</p>
 			<button type="submit">{ p.T("setup.submit") }</button>
 		</form>
 	}
@@ -86,14 +87,16 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 				{ p.T("meet.field.homologation") }
 				<input type="text" name="homologation_ref" value={ f.HomologationRef }/>
 			</label>
+			@helpIcon(p, "meet.homologation")
 			<label>
 				{ p.T("meet.field.start_date") }
 				<input type="date" name="start_date" value={ f.StartDate } required?={ true }/>
 			</label>
 			<label>
 				{ p.T("meet.field.end_date") }
-				<input type="date" name="end_date" value={ f.EndDate } required?={ true }/>
+				<input type="date" name="end_date" value={ f.EndDate } required?={ true } aria-describedby="meet-end-date-hint"/>
 			</label>
+			<p class="hint" id="meet-end-date-hint">{ p.T("meet.hint.end_date") }</p>
 			<label>
 				{ p.T("meet.field.tier") }
 				<select name="tier">
@@ -102,6 +105,7 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 					}
 				</select>
 			</label>
+			@helpIcon(p, "meet.tier")
 			if f.SchemeFixed {
 				<input type="hidden" name="scheme" value={ f.SchemeID }/>
 			} else {
@@ -113,6 +117,7 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 						}
 					</select>
 				</label>
+				@helpIcon(p, "meet.scheme")
 			}
 			<fieldset>
 				<legend>{ p.T("meet.field.sessions") }</legend>
@@ -143,6 +148,7 @@ templ meetFormPage(p PageData, f meetFormView, action string) {
 						}
 					</select>
 				</label>
+				@helpIcon(p, "meet.results_positioning")
 				<label>
 					{ p.T("meet.field.official_source_name") }
 					<input type="text" name="official_source_name" value={ f.OfficialSourceName }/>
@@ -278,14 +284,19 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 					{ p.T("programme.deadline") }
 					<input type="datetime-local" name="entry_deadline"/>
 				</label>
+				@helpIcon(p, "programme.entry_deadline")
 				<label>
 					{ p.T("programme.entry_standard") }
-					<input type="text" name="entry_standard"/>
+					<input type="text" name="entry_standard" aria-describedby="programme-entry-standard-hint"/>
 				</label>
+				@helpIcon(p, "programme.entry_standard")
+				<p class="hint" id="programme-entry-standard-hint">{ p.T("programme.hint.entry_standard") }</p>
 				<label>
 					{ p.T("programme.entry_limit") }
-					<input type="number" name="entry_limit" min="0" placeholder="0"/>
+					<input type="number" name="entry_limit" min="0" placeholder="0" aria-describedby="programme-entry-limit-hint"/>
 				</label>
+				@helpIcon(p, "programme.entry_limit")
+				<p class="hint" id="programme-entry-limit-hint">{ p.T("programme.hint.entry_limit") }</p>
 				<button type="submit">{ p.T("programme.add.submit") }</button>
 			</form>
 		}

@@ -82,6 +82,10 @@ templ layout(p PageData) {
 			if p.LoggedIn {
 				<script src="/static/office-banner.js"></script>
 			}
+			// Contextual-help island (TASK-031, SYS-115): loaded on every
+			// page — help icons appear on operator, entry and fixture
+			// surfaces, and the script is inert when a page renders none.
+			<script src="/static/help.js"></script>
 		</body>
 	</html>
 }

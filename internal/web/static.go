@@ -24,8 +24,11 @@ import (
 // offline-capture islands (UC-034; SYS-085/087), compiled from islands/*.ts by
 // scripts/build-islands — the emitted JS is committed and embedded so the
 // binary is self-contained (ADR-002/ADR-003).
+// help.js is the contextual-help island (TASK-031, SYS-115): open/close
+// behavior for the help-icon component (help.templ) — a static asset
+// because the CSP forbids inline scripts.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/capture-offline.js static/office-banner.js static/service-worker.js
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.

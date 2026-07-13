@@ -32,8 +32,14 @@ templ galleryPage(p PageData) {
 		<form id="gallery-form">
 			<label>
 				{ p.T("gallery.input.text_label") }
-				<input type="text" id="gallery-input-text" name="gallery-text"/>
+				<input type="text" id="gallery-input-text" name="gallery-text" aria-describedby="gallery-input-text-hint"/>
 			</label>
+			// Contextual-help component (TASK-031, SYS-115, UC-037),
+			// rendered in its real placement convention: icon directly
+			// after the field's label, visible hint text below. The
+			// SC 1.4.13 behavior e2e (contextual-help-UC037.spec.ts)
+			// drives this instance; the keyboard walk covers its trigger.
+			@helpIcon(p, "gallery.example")
 			<p class="hint" id="gallery-input-text-hint">{ p.T("gallery.input.text_hint") }</p>
 
 			<label>
@@ -72,7 +78,10 @@ templ galleryPage(p PageData) {
 				</label>
 			</fieldset>
 
-			<input type="text" disabled?={ true } id="gallery-input-disabled" name="gallery-disabled"/>
+			// aria-label rather than a wrapped label: the row demos the bare
+			// disabled state; the accessible name keeps the axe "label" rule
+			// green now that UC-037 #4's scan covers this page (TASK-031).
+			<input type="text" disabled?={ true } id="gallery-input-disabled" name="gallery-disabled" aria-label={ p.T("gallery.button.disabled") }/>
 
 			<label>
 				{ p.T("gallery.input.invalid_label") }

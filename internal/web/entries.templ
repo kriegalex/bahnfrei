@@ -29,7 +29,8 @@ templ entriesPage(p PageData, v entriesView) {
 				</label>
 				<label>{ p.T("roster.first_name") } <input type="text" name="first_name" required?={ true }/></label>
 				<label>{ p.T("roster.last_name") } <input type="text" name="last_name" required?={ true }/></label>
-				<label>{ p.T("roster.birth_year") } <input type="number" name="birth_year" min="1900" required?={ true }/></label>
+				<label>{ p.T("roster.birth_year") } <input type="number" name="birth_year" min="1900" required?={ true } aria-describedby="entries-birth-year-hint"/></label>
+				<p class="hint" id="entries-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
 				<label>
 					{ p.T("roster.sex") }
 					<select name="sex">
@@ -38,11 +39,14 @@ templ entriesPage(p PageData, v entriesView) {
 					</select>
 				</label>
 				<label>{ p.T("roster.club") } <input type="text" name="club"/></label>
-				<label>{ p.T("entries.seed") } <input type="text" name="seed" required?={ true }/></label>
+				<label>{ p.T("entries.seed") } <input type="text" name="seed" required?={ true } aria-describedby="entries-seed-hint"/></label>
+				@helpIcon(p, "entries.seed")
+				<p class="hint" id="entries-seed-hint">{ p.T("entries.hint.seed") }</p>
 				<label>
 					<input type="checkbox" name="publication_withdrawn" value="true"/>
 					{ p.T("roster.publication_withdrawn") }
 				</label>
+				@helpIcon(p, "publication_withdrawn")
 				<button type="submit">{ p.T("entries.individual.submit") }</button>
 			</form>
 
@@ -358,8 +362,10 @@ templ feesPage(p PageData, v feesView) {
 		<form action={ templ.URL("/meets/" + v.MeetID + "/fees/schedule") } method="post">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 			<input type="hidden" name="version" value={ v.Version }/>
-			<label>{ p.T("fees.schedule.entry_fee") } <input type="text" name="entry_fee" value={ v.EntryFeeCHF }/></label>
-			<label>{ p.T("fees.schedule.relay_fee") } <input type="text" name="relay_fee" value={ v.RelayFeeCHF }/></label>
+			<label>{ p.T("fees.schedule.entry_fee") } <input type="text" name="entry_fee" value={ v.EntryFeeCHF } aria-describedby="fees-entry-fee-hint"/></label>
+			<p class="hint" id="fees-entry-fee-hint">{ p.T("fees.hint.amount") }</p>
+			<label>{ p.T("fees.schedule.relay_fee") } <input type="text" name="relay_fee" value={ v.RelayFeeCHF } aria-describedby="fees-relay-fee-hint"/></label>
+			<p class="hint" id="fees-relay-fee-hint">{ p.T("fees.hint.amount") }</p>
 			<button type="submit">{ p.T("fees.schedule.submit") }</button>
 		</form>
 		<h2>{ p.T("fees.summary.title") }</h2>

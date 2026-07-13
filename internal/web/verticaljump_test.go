@@ -377,3 +377,38 @@ func TestVerticalCaptureSheetPDFWeb(t *testing.T) {
 		t.Errorf("anonymous vertical sheet.pdf GET = %d, want 403 (SYS-090)", anon.StatusCode)
 	}
 }
+
+// TestVerticalHeightsCommaSeparatedInputSYS043 pins the single-text-input
+// configuration path the UI actually offers (TASK-031): the operator types
+// the progression comma-separated — exactly what the field's placeholder
+// and visible hint text (`capture.vertical.hint.heights`, SYS-117) say —
+// and the handler splits it into individual heights rather than storing
+// one bogus "1.60, 1.65, 1.70" height.
+func TestVerticalHeightsCommaSeparatedInputSYS043(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60, 1.65, 1.70"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("configure comma-separated heights = %d, want 303", resp.StatusCode)
+	}
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	for _, want := range []string{">1.60<", ">1.65<", ">1.70<"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vertical grid misses individual height column %q", want)
+		}
+	}
+	// The extend form re-posts each stored height as its own hidden input;
+	// a combined value would mean the comma input was stored as ONE height
+	// (the hint/placeholder examples legitimately contain the comma string,
+	// so assert on the attribute, not the whole page).
+	if strings.Contains(body, `value="1.60, 1.65`) {
+		t.Errorf("comma-separated input was stored as a single height")
+	}
+}
