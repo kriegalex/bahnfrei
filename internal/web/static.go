@@ -13,7 +13,8 @@ import (
 // self-contained (ADR-002/ADR-003: no runtime asset fetch, no CDN — the
 // venue-local mode must work with zero internet access). htmx.min.js is
 // htmx 2.0.4, vendored verbatim (Zero-Clause BSD license, htmx-LICENSE);
-// base.css is project-authored.
+// tokens.css and base.css are project-authored (TASK-032: tokens.css holds
+// every design token, base.css consumes them — docs/architecture/design-system.md).
 //
 // capture.js is the capture page's SSE-driven standings refresh (UC-011 #4).
 // public-live.js is the public results page's SSE-driven refresh (UC-017
@@ -24,7 +25,7 @@ import (
 // scripts/build-islands — the emitted JS is committed and embedded so the
 // binary is self-contained (ADR-002/ADR-003).
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/base.css static/capture.js static/public-live.js static/capture-offline.js static/office-banner.js static/service-worker.js
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/capture-offline.js static/office-banner.js static/service-worker.js
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.

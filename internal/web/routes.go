@@ -30,6 +30,11 @@ func (s *Server) routes() http.Handler {
 	// The capture service worker is served from a root-path URL so it can
 	// claim the /meets/…/capture/ scope (UC-034 #3); see handleServiceWorker.
 	mux.HandleFunc("GET /capture-sw.js", s.handleServiceWorker)
+	// Component-gallery fixture (TASK-032, UC-038 #2, SYS-116): dev/fixture
+	// scope, deliberately never linked from the shell nav (layout.templ).
+	// Static markup only — no meet data, no PII, no privileged action — so
+	// it is safe unauthenticated, like /healthz.
+	mux.HandleFunc("GET /dev/design-gallery", s.handleDesignGallery)
 	mux.HandleFunc("/", s.handleNotFound)
 
 	// First-run setup (UC-001 #1): available only while no account exists.
@@ -359,4 +364,12 @@ func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	p := basePageData(r, s.cats)
 	p.Title = p.T("error.not_found")
 	_ = notFoundPage(p).Render(r.Context(), w)
+}
+
+// handleDesignGallery renders the TASK-032 component-gallery fixture (see
+// gallery.templ for scope/rationale).
+func (s *Server) handleDesignGallery(w http.ResponseWriter, r *http.Request) {
+	p := basePageData(r, s.cats)
+	p.Title = p.T("gallery.title")
+	_ = galleryPage(p).Render(r.Context(), w)
 }

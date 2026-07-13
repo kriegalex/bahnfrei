@@ -44,19 +44,22 @@ Every STR maps to ≥1 SYS. (Priorities per StRS §3.)
 | STR-031 | SYS-091, SYS-092, SYS-093, SYS-100, SYS-101, SYS-102, SYS-104, SYS-105 |
 | STR-032 | SYS-100, SYS-102, SYS-103 |
 | STR-033 | SYS-074, SYS-110, SYS-111 |
-| STR-034 | SYS-112, SYS-113 |
-| STR-035 | SYS-114, SYS-120, SYS-131 |
+| STR-034 | SYS-112, SYS-113, SYS-115 |
+| STR-035 | SYS-114, SYS-115, SYS-117, SYS-120, SYS-131 |
 | STR-036 | SYS-092, SYS-132, SYS-133, SYS-146, CON-02 |
 | STR-037 | SYS-062, SYS-073, SYS-078 *(L)*, SYS-105, SYS-144 |
-| STR-038 | SYS-092, SYS-104, SYS-140, SYS-141, SYS-142, SYS-143, SYS-144, SYS-145, SYS-146 |
+| STR-038 | SYS-092, SYS-104, SYS-116, SYS-140, SYS-141, SYS-142, SYS-143, SYS-144, SYS-145, SYS-146 |
 | STR-039 | SYS-084, SYS-131, SYS-132 |
 | STR-040 | SYS-090, SYS-091, SYS-086 |
 | STR-041 | SYS-081, SYS-084, SYS-085, SYS-086, SYS-087, SYS-130 |
 | STR-042 | SYS-076, SYS-077, SYS-078 *(L)* |
 | STR-043 | SYS-053, SYS-077 |
+| STR-044 | SYS-115 |
+| STR-045 | SYS-116, SYS-117 |
 
-**Coverage check:** 43/43 STR covered. Zero orphan stakeholder requirements.
-*(2026-07-05 delta: STR-042/043 added from founder answers; STR-030 re-scoped per DEC-007.)*
+**Coverage check:** 45/45 STR covered. Zero orphan stakeholder requirements.
+*(2026-07-05 delta: STR-042/043 added from founder answers; STR-030 re-scoped per DEC-007.
+2026-07-13 delta: STR-044/045 added from founder UX request.)*
 
 ## 2. System requirements → Use-cases → verification
 
@@ -137,7 +140,10 @@ inspection/analysis procedure.
 | SYS-111 | UC-025 #1 + UC-018 #3 | T | TASK-024 (domain-vocabulary glossary completion): `internal/web/i18n` `TestLoadShipsCompleteDEAndFR` now covers all 33 `discipline.<code>` keys in `internal/domain/data/disciplines/catalog.json` (previously 6 — see `docs/requirements/open-questions-and-assumptions.md` OQ-022, resolved) in both `de.json`/`fr.json`; the public timetable page (`GET /m/{id}/timetable`) was switched from the catalog's canonical English name to the same `localizedDisciplineName` helper `TestPublicResultsLocalizedDisciplineLabelsSYS074` (TASK-010) already covers for the results page — a real localization gap on a public surface, not just missing keys. Official-document headings: `internal/web/printables.go`'s capture-sheet/result-list PDFs already reuse `localizedDisciplineName` (TASK-011), so the wider catalog benefits them too, unchanged code. Operator-only Programme/Units tables and the capture/reconciliation surfaces intentionally keep the canonical catalog name as a stable, locale-invariant identifier (same treatment as category codes) — unchanged by this task. |
 | SYS-112 | UC-026 #1–#2 | T/I | TASK-024: `e2e/tests/a11y-public-SYS113.spec.ts` (axe-core `@axe-core/playwright`, WCAG 2.2 AA rule tags `wcag2a`/`wcag2aa`/`wcag21a`/`wcag21aa`/`wcag22aa`) — one scan per public page type (`UC-026 #1: meet overview...`, `...public timetable...`, `...public start lists...`, `...public results...(populated with a captured result)...`) against a real seeded meet with a published timetable and a captured result, wired into `cd e2e && npx playwright test` (CI's existing `e2e` job). Fixes landed to reach zero violations: keyboard access to `.table-scroll` overflow regions (`tabindex="0"`, `internal/web/{public,meets,accounts,auditlog,officials}.templ`), localized `nav aria-label` (was the hardcoded English word `"primary"`), explicit `<th scope="col">` on every table header cell. UC-026 #2 (screen-reader walk-through, per release) is process documentation, not a one-shot automated check: `docs/requirements/accessibility-manual-audit-checklist.md` (I). |
 | SYS-113 | UC-017 #2, UC-026 #1 | T | TASK-010: `internal/web` `TestPublicPagesAnonymousAccessSYS070UC017_2` (viewport meta tag present on every public page). TASK-024: `e2e/tests/a11y-public-SYS113.spec.ts` `SYS-113: public pages are usable at 360px width...` (real 360×740 viewport against all four public page types: `document.documentElement.scrollWidth` never exceeds `clientWidth` — no page-level horizontal scroll, wide tables scroll within their own `.table-scroll` box per the existing CSS contract — plus the same WCAG 2.2 AA scan at that viewport size, since AA already requires sufficient contrast/no-hover-only-interaction and this pins it at the width SYS-113 names). |
-| SYS-114 | Keyboard-only E2E pass of check-in/result-entry flows | T/D | Phase B (TASK-030, M3) |
+| SYS-114 | UC-007 #1–#2, UC-010 #1–#3 | T | TASK-030: `e2e/tests/keyboard-operator-SYS114.spec.ts` "SYS-114 UC-007: check-in is keyboard-only, incl. bulk DNS-close and reinstate" (real Tab/Shift-Tab traversal via `helpers/keyboard.ts`'s `tabUntilFocused` — never `.focus()` or `.click()` — from page load through nav/skip-link to a row's confirm button; Enter confirms one entry; the bulk "close check-in" action DNSes the other two in a single keystroke, UC-007 #1; Space reinstates a DNS entry via keyboard, UC-007 #2); "SYS-114 UC-010: track result entry is keyboard-only (times, statuses, corrections)" (keyboard-typed manual time with D5.1 round-up rendered; DNF/DQ statuses set purely via ArrowDown/ArrowUp on the native `<select>`, never `.selectOption()` — the UC-010 #3 pairing; a DQ's required rule reference typed into `status_detail`; a reasoned correction after keyboard-announcing the unit, exercising `capture.templ`'s `/correct` form switch). `helpers/keyboard.ts`'s `assertTabAdvancesFocus` pins the no-trap requirement (SC 2.1.2) directly. Fix landed: `internal/web/seeding.templ`'s check-in table (`checkInPage`) was missing the `tabindex="0"` the SYS-112 fix already gives every other operator/public scrollable table — added for consistency, so the check-in roster's own overflow region is keyboard-focusable/scrollable like the rest of the design system. Open question: SYS-114's bulk-operation clause has only one implemented instance today (check-in's bulk DNS-close) — see OQ-070. |
+| SYS-115 | UC-037 #1–#5 | T/I | Phase B (TASK-031, M3) |
+| SYS-116 | UC-038 #1–#2 | T/I | TASK-032 (design tokens + component inventory): `docs/architecture/design-system.md` (token catalog §1, component inventory §2); `scripts/check-style-tokens.sh` (CI style-conformance gate, UC-038 #1 — mechanical, documented allowlist); `internal/web` `TestDesignGalleryRendersEveryInventoriedComponentSYS116UC038_2`, `TestDesignGalleryNotLinkedFromShellNavSYS116UC038_2` (dev/fixture gallery page renders one instance of every inventoried component/state, UC-038 #2); `e2e/tests/design-gallery.spec.ts` (real-browser keyboard walk asserts a visible `:focus-visible` outline on every interactive gallery element; a second scenario asserts the three offline-status colors are distinct and the invalid-input/field-error pairing renders and is `aria-describedby`-associated) |
+| SYS-117 | UC-038 #3–#4, UC-037 #5 | T/I | TASK-032: `docs/requirements/usability-audit-checklist.md` (NN/g heuristics + SYS-117 form conventions, run process); `docs/delivery/usability-audit-2026-07.md` (first dated run against the real server — 2 Critical findings open as OQ-074/OQ-075 to close before the release-0.1 re-run per UC-038 #3, 1 Major as OQ-076, 1 Minor as OQ-077; a 13-field placeholder-only-label gap found and fixed in the same run — `internal/web` `{entries,timing,import,meets}.templ`); the `.field-error`/`aria-invalid`/`.hint` conventions (UC-038 #4) are documented and demonstrated on the gallery page (design-system.md §2, §4) — see the usability-audit report for existing-form adoption status |
 | SYS-120 | Benchmark on reference dataset (1,500 athletes / 4,000 entries / 250 units) | A | Phase B |
 | SYS-121 | Benchmark (seeding 200 entries ≤10 s; recompute ≤5 s) | A | Phase B |
 | SYS-122 | Load test (UC-017 #4) | A | Phase B |
@@ -160,7 +166,7 @@ in either direction.
 
 | Check | Status |
 |-------|--------|
-| Every requirement uniquely identified, atomic, testable | ✅ STR-001…043, SYS-001…146 (blocks), UC-001…033 |
+| Every requirement uniquely identified, atomic, testable | ✅ STR-001…045, SYS-001…146 (blocks), UC-001…038 |
 | Zero orphan requirements (both directions) | ✅ §1–§2 above |
 | Vague founder language converted to measurable targets | ✅ "well tested/bug free/state of the art" → SYS-140…146, SYS-092, SYS-120…122; no adjectives used as requirements |
 | External facts cited; named systems verified by exact spelling | ✅ Seltec (not "setlec") confirmed; Swiss Athletics stack verified; SVM (not "CSI"); see `../research/*.md` |
