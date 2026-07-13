@@ -69,15 +69,6 @@ func (f seedingFixture) confirmedEntry(t *testing.T, name, clubID, seed string) 
 	return rec
 }
 
-func (f seedingFixture) club(t *testing.T, name string) store.ClubRecord {
-	t.Helper()
-	c, err := store.CreateClub(context.Background(), f.st.DB(), domain.Club{Name: name})
-	if err != nil {
-		t.Fatalf("CreateClub: %v", err)
-	}
-	return c
-}
-
 // TestGenerateHeatsSYS026UC008_1 reproduces UC-008 #1: 21 confirmed 100m
 // entries with seed times and 8 lanes generate 3 heats of 7, seeded
 // serpentine, no two of the top-3 seeds sharing a heat.

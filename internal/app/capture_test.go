@@ -451,7 +451,7 @@ func TestUnitCaptureShowsLaneContextSYS026SYS027(t *testing.T) {
 		if err := results.ConfirmCheckIn(ctx, office, meet.ID, detail.ID, detail.Version); err != nil {
 			t.Fatalf("ConfirmCheckIn: %v", err)
 		}
-		athleteIDs = append(athleteIDs, detail.EntryRecord.AthleteID)
+		athleteIDs = append(athleteIDs, detail.AthleteID)
 	}
 
 	rounds, err := store.ListRounds(ctx, results.db, ev.ID)
