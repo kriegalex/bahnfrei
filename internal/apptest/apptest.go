@@ -46,6 +46,13 @@ type Fixture struct {
 	// Privacy wires TASK-023's data-subject-rights/retention service
 	// (SYS-101/SYS-102, UC-024).
 	Privacy *app.PrivacyService
+	// Store is the underlying store, exposed so TASK-027's large-scale
+	// perf/load fixtures (see scale.go) can batch fast bulk inserts
+	// directly against it — bypassing the app-service layer's one-row-
+	// per-transaction entry/athlete creation, which is far too slow at
+	// the SYS-120 reference scale (1,500 athletes/4,000 entries/250
+	// units). Ordinary tests should keep using the services above.
+	Store *store.Store
 }
 
 // New opens a fresh SQLite store in a t.TempDir(), closing it via
@@ -53,9 +60,20 @@ type Fixture struct {
 // built-in discipline catalog and category schemes).
 func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 	tb.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(tb.TempDir(), "test.db"))
+	return NewAtPath(tb, sessionTTL, filepath.Join(tb.TempDir(), "test.db"))
+}
+
+// NewAtPath is New but opens (or reopens) the store at a caller-supplied
+// path instead of a fresh t.TempDir() — for fixtures that must survive
+// across a process restart. TASK-027's SYS-130 recovery drill
+// (internal/web/recovery_test.go) kills the process serving this fixture
+// mid-operation and reopens the *same* on-disk database from a second
+// process, so the path's lifetime cannot be tied to one New() call.
+func NewAtPath(tb testing.TB, sessionTTL time.Duration, dbPath string) Fixture {
+	tb.Helper()
+	st, err := store.Open(context.Background(), dbPath)
 	if err != nil {
-		tb.Fatalf("apptest: store.Open: %v", err)
+		tb.Fatalf("apptest: store.Open(%s): %v", dbPath, err)
 	}
 	tb.Cleanup(func() { _ = st.Close() })
 
@@ -100,5 +118,6 @@ func New(tb testing.TB, sessionTTL time.Duration) Fixture {
 		Results:  results,
 		Backup:   app.NewBackupService(st),
 		Privacy:  app.NewPrivacyService(st.DB()),
+		Store:    st,
 	}
 }
