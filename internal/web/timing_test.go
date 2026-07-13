@@ -390,26 +390,16 @@ func TestTimingUnknownIDsRedirectOrNotFoundWeb(t *testing.T) {
 	for _, path := range []string{
 		"/meets/does-not-exist/timing/export/ppl", "/meets/does-not-exist/timing/export/sch",
 		"/meets/does-not-exist/timing/export/evt",
+		// OQ-063 (TASK-034): ExportGenericCSV now checks meet existence the
+		// same way its ppl/sch/evt siblings do, so an unknown meet id 404s
+		// here too instead of 200-ing with a header-only CSV.
+		"/meets/does-not-exist/timing/export/csv",
 	} {
 		resp := mustGet(t, client, base+path)
 		_ = bodyString(t, resp)
 		if resp.StatusCode != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", path, resp.StatusCode)
 		}
-	}
-	// NOTE: unlike its ppl/sch/evt siblings, handleTimingExportCSV's
-	// ExportGenericCSV never checks the meet exists (internal/app/exchange.go
-	// ExportGenericCSV skips the store.GetMeet check ExportTimingFiles has) —
-	// an unknown meet id here 200s with a header-only CSV instead of 404.
-	// Captured as current behaviour, not asserted as desirable; see the
-	// final report.
-	csvResp := mustGet(t, client, base+"/meets/does-not-exist/timing/export/csv")
-	csvBody := bodyString(t, csvResp)
-	if csvResp.StatusCode != http.StatusOK {
-		t.Errorf("GET export/csv for an unknown meet = %d, want 200 (current behaviour)", csvResp.StatusCode)
-	}
-	if strings.Count(csvBody, "\n") > 1 {
-		t.Errorf("export/csv for an unknown meet should carry only its header row, got: %q", csvBody)
 	}
 
 	tokenResp := postForm(t, client, timingPageURL, base+"/meets/does-not-exist/timing/agents", url.Values{"label": {"x"}})

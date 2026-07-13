@@ -258,6 +258,11 @@ func (s *ResultsService) ExportGenericCSV(ctx context.Context, actor Session, me
 	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
 		return nil, err
 	}
+	// OQ-063: match the sibling exports' unknown-meet behavior (404 via
+	// store.ErrNotFound) instead of silently returning a header-only CSV.
+	if _, err := store.GetMeet(ctx, s.db, meetID); err != nil {
+		return nil, err
+	}
 	rosters, err := s.timingRosters(ctx, meetID)
 	if err != nil {
 		return nil, err
