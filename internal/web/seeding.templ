@@ -18,7 +18,7 @@ templ checkInPage(p PageData, v checkInView) {
 		if len(v.Rows) == 0 {
 			<p>{ p.T("checkin.empty") }</p>
 		} else {
-			<div class="table-scroll">
+			<div class="table-scroll" tabindex="0">
 				<table>
 					<thead>
 						<tr>

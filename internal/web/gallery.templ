@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// galleryPage is the TASK-032 component-gallery fixture (UC-038 #2, SYS-116):
+// a dev/fixture-scope page — reachable at GET /dev/design-gallery, never
+// linked from the shell nav — that renders one live instance of every
+// component the inventory in docs/architecture/design-system.md names, in
+// every documented state (default, hover/active via CSS only, focus-visible,
+// disabled, error/invalid). It exists so the UC-038 #2 e2e
+// (e2e/tests/design-gallery.spec.ts) has one page to keyboard-walk and
+// assert a visible focus indicator on every interactive element, and so a
+// contributor/reviewer can eyeball the whole design system in one place.
+// Nothing here reads real meet data — it is pure static markup, safe to
+// serve unauthenticated (no PII, no privileged action).
+templ galleryPage(p PageData) {
+	@layout(p) {
+		<h1>{ p.T("gallery.title") }</h1>
+		<p>{ p.T("gallery.intro") }</p>
+
+		<h2>{ p.T("gallery.section.buttons") }</h2>
+		<button type="button" id="gallery-button-default">{ p.T("gallery.button.enabled") }</button>
+		<button type="button" id="gallery-button-disabled" disabled?={ true }>{ p.T("gallery.button.disabled") }</button>
+
+		<h2>{ p.T("gallery.section.links") }</h2>
+		<p>
+			<a href="#main" id="gallery-link-default">{ p.T("gallery.link.example") }</a>
+		</p>
+
+		<h2>{ p.T("gallery.section.inputs") }</h2>
+		<form id="gallery-form">
+			<label>
+				{ p.T("gallery.input.text_label") }
+				<input type="text" id="gallery-input-text" name="gallery-text"/>
+			</label>
+			<p class="hint" id="gallery-input-text-hint">{ p.T("gallery.input.text_hint") }</p>
+
+			<label>
+				{ p.T("gallery.input.number_label") }
+				<input type="number" id="gallery-input-number" name="gallery-number" min="0"/>
+			</label>
+			<p class="hint" id="gallery-input-number-hint">{ p.T("gallery.input.number_hint") }</p>
+
+			<label>
+				{ p.T("gallery.input.date_label") }
+				<input type="date" id="gallery-input-date" name="gallery-date"/>
+			</label>
+
+			<label>
+				<input type="checkbox" id="gallery-input-checkbox" name="gallery-checkbox" value="true"/>
+				{ p.T("gallery.checkbox.label") }
+			</label>
+
+			<label>
+				{ p.T("gallery.select.label") }
+				<select id="gallery-select" name="gallery-select">
+					<option value="a">A</option>
+					<option value="b">B</option>
+				</select>
+			</label>
+
+			<fieldset>
+				<legend>{ p.T("gallery.fieldset.legend") }</legend>
+				<label>
+					<input type="checkbox" id="gallery-fieldset-a" name="gallery-fieldset-a" value="true"/>
+					A
+				</label>
+				<label>
+					<input type="checkbox" id="gallery-fieldset-b" name="gallery-fieldset-b" value="true"/>
+					B
+				</label>
+			</fieldset>
+
+			<input type="text" disabled?={ true } id="gallery-input-disabled" name="gallery-disabled"/>
+
+			<label>
+				{ p.T("gallery.input.invalid_label") }
+				<input
+					type="text"
+					id="gallery-input-invalid"
+					name="gallery-invalid"
+					aria-invalid="true"
+					aria-describedby="gallery-input-invalid-error"
+				/>
+			</label>
+			<p class="field-error" id="gallery-input-invalid-error" role="alert">{ p.T("gallery.error.example") }</p>
+
+			<button type="submit" id="gallery-form-submit">{ p.T("gallery.button.enabled") }</button>
+		</form>
+
+		<h2>{ p.T("gallery.section.tables") }</h2>
+		<div class="table-scroll" tabindex="0">
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">{ p.T("gallery.table.heading_one") }</th>
+						<th scope="col">{ p.T("gallery.table.heading_two") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>{ p.T("gallery.table.sample_cell") }</td>
+						<td>1</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+
+		<h2>{ p.T("gallery.section.status_badges") }</h2>
+		<div id="gallery-status-online" class="offline-status" role="status">{ p.T("capture.offline.online") }</div>
+		<div id="gallery-status-offline" class="offline-status" data-state="offline" role="status">{ p.T("capture.offline.online") }</div>
+		<div id="gallery-status-syncing" class="offline-status" data-state="syncing" role="status">{ p.T("capture.offline.online") }</div>
+		<p id="gallery-unofficial-label" class="unofficial-label" role="note">{ p.T("public.results.unofficial_badge") }</p>
+
+		<h2>{ p.T("gallery.section.alerts") }</h2>
+		<p class="error" role="alert" id="gallery-alert-error">{ p.T("gallery.error.example") }</p>
+		<div id="gallery-offline-banner" class="offline-banner" role="alert">{ p.T("offline.banner.degraded") }</div>
+	}
+}

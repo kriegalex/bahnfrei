@@ -1,0 +1,66 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Copyright (c) 2026 Bahnfrei contributors */
+
+/* Design tokens (TASK-032, STR-045/SYS-116): the single source of every
+   visual literal a template or stylesheet is allowed to use. Documented in
+   docs/architecture/design-system.md, alongside the component inventory
+   these tokens back. Consumed by base.css and every future stylesheet —
+   nothing outside this file may declare a raw color, font-size, spacing or
+   radius value (scripts/check-style-tokens.sh enforces this in CI).
+
+   Neutral default (OQ-061): no brand identity exists yet for Bahnfrei.
+   These are placeholder, accessibility-checked values chosen for contrast
+   and legibility only; rebranding later is a values-only change to this
+   file — no template or component touches a color/spacing literal
+   directly, so a future palette swap never requires a template edit. */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- Color: base surface & text --- */
+  --color-bg: #fff;
+  --color-fg: #111;
+  --color-border: rgba(136, 136, 136, 0.27); /* was #8884 */
+
+  /* --- Color: accent (links, focus ring, primary actions) --- */
+  --color-accent: #1a4d8f;
+  --color-accent-fg: #fff;
+
+  /* --- Color: semantic status (success/warning/info/danger) — the
+     offline-capture indicator (SYS-087), the unofficial-results label
+     (SYS-076) and inline validation errors (SYS-117) all read from these,
+     never a literal hex. --- */
+  --color-success-bg: #e6f4ea;
+  --color-success-fg: #14532d;
+  --color-warning-bg: #fff4e5;
+  --color-warning-fg: #7a3d00;
+  --color-warning-strong-bg: #7a3d00;
+  --color-warning-strong-fg: #fff;
+  --color-info-bg: #e5efff;
+  --color-info-fg: #003a7a;
+  --color-danger-fg: #a30000;
+
+  /* --- Typography --- */
+  --font-family-base: system-ui, sans-serif;
+  --font-size-base: 1rem;
+  --font-size-sm: 0.9rem;
+  --line-height-base: 1.4;
+  --font-weight-bold: 700;
+
+  /* --- Spacing scale (rem) --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+
+  /* --- Radius --- */
+  --radius-sm: 0.4rem;
+
+  /* --- Focus ring (SYS-114: visible focus indicator for keyboard-only
+     operation; kept as its own token so UC-038 #2's keyboard-walk e2e and
+     any future component can assert/reuse the same ring). --- */
+  --focus-ring-color: var(--color-accent);
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+}

@@ -4,6 +4,7 @@
 # TASK-002 CI gates (SYS-140, SYS-141, ADR-001 §3–4): 3-OS build matrix,
 # lint, TS typecheck, tests + coverage thresholds, dependency licence scan,
 # vulnerability scan. Governance gates (SPDX/DCO) live in governance.yml.
+# style-conformance (TASK-032, SYS-116) is the design-token gate.
 name: ci
 
 on:
@@ -52,6 +53,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+
+  style-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Design-token conformance check (TASK-032, SYS-116, UC-038 #1)
+        run: ./scripts/check-style-tokens.sh
 
   typecheck-islands:
     runs-on: ubuntu-latest
