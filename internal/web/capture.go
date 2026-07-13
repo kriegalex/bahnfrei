@@ -84,6 +84,19 @@ type standingRowView2 struct {
 	Mark   string // provenance-marked (SYS-041)
 	Status string
 	Points string
+	// Flags is the SYS-049 record/best flag codes (e.g. "MR", "PB"),
+	// comma-joined for display — "" when none earned.
+	Flags string
+	// AthleteID lets the row link to its record checklist (SYS-051) when
+	// Flags is non-empty.
+	AthleteID string
+}
+
+// categorySplitView is one SYS-052/UC-028 per-category re-ranked group,
+// alongside the combined-unit standings.
+type categorySplitView struct {
+	CategoryCode string
+	Standings    []standingRowView2
 }
 
 type captureView struct {
@@ -97,7 +110,12 @@ type captureView struct {
 	CutTo        int
 	Standings    []standingRowView2
 	Continuation []string // bib+name in competing order after the cut
-	Rows         []captureRowView
+	// CategorySplits renders only when the unit's entrants span more than
+	// one category (SYS-052, UC-028 #1/#2) — a unit with a single category
+	// present keeps this empty, matching app.UnitCaptureView.CategorySplits'
+	// own "callers only render when >1" contract.
+	CategorySplits []categorySplitView
+	Rows           []captureRowView
 	// Track form state (UC-010 subset).
 	TrackTimings  []string
 	TrackStatuses []string
@@ -214,24 +232,46 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 	}
 
 	for _, st := range uc.Standings {
-		rv := standingRowView2{
-			Name:   names[st.AthleteID],
-			Bib:    bibs[st.AthleteID],
-			Mark:   markWithProvenance(st.Mark, st.Timing),
-			Status: domain.RenderStatus(st.Status, st.StatusDetail),
-		}
-		if st.Rank > 0 {
-			rv.Rank = strconv.Itoa(st.Rank)
-		}
-		if st.Points != nil {
-			rv.Points = strconv.Itoa(*st.Points)
-		}
-		v.Standings = append(v.Standings, rv)
+		v.Standings = append(v.Standings, buildStandingRowView(st, names, bibs))
 	}
 	for _, athleteID := range uc.Continuation {
 		v.Continuation = append(v.Continuation, strings.TrimSpace(bibs[athleteID]+" "+names[athleteID]))
 	}
+	// Only render a "per category" section when the unit's entrants
+	// actually span more than one category (SYS-052, UC-028); a single
+	// category present is a degenerate split not worth a second table.
+	if len(uc.CategorySplits) > 1 {
+		for _, split := range uc.CategorySplits {
+			sv := categorySplitView{CategoryCode: split.CategoryCode}
+			for _, st := range split.Standings {
+				sv.Standings = append(sv.Standings, buildStandingRowView(st, names, bibs))
+			}
+			v.CategorySplits = append(v.CategorySplits, sv)
+		}
+	}
 	return v, nil
+}
+
+// buildStandingRowView renders one app.UnitStandingRow for display —
+// shared by the combined-unit standings and every per-category split
+// group (SYS-052), so a record flag or provenance marker never renders
+// differently between the two.
+func buildStandingRowView(st app.UnitStandingRow, names, bibs map[string]string) standingRowView2 {
+	rv := standingRowView2{
+		AthleteID: st.AthleteID,
+		Name:      names[st.AthleteID],
+		Bib:       bibs[st.AthleteID],
+		Mark:      markWithProvenance(st.Mark, st.Timing),
+		Status:    domain.RenderStatus(st.Status, st.StatusDetail),
+		Flags:     strings.Join(st.RecordFlags, ", "),
+	}
+	if st.Rank > 0 {
+		rv.Rank = strconv.Itoa(st.Rank)
+	}
+	if st.Points != nil {
+		rv.Points = strconv.Itoa(*st.Points)
+	}
+	return rv
 }
 
 // markWithProvenance renders a mark with its timing provenance: hand times
@@ -301,6 +341,57 @@ func (s *Server) handleCaptureStandings(w http.ResponseWriter, r *http.Request) 
 	}
 	p := basePageData(r, s.cats)
 	_ = captureStandings(p, v).Render(r.Context(), w)
+}
+
+// recordChecklistItemView is one SYS-051 Rekordprotokoll field, localized
+// for display.
+type recordChecklistItemView struct {
+	Label string
+	Value string
+	Gap   bool
+}
+
+type recordChecklistView struct {
+	MeetID     string
+	UnitID     string
+	AthleteID  string
+	AthleteRow string // bib + name, for the page heading
+	Flags      string
+	Items      []recordChecklistItemView
+}
+
+// handleRecordChecklist serves the SYS-051 record-documentation checklist
+// for one flagged result (UC-016 #4): the operator capture standings link
+// to this from every flagged row.
+func (s *Server) handleRecordChecklist(w http.ResponseWriter, r *http.Request) {
+	meetID, unitID, athleteID := r.PathValue("id"), r.PathValue("unit"), r.PathValue("athlete")
+	if actor, ok := sessionFromContext(r.Context()); ok {
+		if err := s.results.CheckUnitAccess(r.Context(), actor, meetID, unitID); err != nil {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+	}
+	checklist, err := s.results.RecordChecklist(r.Context(), meetID, unitID, athleteID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	detail, err := s.meets.Meet(r.Context(), meetID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	p := basePageData(r, s.cats)
+	v := recordChecklistView{
+		MeetID: meetID, UnitID: unitID, AthleteID: athleteID,
+		Flags: strings.Join(checklist.RecordFlags, ", "),
+	}
+	for _, it := range checklist.Items {
+		iv := recordChecklistItemView{Label: p.T("record_checklist." + it.Key), Value: it.Value, Gap: it.Gap}
+		v.Items = append(v.Items, iv)
+	}
+	p.Title = detail.Name + " — " + p.T("record_checklist.title")
+	_ = recordChecklistPage(p, v).Render(r.Context(), w)
 }
 
 // parseAttemptValue maps the grid's single-input notation to an attempt:

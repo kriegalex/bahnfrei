@@ -155,6 +155,9 @@ templ publicResultsFragment(p PageData, v publicResultsView) {
 										if cell.Points != "" {
 											<small>{ " (" + cell.Points + " " + p.T("standings.points_abbr") + ")" }</small>
 										}
+										if cell.Flags != "" {
+											<strong class="record-flags">{ " " + cell.Flags }</strong>
+										}
 									</td>
 								}
 								<td><strong>{ row.Total }</strong></td>

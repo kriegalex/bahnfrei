@@ -239,6 +239,9 @@ type UnitStandingRow struct {
 	StatusDetail string
 	Timing       domain.Timing
 	Points       *int
+	// RecordFlags carries the SYS-049 record/best flags (e.g. "MR", "PB")
+	// through to every operator-view renderer built on UnitStandingRow.
+	RecordFlags []string
 }
 
 // UnitCaptureView is everything the capture page for one unit renders.
@@ -256,6 +259,21 @@ type UnitCaptureView struct {
 	// the field cut, once every athlete has CutAfter attempts (SYS-042);
 	// empty when the unit has no cut or the cut round is still open.
 	Continuation []string
+	// CategorySplits re-ranks this same unit's entrants per category (SYS-052,
+	// UC-028 #1/#2: "combining categories/divisions for lack of entries"): one
+	// group per category present among the unit's entrants, each ranked
+	// exactly like Standings but restricted to that group. A unit whose
+	// entrants are all one category still gets one (degenerate) group here —
+	// callers only need to render a "per category" section when
+	// len(CategorySplits) > 1.
+	CategorySplits []CategorySplitStanding
+}
+
+// CategorySplitStanding is one category group's re-ranked view of a unit
+// whose field combines more than one age category/division (SYS-052).
+type CategorySplitStanding struct {
+	CategoryCode string
+	Standings    []UnitStandingRow
 }
 
 // UnitCapture assembles the capture view for one unit: the participant
@@ -306,6 +324,20 @@ func (s *ResultsService) UnitCapture(ctx context.Context, meetID, unitID string)
 	for i := range results {
 		byAthleteResult[results[i].AthleteID] = &results[i]
 	}
+	// catByAthlete resolves each participant's default category (SYS-052,
+	// UC-028) up front, alongside the grid build below, so the split-by-
+	// category standings need no second participant query. A meet
+	// referencing an unknown scheme (should not happen once created) simply
+	// gets no split — the combined Standings below is unaffected.
+	scheme, hasScheme := s.schemes[uc.meet.CategorySchemeID]
+	catByAthlete := make(map[string]string, len(participants))
+	if hasScheme {
+		for _, p := range participants {
+			if cat, err := scheme.ResolveDefaultCategory(p.Athlete.BirthYear, p.Athlete.Sex, uc.meet.StartDate); err == nil {
+				catByAthlete[p.AthleteID] = cat.Code
+			}
+		}
+	}
 
 	for _, p := range participants {
 		row := CaptureRow{
@@ -334,7 +366,50 @@ func (s *ResultsService) UnitCapture(ctx context.Context, meetID, unitID string)
 	} else {
 		v.Standings = trackStandings(results)
 	}
+	if hasScheme {
+		v.CategorySplits = splitStandingsByCategory(scheme, catByAthlete, v.Rows, byAthleteResult, uc.disc.Family, v.Config)
+	}
 	return v, nil
+}
+
+// splitStandingsByCategory re-ranks rows per category (SYS-052, UC-028
+// #1/#2): the same fieldStandings/trackStandings ranking functions the
+// combined-unit standings use, each re-run on the subset of rows one
+// category's entrants make up, in the meet's category-scheme order (so
+// output order is deterministic and matches the scheme's own age-band
+// ordering, not row-arrival order).
+func splitStandingsByCategory(scheme *domain.CategoryScheme, catByAthlete map[string]string, rows []CaptureRow,
+	byAthleteResult map[string]*store.ResultRecord, family domain.DisciplineFamily, cfg CaptureConfig) []CategorySplitStanding {
+	byCategory := map[string][]CaptureRow{}
+	for _, row := range rows {
+		code, ok := catByAthlete[row.AthleteID]
+		if !ok {
+			continue // no resolvable category for this athlete: excluded from every split group
+		}
+		byCategory[code] = append(byCategory[code], row)
+	}
+
+	var out []CategorySplitStanding
+	for _, cat := range scheme.Categories {
+		group, ok := byCategory[cat.Code]
+		if !ok {
+			continue
+		}
+		var standings []UnitStandingRow
+		if family == domain.FamilyFieldHorizontal {
+			standings, _ = fieldStandings(group, byAthleteResult, cfg)
+		} else {
+			recs := make([]store.ResultRecord, 0, len(group))
+			for _, row := range group {
+				if row.Result != nil {
+					recs = append(recs, *row.Result)
+				}
+			}
+			standings = trackStandings(recs)
+		}
+		out = append(out, CategorySplitStanding{CategoryCode: cat.Code, Standings: standings})
+	}
+	return out
 }
 
 // laneByAthlete resolves a unit's drawn lanes (TASK-018, SYS-026/027),
@@ -398,6 +473,7 @@ func fieldStandings(rows []CaptureRow, results map[string]*store.ResultRecord, c
 		if r := results[st.AthleteID]; r != nil {
 			row.Points = r.Points
 			row.StatusDetail = r.StatusDetail
+			row.RecordFlags = r.RecordFlags
 		}
 		out = append(out, row)
 	}
@@ -423,6 +499,7 @@ func trackStandings(results []store.ResultRecord) []UnitStandingRow {
 			StatusDetail: r.StatusDetail,
 			Timing:       r.Timing,
 			Points:       r.Points,
+			RecordFlags:  r.RecordFlags,
 		}}
 		if r.Mark == "" || r.Status != domain.StatusNone {
 			unranked = append(unranked, st)
@@ -544,6 +621,22 @@ func (s *ResultsService) SaveFieldAttempt(ctx context.Context, actor Session, me
 		if result.Points, err = s.scorePoints(ctx, tx, uc.meet, uc.disc.Code, domain.TimingNone, p.Athlete.Sex, best); err != nil {
 			return store.AttemptRecord{}, err
 		}
+		// Record/best flagging (SYS-049/050) evaluates against the specific
+		// trial that produced the settled best mark — its own wind reading,
+		// not any other trial's (a wind-assisted best cannot borrow a legal
+		// reading from a different attempt).
+		var bestWind *float64
+		for _, a := range series.Attempts {
+			if a.Kind == domain.AttemptValid && a.Mark == best {
+				bestWind = a.Wind
+				break
+			}
+		}
+		eval, err := s.evaluateRecord(ctx, tx, uc.meet, uc.disc, p.Athlete, best, domain.TimingNone, bestWind, unitID)
+		if err != nil {
+			return store.AttemptRecord{}, err
+		}
+		result.RecordFlags = eval.Flags()
 	}
 	settled, err := store.SaveResult(ctx, tx, result, domain.TimingNone)
 	if err != nil {
@@ -653,6 +746,14 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 		if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
 			return store.ResultRecord{}, err
 		}
+		// Record/best flagging (SYS-049/050/051, UC-016): a status-only
+		// result (DNS/DNF/DQ/NM, the other branch) never flags — no mark to
+		// evaluate.
+		eval, err := s.evaluateRecord(ctx, s.db, uc.meet, uc.disc, p.Athlete, result.Mark, timing, result.Wind, unitID)
+		if err != nil {
+			return store.ResultRecord{}, err
+		}
+		result.RecordFlags = eval.Flags()
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)

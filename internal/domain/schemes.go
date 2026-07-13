@@ -15,7 +15,7 @@ import (
 // (UC-002 #4) — embedding is purely a distribution mechanism, not a special
 // code path.
 //
-//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json data/import-profiles/*.json data/seeding/*.json
+//go:embed data/category-schemes/*.json data/disciplines/*.json data/scoring/*.json data/templates/*.json data/series-uploads/*.json data/import-profiles/*.json data/seeding/*.json data/records/*.json
 var builtinData embed.FS
 
 // Built-in category-scheme identifiers (SYS-005).
@@ -277,6 +277,46 @@ func BuiltinImportMappingProfiles() (map[string]*ImportMappingProfile, error) {
 			return nil, err
 		}
 		out[id] = p
+	}
+	return out, nil
+}
+
+// Built-in record-list identifier (SYS-049, TASK-022): a clearly-labeled
+// example fixture, not a certified federation record list — real
+// WR/AR/NR/meeting marks change too often (and would need live
+// verification this offline data file can never guarantee) to ship as
+// built-in "fact" data. Organizers load their own current list per meet
+// the same way (ParseRecordList); this ships only so the loader path and
+// the demo/test fixtures have something concrete to point at.
+const RecordListExample = "example-meeting-records"
+
+var builtinRecordListFiles = map[string]string{
+	RecordListExample: "data/records/example-meeting-records.json",
+}
+
+// BuiltinRecordList loads and parses one of the shipped record-list data
+// files by ID.
+func BuiltinRecordList(id string) (*RecordList, error) {
+	path, ok := builtinRecordListFiles[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown built-in record list %q", id)
+	}
+	data, err := builtinData.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read built-in record list %q: %w", id, err)
+	}
+	return ParseRecordList(data)
+}
+
+// BuiltinRecordLists loads every shipped record list, keyed by ID.
+func BuiltinRecordLists() (map[string]*RecordList, error) {
+	out := make(map[string]*RecordList, len(builtinRecordListFiles))
+	for id := range builtinRecordListFiles {
+		l, err := BuiltinRecordList(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = l
 	}
 	return out, nil
 }

@@ -532,7 +532,11 @@ type Result struct {
 	RecordFlags  []string // e.g. "PB", "SB", "NR" (D6.1)
 }
 
-// RecordType is the WA/Swiss record-abbreviation vocabulary (D6.1).
+// RecordType is the WA/Swiss record-abbreviation vocabulary (D6.1): the
+// kind of reference-list row a RecordReference is. PB/SB are not reference
+// rows (no file loads them) — they are computed per athlete from in-system
+// history (internal/domain/record.go) and carry their own flag codes
+// directly (FlagPersonalBest/FlagSeasonBest), never a RecordType value.
 type RecordType string
 
 const (
@@ -542,17 +546,40 @@ const (
 	RecordMeeting  RecordType = "meeting"
 )
 
+// FlagCode returns the D6.1 result-list abbreviation this reference type
+// flags a bettering performance with — "MR" for a loaded meeting-record row
+// (RecordMeeting's own value, "meeting", is the file vocabulary, not the
+// printed flag), the type's own value otherwise (WR/AR/NR already are their
+// flag codes).
+func (t RecordType) FlagCode() string {
+	if t == RecordMeeting {
+		return "MR"
+	}
+	return string(t)
+}
+
 // RecordReference is the SyRS §2 Record/Best reference entity: type, scope,
-// category, discipline, mark, holder, date (D6.1/D6.2).
+// category, discipline, mark, holder, date (D6.1/D6.2). Loaded from a
+// RecordList data file (internal/domain/record.go, ADR-005 §4 "rule-shaped
+// data is data, not code") — never hand-built in application code.
 type RecordReference struct {
-	ID              string
-	Type            RecordType
-	Scope           string
-	CategoryCode    string
-	DisciplineCode  string
-	Mark            string
-	HolderAthleteID string
-	Date            time.Time
+	ID   string     `json:"id"`
+	Type RecordType `json:"type"`
+	// Scope is the reference's jurisdiction label for display (e.g. "CH",
+	// "Europe", "World") — free text, not matched against anything; a
+	// RecordMeeting entry's actual meet scoping is MeetID below, not Scope.
+	Scope          string `json:"scope"`
+	CategoryCode   string `json:"categoryCode"`
+	DisciplineCode string `json:"disciplineCode"`
+	Mark           string `json:"mark"`
+	// MeetID scopes a RecordMeeting entry to the one meet it is a record
+	// for (SYS-049 "meeting records"): only that meet's captured results are
+	// evaluated against it. Empty for WR/AR/NR entries, which apply across
+	// every meet that loads this list (D6.1's federation-wide reference
+	// lists).
+	MeetID          string    `json:"meetId,omitempty"`
+	HolderAthleteID string    `json:"holderAthleteId,omitempty"`
+	Date            time.Time `json:"date,omitempty"`
 }
 
 // DocumentKind enumerates official-document kinds (SyRS §2).

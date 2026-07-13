@@ -272,6 +272,16 @@ func (s *ResultsService) CorrectResult(ctx context.Context, actor Session, meetI
 	if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
 		return store.ResultRecord{}, err
 	}
+	// Record/best flagging (SYS-049/050) must be re-evaluated against the
+	// corrected mark, not silently dropped: domain.Result{} above starts
+	// with nil RecordFlags, and store.SaveResult persists exactly what it
+	// is given — a correction that skipped this would erase a prior "MR"/
+	// "PB" flag even when the corrected mark still earns it.
+	eval, err := s.evaluateRecord(ctx, s.db, uc.meet, uc.disc, p.Athlete, result.Mark, timing, result.Wind, unitID)
+	if err != nil {
+		return store.ResultRecord{}, err
+	}
+	result.RecordFlags = eval.Flags()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

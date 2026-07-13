@@ -190,6 +190,11 @@ func (s *Server) resultListDocument(p PageData, meetName string, standings app.M
 				if m.Points != nil {
 					cell += " (" + strconv.Itoa(*m.Points) + ")"
 				}
+				// SYS-049: record/best flags appear in exports too, not
+				// just operator views and the public web page.
+				if len(m.RecordFlags) > 0 {
+					cell += " " + strings.Join(m.RecordFlags, ",")
+				}
 				cells = append(cells, cell)
 			}
 			cells = append(cells, strconv.Itoa(row.Total))

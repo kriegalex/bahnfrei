@@ -182,6 +182,9 @@ func (s *Server) handleRosterAdd(w http.ResponseWriter, r *http.Request) {
 type markCellView struct {
 	Mark   string
 	Points string
+	// Flags is the SYS-049 record/best flag codes (e.g. "MR", "PB"),
+	// comma-joined for display — "" when none earned.
+	Flags string
 }
 
 type standingRowView struct {
@@ -240,7 +243,7 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 				Total:     strconv.Itoa(row.Total),
 			}
 			for _, m := range row.Marks {
-				cell := markCellView{Mark: markOrGap(m)}
+				cell := markCellView{Mark: markOrGap(m), Flags: strings.Join(m.RecordFlags, ", ")}
 				if m.Points != nil {
 					cell.Points = strconv.Itoa(*m.Points)
 				}

@@ -244,7 +244,7 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 				Total:     strconv.Itoa(row.Total),
 			}
 			for _, m := range row.Marks {
-				cell := markCellView{Mark: markOrGap(m)}
+				cell := markCellView{Mark: markOrGap(m), Flags: strings.Join(m.RecordFlags, ", ")}
 				if m.Points != nil {
 					cell.Points = strconv.Itoa(*m.Points)
 				}

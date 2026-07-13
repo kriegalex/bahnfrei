@@ -168,6 +168,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/capture", captureRole(s.handleCaptureIndex))
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}", captureRole(s.handleCaptureUnit))
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/standings", captureRole(s.handleCaptureStandings))
+	mux.HandleFunc("GET /meets/{id}/capture/{unit}/record-checklist/{athlete}", captureRole(s.handleRecordChecklist))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/attempt", captureRole(s.handleCaptureAttempt))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/track", captureRole(s.handleCaptureTrack))
 	mux.HandleFunc("GET /meets/{id}/capture/{unit}/sheet.pdf", captureRole(s.handleCaptureSheetPDF))

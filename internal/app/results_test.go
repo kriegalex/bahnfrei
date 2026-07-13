@@ -47,6 +47,11 @@ func newTestResults(t *testing.T) (*MeetService, *ResultsService, *store.Store) 
 		t.Fatalf("BuiltinImportMappingProfiles: %v", err)
 	}
 	results.SetImportMappingProfiles(importProfiles)
+	recordLists, err := domain.BuiltinRecordLists()
+	if err != nil {
+		t.Fatalf("BuiltinRecordLists: %v", err)
+	}
+	results.SetRecordLists(recordLists)
 	return meets, results, st
 }
 

@@ -14,6 +14,12 @@ type CombinedPerformance struct {
 	Mark           string
 	Status         QualificationStatus
 	Points         *int
+	// RecordFlags carries the SYS-049 record/best flags (e.g. "MR", "PB")
+	// through to every standings renderer built on CombinedPerformance
+	// (public results, the printed result list) — the same flags the
+	// operator capture view shows (SYS-049 "flags SHALL appear in operator
+	// views, public results, and exports").
+	RecordFlags []string
 }
 
 // CombinedStanding is one athlete's row in a combined-event ranking.

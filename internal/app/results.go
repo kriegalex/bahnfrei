@@ -36,8 +36,14 @@ type ResultsService struct {
 	// (TASK-021), wired via SetCombinedScoringTables — normally the
 	// built-in domain.BuiltinCombinedScoringTables().
 	combinedTables map[string]*domain.CombinedScoringTable
-	onChange       func(meetID string)
-	now            Clock
+	// recordLists are the SYS-049 loadable record/best reference lists
+	// (TASK-022), wired via SetRecordLists — normally
+	// domain.BuiltinRecordLists() plus whatever organizer-authored lists a
+	// deployment adds. A meet references the subset that applies to it via
+	// store.AddMeetRecordList/ListMeetRecordListIDs (internal/app/record.go).
+	recordLists map[string]*domain.RecordList
+	onChange    func(meetID string)
+	now         Clock
 }
 
 // SetImportMappingProfiles wires the SYS-013 entry-import mapping profiles
@@ -56,6 +62,15 @@ func (s *ResultsService) SetImportMappingProfiles(profiles map[string]*domain.Im
 // rather than silently scoring 0.
 func (s *ResultsService) SetCombinedScoringTables(tables map[string]*domain.CombinedScoringTable) {
 	s.combinedTables = tables
+}
+
+// SetRecordLists wires the SYS-049 loadable record/best reference lists
+// (TASK-022) — normally domain.BuiltinRecordLists(). A meet with no
+// configured record list (SetMeetRecordLists/store.AddMeetRecordList) still
+// gets PB/SB flagging from in-system athlete history; it just has no
+// WR/AR/NR/MR reference to flag against.
+func (s *ResultsService) SetRecordLists(lists map[string]*domain.RecordList) {
+	s.recordLists = lists
 }
 
 // NewResultsService wires a ResultsService; catalog, schemes, tables and
@@ -430,6 +445,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 			Mark:           r.Mark,
 			Status:         r.Status,
 			Points:         r.Points,
+			RecordFlags:    r.RecordFlags,
 		}
 	}
 

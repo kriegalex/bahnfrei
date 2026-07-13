@@ -284,11 +284,37 @@ templ windForm(p PageData, v captureView) {
 
 // captureStandings is the live-refreshing unit ranking (UC-011 #4): rank
 // by best mark with the D5.6 tie-break for field events, by time for
-// track; hand times stay marked (SYS-041).
+// track; hand times stay marked (SYS-041). Record/best flags (SYS-049)
+// render in their own column, each linking to the SYS-051 documentation
+// checklist. When the unit's entrants span more than one category
+// (SYS-052, UC-028), a re-ranked table per category follows the combined
+// race result.
 templ captureStandings(p PageData, v captureView) {
 	<h2>{ p.T("capture.standings") }</h2>
-	if len(v.Standings) == 0 {
-		<p>{ p.T("capture.standings_empty") }</p>
+	@standingsTable(p, v.MeetID, v.UnitID, v.Standings, p.T("capture.standings_empty"))
+	if len(v.Continuation) > 0 {
+		<h3>{ p.T("capture.continuation", "n", intToStr(int64(v.CutTo))) }</h3>
+		<ol>
+			for _, name := range v.Continuation {
+				<li>{ name }</li>
+			}
+		</ol>
+	}
+	if len(v.CategorySplits) > 1 {
+		<h3>{ p.T("capture.category_splits") }</h3>
+		for _, split := range v.CategorySplits {
+			<h4>{ split.CategoryCode }</h4>
+			@standingsTable(p, v.MeetID, v.UnitID, split.Standings, p.T("capture.standings_empty"))
+		}
+	}
+}
+
+// standingsTable renders one rank/bib/name/result/points/flags table —
+// shared by the combined-unit standings and every per-category split group
+// so both stay visually and structurally identical (SYS-052).
+templ standingsTable(p PageData, meetID, unitID string, rows []standingRowView2, emptyText string) {
+	if len(rows) == 0 {
+		<p>{ emptyText }</p>
 	} else {
 		<table>
 			<thead>
@@ -298,10 +324,11 @@ templ captureStandings(p PageData, v captureView) {
 					<th>{ p.T("roster.name") }</th>
 					<th>{ p.T("capture.result") }</th>
 					<th>{ p.T("standings.points_abbr") }</th>
+					<th>{ p.T("capture.record_flags") }</th>
 				</tr>
 			</thead>
 			<tbody>
-				for _, row := range v.Standings {
+				for _, row := range rows {
 					<tr>
 						<td>{ row.Rank }</td>
 						<td>{ row.Bib }</td>
@@ -313,17 +340,45 @@ templ captureStandings(p PageData, v captureView) {
 							}
 						</td>
 						<td>{ row.Points }</td>
+						<td>
+							if row.Flags != "" {
+								<a href={ templ.URL("/meets/" + meetID + "/capture/" + unitID + "/record-checklist/" + row.AthleteID) }>
+									{ row.Flags }
+								</a>
+							}
+						</td>
 					</tr>
 				}
 			</tbody>
 		</table>
 	}
-	if len(v.Continuation) > 0 {
-		<h3>{ p.T("capture.continuation", "n", intToStr(int64(v.CutTo))) }</h3>
-		<ol>
-			for _, name := range v.Continuation {
-				<li>{ name }</li>
-			}
-		</ol>
+}
+
+// recordChecklistPage renders the SYS-051 Rekordprotokoll checklist for one
+// flagged result (UC-016 #4): the in-system data plus explicit gaps for
+// manual completion.
+templ recordChecklistPage(p PageData, v recordChecklistView) {
+	@layout(p) {
+		<h1>{ p.T("record_checklist.title") }</h1>
+		<p><strong>{ v.Flags }</strong></p>
+		<table>
+			<tbody>
+				for _, it := range v.Items {
+					<tr>
+						<th scope="row">{ it.Label }</th>
+						<td>
+							if it.Gap {
+								<em>{ p.T("record_checklist.gap") }</em>
+							} else {
+								{ it.Value }
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<p>
+			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID) }>{ p.T("record_checklist.back") }</a>
+		</p>
 	}
 }

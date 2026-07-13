@@ -1,0 +1,20 @@
+{
+  "id": "example-meeting-records",
+  "version": "1.0.0",
+  "name": "Example meeting-record list (fixture, not certified data)",
+  "source": "TASK-022 example fixture. NOT a certified Swiss Athletics/World Athletics record list — marks below are illustrative placeholders. Organizers load their own current, verified record list per meet (domain.ParseRecordList); this file exists only to demonstrate the loadable-data mechanism (ADR-005 §4) and to give the demo/test build something concrete to reference.",
+  "notes": "meetId values here (\"example-meet\") are placeholders and will not match any real meet ID (ULIDs are generated at meet creation) — wiring this list to a real meet's meeting record requires editing meetId to that meet's actual ID, or loading an organizer-authored list instead.",
+  "records": [
+    {
+      "id": "example-100m-u18w-mr",
+      "type": "meeting",
+      "scope": "Example Meeting",
+      "categoryCode": "U18 W",
+      "disciplineCode": "100m",
+      "mark": "11.90",
+      "meetId": "example-meet",
+      "holderAthleteId": "",
+      "date": "2025-06-01T00:00:00Z"
+    }
+  ]
+}
