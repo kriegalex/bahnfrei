@@ -162,14 +162,28 @@ func (p *PrivacyService) ExportAthleteData(ctx context.Context, actor Session, a
 // (UC-024 #2): it applies domain.Athlete.AnonymizePersonalData and
 // persists the result. Office level and above (CapPrivacyActions).
 //
-// The audit row deliberately documents ONLY that an erasure happened
-// (actor, timestamp, reason, which field categories were cleared) — never
-// the pre-erasure name. The audit_log table is append-only by design
-// (SYS-046, migrations/0001_audit_log.sql): if the real name were written
-// into before_json here "for the record", it would sit in that immutable
-// log forever, permanently defeating the very erasure this action
-// performs. UC-024 #2's "the action is documented" is satisfied by
-// recording that erasure occurred, not by re-embedding what it erased.
+// The athlete.erase audit row deliberately documents ONLY that an erasure
+// happened (actor, timestamp, reason, which field categories were
+// cleared) — never the pre-erasure name. The audit_log table is
+// append-only by design (SYS-046, migrations/0001_audit_log.sql): if the
+// real name were written into before_json here "for the record", it would
+// sit in that immutable log forever, permanently defeating the very
+// erasure this action performs. UC-024 #2's "the action is documented" is
+// satisfied by recording that erasure occurred, not by re-embedding what
+// it erased.
+//
+// That leaves the OLDER audit rows a prior action already wrote with the
+// name in plain text: participant.register (internal/app/results.go) and
+// entry.submit (internal/app/entry.go) both embed the athlete's name in
+// their after_json at the time, before this erasure ever ran. TASK-029
+// privacy-review finding #1: those rows must be redacted too, or the
+// erasure is cosmetic — the subject's name survives, just one hop away in
+// the same table. This reuses RedactAuditPII (the SYS-102 retention
+// purge's own transactional trigger-drop/restore mechanism,
+// internal/store/privacy.go) rather than inventing a second redaction
+// path — erasure and retention purge both need "redact exactly these
+// audit_log rows, leave actor/action/entity/timestamp intact" and nothing
+// more.
 func (p *PrivacyService) EraseAthlete(ctx context.Context, actor Session, athleteID, reason string) error {
 	if err := Authorize(actor.Role, CapPrivacyActions); err != nil {
 		return err
@@ -194,9 +208,31 @@ func (p *PrivacyService) EraseAthlete(ctx context.Context, actor Session, athlet
 	if _, err := store.AnonymizeAthlete(ctx, tx, a, rec.Version); err != nil {
 		return err
 	}
+
+	participantIDs, resultIDs, entryIDs, err := store.AthletePersonalDataEntityIDs(ctx, tx, athleteID)
+	if err != nil {
+		return fmt.Errorf("erase athlete: find audit entity ids: %w", err)
+	}
+	var redacted int64
+	for _, scope := range []struct {
+		entityType string
+		ids        []string
+	}{
+		{"participant", participantIDs},
+		{"result", resultIDs},
+		{"entry", entryIDs},
+	} {
+		n, err := store.RedactAuditPII(ctx, tx, scope.entityType, scope.ids)
+		if err != nil {
+			return fmt.Errorf("erase athlete: redact audit PII (%s): %w", scope.entityType, err)
+		}
+		redacted += n
+	}
+
 	after, _ := json.Marshal(map[string]any{
-		"anonymized":     true,
-		"fields_cleared": []string{"first_name", "last_name", "birth_date", "external_ids"},
+		"anonymized":          true,
+		"fields_cleared":      []string{"first_name", "last_name", "birth_date", "external_ids"},
+		"audit_rows_redacted": redacted,
 	})
 	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
 		Actor: actor.AccountID, Action: "athlete.erase",
@@ -291,7 +327,7 @@ func (p *PrivacyService) purge(ctx context.Context, actorID string, retentionDay
 
 	var redacted int64
 	for _, meetID := range meetIDs {
-		participantIDs, resultIDs, err := store.MeetPersonalDataEntityIDs(ctx, tx, meetID)
+		participantIDs, resultIDs, entryIDs, err := store.MeetPersonalDataEntityIDs(ctx, tx, meetID)
 		if err != nil {
 			return report, fmt.Errorf("retention purge: meet %s: %w", meetID, err)
 		}
@@ -301,6 +337,14 @@ func (p *PrivacyService) purge(ctx context.Context, actorID string, retentionDay
 		}
 		redacted += n
 		n, err = store.RedactAuditPII(ctx, tx, "result", resultIDs)
+		if err != nil {
+			return report, fmt.Errorf("retention purge: %w", err)
+		}
+		redacted += n
+		// TASK-029 privacy-review finding #2: entries (entity_type "entry",
+		// entry.submit's audit row) were previously omitted from this sweep
+		// entirely — online-entry audit names never aged out.
+		n, err = store.RedactAuditPII(ctx, tx, "entry", entryIDs)
 		if err != nil {
 			return report, fmt.Errorf("retention purge: %w", err)
 		}

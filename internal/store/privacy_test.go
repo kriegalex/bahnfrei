@@ -395,13 +395,25 @@ func TestListParticipationsAndResultsByAthleteSYS101UC024_1(t *testing.T) {
 
 // TestFindExpiredMeetIDsAndMeetPersonalDataEntityIDsSYS102UC024_3 covers
 // the meet-scoped half of the retention sweep: an expired meet's
-// participant/result row IDs are the exact set RedactAuditPII targets.
+// participant/result/entry row IDs are the exact set RedactAuditPII
+// targets. Entries are included since TASK-029 privacy-review finding #2:
+// they were previously omitted from the purge sweep entirely (an entry is
+// event-scoped, one hop further from the meet than participants/results).
 func TestFindExpiredMeetIDsAndMeetPersonalDataEntityIDsSYS102UC024_3(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	meetID, _, athleteID := ukcFixture(t, s)
 	if _, err := RegisterParticipant(ctx, s.DB(), meetID, athleteID, "1"); err != nil {
 		t.Fatal(err)
+	}
+	entryEvent, err := CreateEvent(ctx, s.DB(), domain.Event{
+		MeetID: meetID, DisciplineCode: "100m", CategoryCodes: []string{"W12"},
+	})
+	if err != nil {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	if _, err := CreateEntry(ctx, s.DB(), domain.Entry{EventID: entryEvent.ID, AthleteID: athleteID}); err != nil {
+		t.Fatalf("CreateEntry: %v", err)
 	}
 	m, err := GetMeet(ctx, s.DB(), meetID)
 	if err != nil {
@@ -439,7 +451,7 @@ func TestFindExpiredMeetIDsAndMeetPersonalDataEntityIDsSYS102UC024_3(t *testing.
 			t.Fatal("meet ending before cutoff must be reported expired")
 		}
 
-		participantIDs, resultIDs, err := MeetPersonalDataEntityIDs(ctx, s.DB(), meetID)
+		participantIDs, resultIDs, entryIDs, err := MeetPersonalDataEntityIDs(ctx, s.DB(), meetID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -449,5 +461,63 @@ func TestFindExpiredMeetIDsAndMeetPersonalDataEntityIDsSYS102UC024_3(t *testing.
 		if len(resultIDs) != 0 {
 			t.Errorf("resultIDs = %v, want none (no results saved in this fixture)", resultIDs)
 		}
+		if len(entryIDs) != 1 {
+			t.Errorf("entryIDs = %v, want exactly 1 (TASK-029: entries must be swept too)", entryIDs)
+		}
 	})
+}
+
+// TestAthletePersonalDataEntityIDsSYS101UC024_2 covers the SYS-101
+// erasure-scoped counterpart to MeetPersonalDataEntityIDs: an athlete's
+// participant/result/entry row IDs are returned regardless of which meet
+// they belong to (an athlete is instance-global, SYS-010), and another
+// athlete's rows in the very same meet/event/unit are never included.
+func TestAthletePersonalDataEntityIDsSYS101UC024_2(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	meetID, unitID, athleteA := ukcFixture(t, s)
+
+	athleteB, err := CreateAthlete(ctx, s.DB(), domain.Athlete{FirstName: "Bea", LastName: "Beispiel", BirthYear: 2013, Sex: domain.SexFemale})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RegisterParticipant(ctx, s.DB(), meetID, athleteA, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RegisterParticipant(ctx, s.DB(), meetID, athleteB.ID, "2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveResult(ctx, s.DB(), domain.Result{UnitID: unitID, AthleteID: athleteA, Mark: "8.90"}, domain.TimingManual); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveResult(ctx, s.DB(), domain.Result{UnitID: unitID, AthleteID: athleteB.ID, Mark: "9.10"}, domain.TimingManual); err != nil {
+		t.Fatal(err)
+	}
+	entryEvent, err := CreateEvent(ctx, s.DB(), domain.Event{
+		MeetID: meetID, DisciplineCode: "100m", CategoryCodes: []string{"W12"},
+	})
+	if err != nil {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	entryA, err := CreateEntry(ctx, s.DB(), domain.Entry{EventID: entryEvent.ID, AthleteID: athleteA})
+	if err != nil {
+		t.Fatalf("CreateEntry (A): %v", err)
+	}
+	if _, err := CreateEntry(ctx, s.DB(), domain.Entry{EventID: entryEvent.ID, AthleteID: athleteB.ID}); err != nil {
+		t.Fatalf("CreateEntry (B): %v", err)
+	}
+
+	participantIDs, resultIDs, entryIDs, err := AthletePersonalDataEntityIDs(ctx, s.DB(), athleteA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(participantIDs) != 1 {
+		t.Errorf("participantIDs = %v, want exactly 1 (athlete A's own participant row)", participantIDs)
+	}
+	if len(resultIDs) != 1 {
+		t.Errorf("resultIDs = %v, want exactly 1 (athlete A's own result row)", resultIDs)
+	}
+	if len(entryIDs) != 1 || entryIDs[0] != entryA.ID {
+		t.Errorf("entryIDs = %v, want exactly [%s] (athlete A's own entry, not athlete B's)", entryIDs, entryA.ID)
+	}
 }

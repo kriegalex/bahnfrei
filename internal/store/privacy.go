@@ -203,44 +203,71 @@ func FindExpiredMeetIDs(ctx context.Context, db DBTX, cutoff time.Time) ([]strin
 	return out, rows.Err()
 }
 
-// MeetPersonalDataEntityIDs returns the participant and result row IDs
-// belonging to meetID — the audit_log (entity_type, entity_id) pairs the
-// SYS-102 retention purge redacts once the meet is out of retention
-// (RedactAuditPII's callers).
-func MeetPersonalDataEntityIDs(ctx context.Context, db DBTX, meetID string) (participantIDs, resultIDs []string, err error) {
-	pRows, err := db.QueryContext(ctx, `SELECT id FROM participants WHERE meet_id = ?`, meetID)
-	if err != nil {
-		return nil, nil, err
+// MeetPersonalDataEntityIDs returns the participant, result and entry row
+// IDs belonging to meetID — the audit_log (entity_type, entity_id) pairs
+// the SYS-102 retention purge redacts once the meet is out of retention
+// (RedactAuditPII's callers). Entries are event-scoped, not directly
+// meet-scoped (entries.event_id -> events.meet_id), unlike
+// participants/results which carry a direct or one-hop meet reference —
+// TASK-029 privacy-review finding #2: online-entry audit rows
+// (entity_type "entry", written by internal/app/entry.go's
+// auditEntrySubmit) were omitted from the purge sweep entirely.
+func MeetPersonalDataEntityIDs(ctx context.Context, db DBTX, meetID string) (participantIDs, resultIDs, entryIDs []string, err error) {
+	if participantIDs, err = queryIDColumn(ctx, db, `SELECT id FROM participants WHERE meet_id = ?`, meetID); err != nil {
+		return nil, nil, nil, err
 	}
-	defer pRows.Close()
-	for pRows.Next() {
-		var id string
-		if err := pRows.Scan(&id); err != nil {
-			return nil, nil, err
-		}
-		participantIDs = append(participantIDs, id)
-	}
-	if err := pRows.Err(); err != nil {
-		return nil, nil, err
-	}
-
-	rRows, err := db.QueryContext(ctx, `SELECT r.id FROM results r
+	if resultIDs, err = queryIDColumn(ctx, db, `SELECT r.id FROM results r
 		JOIN units u ON u.id = r.unit_id
 		JOIN rounds rd ON rd.id = u.round_id
 		JOIN events e ON e.id = rd.event_id
-		WHERE e.meet_id = ?`, meetID)
+		WHERE e.meet_id = ?`, meetID); err != nil {
+		return nil, nil, nil, err
+	}
+	entryIDs, err = queryIDColumn(ctx, db, `SELECT e.id FROM entries e
+		JOIN events ev ON ev.id = e.event_id
+		WHERE ev.meet_id = ?`, meetID)
+	return participantIDs, resultIDs, entryIDs, err
+}
+
+// AthletePersonalDataEntityIDs returns the participant, result and entry
+// row IDs belonging to athleteID, across every meet the athlete ever
+// touched — the audit_log (entity_type, entity_id) pairs the SYS-101
+// erasure request redacts (RedactAuditPII's caller in
+// internal/app/privacy.go PrivacyService.EraseAthlete). Unlike
+// MeetPersonalDataEntityIDs (meet-scoped, for the SYS-102 retention purge
+// sweep), erasure is athlete-scoped: an athlete is instance-global
+// (SYS-010), so their audit-payload PII can be sitting in any meet's
+// participant.register/entry.submit rows, not just the one the erasure
+// request happened to be filed from — TASK-029 privacy-review finding #1.
+func AthletePersonalDataEntityIDs(ctx context.Context, db DBTX, athleteID string) (participantIDs, resultIDs, entryIDs []string, err error) {
+	if participantIDs, err = queryIDColumn(ctx, db, `SELECT id FROM participants WHERE athlete_id = ?`, athleteID); err != nil {
+		return nil, nil, nil, err
+	}
+	if resultIDs, err = queryIDColumn(ctx, db, `SELECT id FROM results WHERE athlete_id = ?`, athleteID); err != nil {
+		return nil, nil, nil, err
+	}
+	entryIDs, err = queryIDColumn(ctx, db, `SELECT id FROM entries WHERE athlete_id = ?`, athleteID)
+	return participantIDs, resultIDs, entryIDs, err
+}
+
+// queryIDColumn runs a single-column `id`-shaped query and collects the
+// results — the shared scan loop behind FindExpiredMeetIDs,
+// MeetPersonalDataEntityIDs and AthletePersonalDataEntityIDs.
+func queryIDColumn(ctx context.Context, db DBTX, query string, args ...any) ([]string, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	defer rRows.Close()
-	for rRows.Next() {
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
 		var id string
-		if err := rRows.Scan(&id); err != nil {
-			return nil, nil, err
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
 		}
-		resultIDs = append(resultIDs, id)
+		out = append(out, id)
 	}
-	return participantIDs, resultIDs, rRows.Err()
+	return out, rows.Err()
 }
 
 // AuditRedactionMarker replaces a redacted audit_log row's before/after

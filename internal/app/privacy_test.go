@@ -278,6 +278,170 @@ func TestEraseAthleteSYS101UC024_2(t *testing.T) {
 	})
 }
 
+// TestEraseAthleteRedactsAuditPIIInOlderAuditRowsSYS101UC024_2 covers
+// TASK-029 privacy-review finding #1: EraseAthlete must also redact the
+// subject's cleartext name out of OLDER audit rows a prior action already
+// wrote it into — participant.register (roster path,
+// ResultsService.RegisterParticipant, internal/app/results.go) and
+// entry.submit (online-entry path, internal/app/entry.go) both embed the
+// athlete's name in after_json at write time, before any erasure request
+// exists to know about them. Without this, erasure is cosmetic: the name
+// survives one hop away in the same audit_log table. The audit trail's
+// non-PII shape (actor/action/entity_type/entity_id/seq) must survive the
+// redaction untouched — the same invariant UC-022 #2 already covers for
+// the SYS-102 retention purge's RedactAuditPII (store/privacy_test.go).
+func TestEraseAthleteRedactsAuditPIIInOlderAuditRowsSYS101UC024_2(t *testing.T) {
+	t.Run("participant.register audit row (roster path)", func(t *testing.T) {
+		meets, results, st := newTestResults(t)
+		privacy := NewPrivacyService(st.DB())
+		ctx := context.Background()
+		meet := createUKCMeet(t, meets)
+
+		p, err := results.RegisterParticipant(ctx, office, meet.ID, ParticipantInput{
+			FirstName: "Petra", LastName: "Participant", BirthYear: 2013, Sex: domain.SexFemale, Bib: "7",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		before, err := store.AuditTrail(ctx, st.DB(), "participant", p.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(before) != 1 || !strings.Contains(before[0].After, "Petra") {
+			t.Fatalf("fixture error: expected the participant.register row to carry the name before erasure: %+v", before)
+		}
+		wantActor, wantAction, wantSeq := before[0].Actor, before[0].Action, before[0].Seq
+
+		if err := privacy.EraseAthlete(ctx, office, p.AthleteID, "subject request"); err != nil {
+			t.Fatalf("EraseAthlete: %v", err)
+		}
+
+		after, err := store.AuditTrail(ctx, st.DB(), "participant", p.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(after) != 1 {
+			t.Fatalf("redaction must not add/remove rows: got %d, want 1", len(after))
+		}
+		if strings.Contains(after[0].After, "Petra") || strings.Contains(after[0].After, "Participant") {
+			t.Errorf("participant.register audit row still carries the erased athlete's name: %q", after[0].After)
+		}
+		if after[0].After != store.AuditRedactionMarker {
+			t.Errorf("After = %q, want the redaction marker", after[0].After)
+		}
+		if after[0].Actor != wantActor || after[0].Action != wantAction || after[0].Seq != wantSeq {
+			t.Errorf("redaction must preserve actor/action/seq: got %+v, want actor=%q action=%q seq=%d",
+				after[0], wantActor, wantAction, wantSeq)
+		}
+	})
+
+	t.Run("entry.submit audit row (online-entry path)", func(t *testing.T) {
+		f := newEntryFixture(t)
+		privacy := NewPrivacyService(f.st.DB())
+		ctx := context.Background()
+
+		detail, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+			EventID: f.eventID, FirstName: "Enno", LastName: "Entrant",
+			BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+		})
+		if err != nil {
+			t.Fatalf("SubmitIndividualEntry: %v", err)
+		}
+		before, err := store.AuditTrail(ctx, f.st.DB(), "entry", detail.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(before) != 1 || !strings.Contains(before[0].After, "Enno") {
+			t.Fatalf("fixture error: expected the entry.submit row to carry the name before erasure: %+v", before)
+		}
+
+		if err := privacy.EraseAthlete(ctx, office, detail.AthleteID, "subject request"); err != nil {
+			t.Fatalf("EraseAthlete: %v", err)
+		}
+
+		after, err := store.AuditTrail(ctx, f.st.DB(), "entry", detail.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(after) != 1 {
+			t.Fatalf("redaction must not add/remove rows: got %d, want 1", len(after))
+		}
+		if strings.Contains(after[0].After, "Enno") || strings.Contains(after[0].After, "Entrant") {
+			t.Errorf("entry.submit audit row still carries the erased athlete's name: %q", after[0].After)
+		}
+		if after[0].Action != "entry.submit" || after[0].EntityType != "entry" || after[0].EntityID != detail.ID {
+			t.Errorf("redaction must preserve action/entity_type/entity_id: got %+v", after[0])
+		}
+	})
+}
+
+// TestEraseAthleteUnmatchableOnReimportSYS101UC024_2 is the pinning test
+// the privacy review asked for (docs/delivery/reviews/privacy-review-
+// task-023.md finding #4/note: "erasure-unmatchability... verified by
+// construction; pinning test suggested"): after erasure, re-importing a
+// CSV row describing the same real person — same name, birth year, sex,
+// AND the same licence number the erased athlete once carried — must
+// never resurface or re-link the erased athlete's record. It must create
+// a brand-new athlete instead. resolveImportAthlete
+// (internal/app/import.go) matches an incoming row by licence external ID
+// first, then by natural key (name+birth year+sex); AnonymizePersonalData
+// clears both the name and ExternalIDs, so neither matching path can find
+// the erased record — by construction, not by a special case in the
+// import path itself.
+func TestEraseAthleteUnmatchableOnReimportSYS101UC024_2(t *testing.T) {
+	f := newImportFixture(t)
+	privacy := NewPrivacyService(f.st.DB())
+	ctx := context.Background()
+
+	created, err := f.results.RegisterParticipant(ctx, office, f.meetID, ParticipantInput{
+		FirstName: "Wanda", LastName: "Withdrawn", BirthYear: 2001, Sex: domain.SexFemale, Bib: "9",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), created.AthleteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetAthleteExternalID(ctx, f.st.DB(), athlete.ID, athlete.Version,
+		domain.NamespaceSwissAthleticsLicence, "SA-PIN-1"); err != nil {
+		t.Fatalf("SetAthleteExternalID: %v", err)
+	}
+
+	if err := privacy.EraseAthlete(ctx, office, created.AthleteID, "subject request"); err != nil {
+		t.Fatalf("EraseAthlete: %v", err)
+	}
+
+	csvBody := systemNativeCSVHeader + "\n" +
+		systemNativeCSVRow("Wanda", "Withdrawn", "2001", "W", "LC Test", "SA-PIN-1", "100m/Women", "", "12.80") + "\n"
+	report, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(csvBody))
+	if err != nil {
+		t.Fatalf("CommitCSVImport: %v", err)
+	}
+	if report.Accepted != 1 || report.Rejected != 0 {
+		t.Fatalf("report = %+v, want 1 accepted / 0 rejected (a fresh athlete, not a re-link)", report)
+	}
+
+	reimported, err := store.FindAthleteByNaturalKey(ctx, f.st.DB(), "Wanda", "Withdrawn", 2001, domain.SexFemale)
+	if err != nil {
+		t.Fatalf("FindAthleteByNaturalKey: %v", err)
+	}
+	if reimported.ID == created.AthleteID {
+		t.Fatal("re-import must never resurface the erased athlete's own ID")
+	}
+
+	stillErased, err := store.GetAthlete(ctx, f.st.DB(), created.AthleteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stillErased.Anonymized || stillErased.FirstName == "Wanda" || stillErased.LastName == "Withdrawn" {
+		t.Error("the erased athlete's own record must remain anonymized, untouched by the re-import")
+	}
+	if len(stillErased.ExternalIDs) != 0 {
+		t.Error("the erased athlete must not re-acquire the licence external ID via the re-import")
+	}
+}
+
 // TestPurgeExpiredSYS102UC024_3 covers the SYS-102 retention purge:
 // personal data belonging to a meet that ended more than the configured
 // retention period ago is purged (allow), data belonging to a still-
@@ -366,6 +530,80 @@ func TestPurgeExpiredSYS102UC024_3(t *testing.T) {
 			t.Errorf("FindAthletesOutsideRetention after purge = %v, want none", remaining)
 		}
 	})
+}
+
+// TestPurgeExpiredRedactsEntryAuditRowsSYS102UC024_3 covers TASK-029
+// privacy-review finding #2: the retention purge's audit-redaction sweep
+// previously covered only entity_type "participant"/"result"/"athlete" —
+// entity_type "entry" (online-entry audit rows, entry.submit,
+// internal/app/entry.go's auditEntrySubmit) was omitted entirely, so an
+// online-submitted entrant's name never aged out even after the meet was
+// long out of retention. This proves an out-of-retention meet's
+// entry.submit audit row is redacted by the purge, while everything else
+// about the row (action/entity_type/entity_id) survives.
+func TestPurgeExpiredRedactsEntryAuditRowsSYS102UC024_3(t *testing.T) {
+	meets, results, st := newTestResults(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	privacy := NewPrivacyService(st.DB()).WithClock(func() time.Time { return now })
+
+	oldMeet, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Altes Einschreibemeeting", Venue: "V", HomologationRef: "H",
+		StartDate: now.AddDate(0, 0, -200), EndDate: now.AddDate(0, 0, -200),
+		Tier: "C-Meeting", CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet: %v", err)
+	}
+	ev, err := meets.AddEvent(ctx, organizer, oldMeet.ID, AddEventRequest{
+		DisciplineCode: "100m", CategoryCodes: []string{"U16 W"},
+	})
+	if err != nil {
+		t.Fatalf("AddEvent: %v", err)
+	}
+	if err := meets.PublishMeet(ctx, organizer, oldMeet.ID, oldMeet.Version); err != nil {
+		t.Fatalf("PublishMeet: %v", err)
+	}
+
+	detail, err := results.SubmitIndividualEntry(ctx, entrySubmitter, oldMeet.ID, IndividualEntryInput{
+		EventID: ev.ID, FirstName: "Erik", LastName: "Eingetragen",
+		BirthYear: 2011, Sex: domain.SexFemale, SeedPerformance: "13.50",
+	})
+	if err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+	before, err := store.AuditTrail(ctx, st.DB(), "entry", detail.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 1 || !strings.Contains(before[0].After, "Erik") {
+		t.Fatalf("fixture error: expected the entry.submit row to carry the name before the purge: %+v", before)
+	}
+
+	report, err := privacy.PurgeExpired(ctx, admin, DefaultRetentionDays)
+	if err != nil {
+		t.Fatalf("PurgeExpired: %v", err)
+	}
+	if report.AuditRowsRedacted == 0 {
+		t.Error("expected at least one redacted audit row")
+	}
+
+	after, err := store.AuditTrail(ctx, st.DB(), "entry", detail.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("redaction must not add/remove rows: got %d, want 1", len(after))
+	}
+	if strings.Contains(after[0].After, "Erik") || strings.Contains(after[0].After, "Eingetragen") {
+		t.Errorf("entry.submit audit row still carries the entrant's name after the purge: %q", after[0].After)
+	}
+	if after[0].After != store.AuditRedactionMarker {
+		t.Errorf("After = %q, want the redaction marker", after[0].After)
+	}
+	if after[0].Action != "entry.submit" || after[0].EntityType != "entry" || after[0].EntityID != detail.ID {
+		t.Errorf("redaction must preserve action/entity_type/entity_id: got %+v", after[0])
+	}
 }
 
 // TestPurgeExpiredAtStartupAuditsAsSystemSYS102 covers the process-start
