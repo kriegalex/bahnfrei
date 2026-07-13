@@ -123,6 +123,88 @@ export async function seedUkcMeet(
   return { meetID, units, athletes, unitURL };
 }
 
+export interface TrackMeetFixture {
+  meetID: string;
+  eventID: string;
+  /** office check-in page for the 100m event (UC-007). */
+  checkinURL: string;
+  /** field-official capture page for the 100m unit (UC-010). */
+  unitURL: string;
+}
+
+/**
+ * Creates a plain (non-template) meet with one 100m/U18 W final event,
+ * publishes it, and submits one individual online entry per name (landing
+ * in status "entered" — not yet checked in). Mirrors
+ * internal/web/seeding_test.go's TestCheckInFlowHTTPSYS025UC007 fixture, but
+ * entirely over HTTP (no direct app-layer calls) so it can seed a browser
+ * context's cookies. Used by the TASK-030 keyboard-only suite (SYS-114):
+ * UC-007 check-in and UC-010 track result entry both need a real event with
+ * real entries, which the UBS Kids Cup template's simplified roster-only
+ * flow (seedUkcMeet) does not exercise (it has no check-in step at all).
+ */
+export async function seedTrackMeet(
+  request: APIRequestContext,
+  baseURL: string,
+  names: string[],
+): Promise<TrackMeetFixture> {
+  const location = await postForm(request, baseURL + "/meets/new", baseURL + "/meets", {
+    name: "Abendmeeting Uster",
+    venue: "Stadion Buchholz",
+    homologation_ref: "CH-ZH-042",
+    start_date: "2027-06-12",
+    end_date: "2027-06-13",
+    tier: "C-Meeting",
+    scheme: "swiss-athletics",
+    session_day_0: "2027-06-12",
+    session_label_0: "Session 1",
+  });
+  const meetID = location.replace("/meets/", "");
+  expect(meetID).toMatch(/^[0-9A-Za-z]+$/);
+  const meetPage = `${baseURL}/meets/${meetID}`;
+
+  await postForm(request, meetPage, `${meetPage}/events`, {
+    discipline: "100m",
+    categories: "U18 W",
+    round_final: "1",
+  });
+  await postForm(request, meetPage, `${meetPage}/publish`, { version: "1" });
+
+  const entriesPage = `${meetPage}/entries`;
+  const entriesHTML = await getBody(request, entriesPage);
+  const eventMatch = entriesHTML.match(/<select name="event"><option value="([0-9A-Za-z]+)"/);
+  if (!eventMatch) {
+    throw new Error("entries page missing the event <select> option (100m)");
+  }
+  const eventID = eventMatch[1];
+
+  for (const name of names) {
+    await postForm(request, entriesPage, `${meetPage}/entries/individual`, {
+      event: eventID,
+      first_name: name,
+      last_name: "Test",
+      birth_year: "2005",
+      sex: "W",
+      seed: "13.50",
+    });
+  }
+
+  const captureIndex = await getBody(request, `${meetPage}/capture`);
+  const unitMatch = captureIndex.match(
+    new RegExp(`/meets/${meetID}/capture/([0-9A-Za-z]+)">100 metres<`),
+  );
+  if (!unitMatch) {
+    throw new Error("capture index missing the 100m unit");
+  }
+
+  return {
+    meetID,
+    eventID,
+    checkinURL: `${meetPage}/events/${eventID}/checkin`,
+    unitURL: `${meetPage}/capture/${unitMatch[1]}`,
+  };
+}
+
 /**
  * Schedules one unit and publishes the timetable (mirrors
  * internal/web/public_test.go's scheduleAndPublishTimetable), so the
