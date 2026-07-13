@@ -196,7 +196,7 @@ draft Competition Data Model serves as a design reference, not a compliance targ
 
 | ID | Requirement | Traces to |
 |----|-------------|-----------|
-| SYS-140 | Every use-case acceptance criterion (UC-###) SHALL be covered by an automated test; domain-logic modules (seeding, scoring, progression, eligibility, records) SHALL reach ≥90% branch coverage; overall project line coverage SHALL be ≥80%, enforced in CI. | STR-038 |
+| SYS-140 | Every use-case acceptance criterion (UC-###) SHALL be covered by an automated test; domain-logic modules (seeding, scoring, progression, eligibility, records) SHALL reach ≥90% branch coverage; overall project line coverage SHALL be ≥83%, enforced in CI. *(Floor ratcheted 80%→83% at TASK-033 after the measured baseline reached 83.9%; the gate and this floor move together — see `scripts/check-coverage.sh`.)* | STR-038 |
 | SYS-141 | CI SHALL gate every change to the main branch on: successful build, static type check with zero errors, linter with zero errors, full test suite green, dependency vulnerability scan with no new critical/high findings. | STR-038 |
 | SYS-142 | Rule-defined computations (scoring tables, hand-time rounding, wind legality, countback, progression, category assignment) SHALL each have reference test suites with documented expected values from the primary rule sources (D-references), so rule conformance is machine-verified. | STR-014–STR-016, STR-024, STR-038 |
 | SYS-143 | The project SHALL maintain a public defect policy: no release with known critical/high defects; every fixed defect SHALL gain a regression test; defect severity definitions SHALL be documented. | STR-038 |
