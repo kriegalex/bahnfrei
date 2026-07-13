@@ -270,10 +270,16 @@ func (s *Server) handleCaptureVerticalHeights(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var heights []string
+	// Each "heights" value may itself be a comma-separated series: the
+	// first-time configuration form is a single text input the operator
+	// fills as "1.60, 1.65, 1.70" (its placeholder and visible hint text
+	// say exactly that — TASK-031/SYS-117), while the extend form posts
+	// one hidden input per already-configured height.
 	for _, raw := range r.Form["heights"] {
-		h := strings.TrimSpace(raw)
-		if h != "" {
-			heights = append(heights, h)
+		for _, part := range strings.Split(raw, ",") {
+			if h := strings.TrimSpace(part); h != "" {
+				heights = append(heights, h)
+			}
 		}
 	}
 	if add := strings.TrimSpace(r.FormValue("add_height")); add != "" {
