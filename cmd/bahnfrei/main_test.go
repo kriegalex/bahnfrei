@@ -20,13 +20,30 @@ func TestRunVersion(t *testing.T) {
 func TestRunDefault(t *testing.T) {
 	var sb strings.Builder
 	run(context.Background(), nil, &sb)
-	if !strings.Contains(sb.String(), "not yet operational") {
-		t.Errorf("run() = %q, want placeholder notice", sb.String())
+	got := sb.String()
+	// Every subcommand run() actually dispatches must be listed, so the
+	// usage text can never silently drift from the real command set
+	// (TASK-028, replacing the M0/M1 "not yet operational" placeholder).
+	for _, want := range []string{"Usage:", "serve", "backup", "restore", "demo", "timing-agent", "--version"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("run() = %q, want it to mention %q", got, want)
+		}
+	}
+	if strings.Contains(got, "not yet operational") {
+		t.Errorf("run() = %q, want the scaffolding placeholder gone", got)
+	}
+}
+
+func TestRunUnknownSubcommandShowsUsage(t *testing.T) {
+	var sb strings.Builder
+	run(context.Background(), []string{"bogus"}, &sb)
+	if !strings.Contains(sb.String(), "Usage:") {
+		t.Errorf("run([bogus]) = %q, want usage text", sb.String())
 	}
 }
 
 func TestMainEntry(t *testing.T) {
-	main() // prints the placeholder notice to stdout; must not panic
+	main() // prints the usage text to stdout; must not panic
 }
 
 func TestRunServeSubcommandSurfacesErrors(t *testing.T) {
