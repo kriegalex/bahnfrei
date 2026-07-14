@@ -41,6 +41,9 @@ Read in this order:
 7. **`docs/requirements/open-questions-and-assumptions.md`** — **founder attention needed**:
    open questions `OQ-###`, working assumptions `A-###`, TBD register.
 8. **`docs/requirements/glossary.md`** — domain and project terms (DE/FR equivalents).
+9. **`docs/ops/`** — operator-facing documentation for running an instance: quickstart,
+   operator runbook (network kit, timing-agent mode, backup/restore), privacy documentation
+   (SYS-104), support matrix (SYS-132), defect policy (SYS-143), and release process (SYS-146).
 
 ## ID scheme (stable, never renumbered)
 
@@ -63,9 +66,14 @@ meet → M3 release 0.1). Remaining founder inputs are tracked in
 ## Quickstart (≤30 minutes from nothing to a working system)
 
 No configuration file is ever edited: the first browser visit walks you through creating
-the admin account, and everything else happens in the operator UI (SYS-131, UC-001).
+the admin account, and everything else happens in the operator UI (SYS-131, UC-001). This is
+the short version; **`docs/ops/quickstart.md`** has the full walkthrough including the
+release-artifact download path and what to read next (the operator runbook).
 
-**Option A — binary.** Requires Go ≥ 1.26 (release downloads arrive with release 0.1):
+**Option A — binary.** A per-OS release binary (built by `scripts/build-release.sh` for
+`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, with a
+`checksums.txt` to verify against) is attached to each tagged release. Or build from source,
+requires Go ≥ 1.26:
 
 ```
 go build -o bahnfrei ./cmd/bahnfrei
@@ -104,6 +112,22 @@ go test ./...
 Templates (`*.templ`) are pre-generated and checked in; after editing them run
 `go run github.com/a-h/templ/cmd/templ@latest generate` (or the pinned version from
 `go.mod`).
+
+## Operations, privacy & release
+
+- **`docs/ops/operator-runbook.md`** — roles, the ADR-002 v2 network kit for a meet day,
+  timing-agent setup, backup/restore, retention.
+- **`docs/ops/privacy.md`** — data-processing overview, template meet privacy notice, and
+  controller guidance (SYS-104), including the pseudonymization-vs-anonymization distinction
+  for athlete erasure (SYS-101).
+- **`docs/ops/support-matrix.md`** — supported OS/hardware and browsers (SYS-132), and the
+  measured public-results-viewer capacity (SYS-122's 2,000-viewer target is not yet met — see
+  `docs/requirements/open-questions-and-assumptions.md` OQ-066).
+- **`docs/ops/defect-policy.md`** — severity definitions and the regression-test requirement
+  (SYS-143).
+- **`docs/ops/release-process.md`** — versioning, changelog, artifact build
+  (`scripts/build-release.sh`), checksum/signing stance, container publication, support
+  window (SYS-146). See **`CHANGELOG.md`** for what shipped in each release.
 
 ## Licence & contributing
 
