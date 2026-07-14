@@ -29,9 +29,9 @@ var SYS120Scale = ScaleParams{Athletes: 1500, Entries: 4000, Units: 250, Days: 3
 
 // LargeMeetFixture is what SeedLargeMeet built.
 type LargeMeetFixture struct {
-	MeetID     string
-	EventIDs   []string // one per unit, parallel to UnitIDs/DisciplineCodes
-	UnitIDs    []string
+	MeetID   string
+	EventIDs []string // one per unit, parallel to UnitIDs/DisciplineCodes
+	UnitIDs  []string
 	// DisciplineCodes[i] is EventIDs[i]/UnitIDs[i]'s discipline code, so
 	// callers can drive ResultsService.SaveResult (which takes a
 	// DisciplineCode, not a UnitID) against a known-good event.

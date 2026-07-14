@@ -432,8 +432,8 @@ func (s *Server) parseMeetForm(r *http.Request, p PageData) (meetFormView, app.M
 		errs["venue"] = p.T("meet.field_error.venue.required")
 	}
 	var startOK, endOK bool
-	switch {
-	case form.StartDate == "":
+	switch form.StartDate {
+	case "":
 		errs["start_date"] = p.T("meet.field_error.start_date.required")
 	default:
 		if d, err := time.Parse(formDateLayout, form.StartDate); err != nil {
@@ -442,8 +442,8 @@ func (s *Server) parseMeetForm(r *http.Request, p PageData) (meetFormView, app.M
 			req.StartDate, startOK = d, true
 		}
 	}
-	switch {
-	case form.EndDate == "":
+	switch form.EndDate {
+	case "":
 		errs["end_date"] = p.T("meet.field_error.end_date.required")
 	default:
 		if d, err := time.Parse(formDateLayout, form.EndDate); err != nil {

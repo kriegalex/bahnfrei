@@ -226,9 +226,8 @@ func TestOverrideAssignmentRequiresOfficeCapability(t *testing.T) {
 func TestOverrideAssignmentVersionConflict(t *testing.T) {
 	f := newSeedingFixture(t, "400m")
 	ctx := context.Background()
-	var entries []store.EntryRecord
 	for i := 0; i < 4; i++ {
-		entries = append(entries, f.confirmedEntry(t, fmt.Sprintf("F%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0)))
+		f.confirmedEntry(t, fmt.Sprintf("F%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0))
 	}
 	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
 		GenerateHeatsRequest{MaxHeatSize: 8, TrackLanes: 8}); err != nil {
@@ -285,9 +284,8 @@ func TestOverrideAssignmentFirstManualPlacement(t *testing.T) {
 func TestOverrideAssignmentSwapsOccupiedLane(t *testing.T) {
 	f := newSeedingFixture(t, "400m")
 	ctx := context.Background()
-	var entries []store.EntryRecord
 	for i := 0; i < 4; i++ {
-		entries = append(entries, f.confirmedEntry(t, fmt.Sprintf("G%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0)))
+		f.confirmedEntry(t, fmt.Sprintf("G%d", i), "", fmt.Sprintf("%d.%02d", 5000+i*20, 0))
 	}
 	if _, err := f.results.GenerateHeats(ctx, office, f.meetID, f.eventID, f.roundID,
 		GenerateHeatsRequest{MaxHeatSize: 8, TrackLanes: 8}); err != nil {
