@@ -76,7 +76,9 @@ func TestHandleHome(t *testing.T) {
 		t.Fatalf("GET / on fresh instance = %d -> %q, want 303 -> /setup", resp.StatusCode, resp.Header.Get("Location"))
 	}
 
-	// Once an account exists, the home page renders normally.
+	// Once an account exists, the home page renders normally — anonymous
+	// visitors get the login-pointing hub content (TASK-028, replacing the
+	// M0/M1 placeholder), never the organizer-only /meets link.
 	if _, err := deps.auth.Bootstrap(context.Background(), "admin", "Admin", "s3cret-passphrase"); err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +89,66 @@ func TestHandleHome(t *testing.T) {
 	}
 	if !strings.Contains(body, "Bahnfrei") {
 		t.Errorf("home page missing app title: %s", body)
+	}
+	if strings.Contains(body, "not yet operational") || strings.Contains(body, "nicht einsatzbereit") {
+		t.Errorf("home page still renders the M0/M1 scaffolding placeholder: %s", body)
+	}
+	if !strings.Contains(body, `href="/login"`) {
+		t.Errorf("anonymous home page missing a login link: %s", body)
+	}
+	if strings.Contains(body, `href="/meets"`) {
+		t.Errorf("anonymous home page must not offer the organizer-only /meets link: %s", body)
+	}
+}
+
+// TestHandleHomeOrganizerView covers the logged-in, meet-organizer-capable
+// case (TASK-028): the hub landing page points straight at the meets
+// workspace instead of the anonymous login pitch.
+func TestHandleHomeOrganizerView(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	resp := mustGet(t, client, base+"/")
+	body := bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / = %d, want 200; body=%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, `href="/meets"`) {
+		t.Errorf("organizer home page missing the /meets link: %s", body)
+	}
+}
+
+// TestHandleHomeNonOrganizerLoggedInView covers a logged-in session below
+// the meet-organizer floor (e.g. competition-office, TASK-028): it has no
+// instance-wide workspace of its own (OQ-089), so the home page neither
+// offers /meets nor the anonymous login pitch.
+func TestHandleHomeNonOrganizerLoggedInView(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+
+	resp := postForm(t, client, base+"/admin", base+"/admin/accounts", url.Values{
+		"username": {"office0"}, "display_name": {"Office Zero"},
+		"password": {"s3cret-passphrase"}, "role": {"competition_office"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("create office account = %d, want 303", resp.StatusCode)
+	}
+	logout(t, client, base)
+	login(t, client, base, "office0", "s3cret-passphrase")
+
+	resp = mustGet(t, client, base+"/")
+	body := bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / = %d, want 200; body=%s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, `href="/meets"`) {
+		t.Errorf("non-organizer home page must not offer the organizer-only /meets link: %s", body)
+	}
+	if strings.Contains(body, `href="/login"`) {
+		t.Errorf("logged-in home page must not still offer the login link: %s", body)
 	}
 }
 

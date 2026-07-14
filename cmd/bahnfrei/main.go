@@ -57,5 +57,28 @@ func run(ctx context.Context, args []string, out io.Writer) {
 			return
 		}
 	}
-	fmt.Fprintln(out, "bahnfrei: not yet operational — see docs/delivery/work-breakdown.md")
+	printUsage(out)
+}
+
+// printUsage is the no-subcommand / unrecognized-subcommand fallback
+// (TASK-028, replacing the M0/M1 "not yet operational" scaffolding
+// placeholder now that every listed command is real).
+func printUsage(out io.Writer) {
+	fmt.Fprintln(out, "bahnfrei — open-source athletics tournament management (AGPL-3.0-only)")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  bahnfrei <command> [flags]")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Commands:")
+	fmt.Fprintln(out, "  serve          run the server (hub or venue role): operator UI, first-run setup, public results")
+	fmt.Fprintln(out, "  backup         write a one-action snapshot of a running instance's database (SYS-084, UC-020 #3)")
+	fmt.Fprintln(out, "  restore        restore a backup snapshot into a fresh data directory")
+	fmt.Fprintln(out, "  demo           seed a demo meet for evaluation")
+	fmt.Fprintln(out, "  timing-agent   bridge a local FinishLynx-style timing folder to the hub over HTTPS (ADR-006)")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Flags:")
+	fmt.Fprintln(out, "  --version      print the version and exit")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Run 'bahnfrei <command> -h' for flags on a specific command.")
+	fmt.Fprintln(out, "First run? See docs/ops/quickstart.md (install to a working system in <=30 min).")
 }

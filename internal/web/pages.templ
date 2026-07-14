@@ -3,12 +3,28 @@
 
 package web
 
-// homePage is the placeholder landing page for the server shell (TASK-005);
-// meet/domain content replaces its body in later tasks.
+// homePage is the hub landing page (TASK-028, replacing the TASK-005
+// scaffolding placeholder now that meet setup, entries, capture and public
+// results all exist). Content is role-appropriate rather than one static
+// blurb: an anonymous visitor is pointed at login (no global public-meet
+// directory exists — public results are reached via the per-meet URL the
+// organizer shares, ADR-002), an organizer-capable session is pointed at
+// their meets workspace, and any other authenticated session (office,
+// field-official, entry-submitter accounts) is told to use the meet-scoped
+// link its organizer shared, since those roles have no instance-wide
+// landing surface of their own (see OQ-089).
 templ homePage(p PageData) {
 	@layout(p) {
 		<h1>{ p.T("home.welcome") }</h1>
-		<p>{ p.T("home.placeholder") }</p>
+		if !p.LoggedIn {
+			<p>{ p.T("home.intro_anonymous") }</p>
+			<p><a href="/login">{ p.T("nav.login") }</a></p>
+		} else if p.CanOrganize {
+			<p>{ p.T("home.intro_operator") }</p>
+			<p><a href="/meets">{ p.T("nav.meets") }</a></p>
+		} else {
+			<p>{ p.T("home.intro_loggedin") }</p>
+		}
 	}
 }
 
