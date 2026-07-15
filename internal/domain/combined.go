@@ -34,8 +34,29 @@ type CombinedStanding struct {
 	Complete     bool // every discipline has a scoring result
 }
 
+// CombinedTieBreak names the equal-totals ranking policy a combined-events
+// standing applies. It is rule-shaped data (ADR-005 §4): the governing
+// series/federation rule set decides it, not code.
+type CombinedTieBreak string
+
+const (
+	// TieBreakMajorityThenHighest is the UBS Kids Cup Reglement §3 policy:
+	// on equal totals, better points in the majority of disciplines wins,
+	// then the highest (then next-highest, …) single-discipline points.
+	TieBreakMajorityThenHighest CombinedTieBreak = "majority-then-highest"
+	// TieBreakTiesStand is the World Athletics combined-events policy
+	// (CR&TR 2026 edition, TR 39 Combined Events Competitions, final
+	// placing provision, verified 2026-07-15 — OQ-045): "If two or more
+	// athletes achieve an equal number of points for any place in the
+	// competition, it shall be determined as a tie." WA abolished the
+	// pre-2020 majority/highest-event tie-break; equal totals share the
+	// place with no further comparison.
+	TieBreakTiesStand CombinedTieBreak = "ties-stand"
+)
+
 // RankCombined computes totals, orders rows and assigns competition ranks
-// (1, 2, 2, 4) per the UBS Kids Cup Reglement §3:
+// (1, 2, 2, 4) per the UBS Kids Cup Reglement §3 (the
+// TieBreakMajorityThenHighest policy):
 //
 //   - the total is the sum of the discipline points ("Dreikampfresultat");
 //     a missing discipline contributes 0 points but still ranks by total
@@ -52,6 +73,19 @@ type CombinedStanding struct {
 // (athlete ID breaks presentation order, not rank) so repeated computation
 // is stable.
 func RankCombined(rows []CombinedStanding) []CombinedStanding {
+	return RankCombinedWithTieBreak(rows, TieBreakMajorityThenHighest)
+}
+
+// RankCombinedWithTieBreak is RankCombined under an explicit equal-totals
+// policy: TieBreakMajorityThenHighest (UKC Reglement §3) or TieBreakTiesStand
+// (WA TR 39: equal points for any place is a tie — SYS-044/UC-013 combined
+// events). An unknown policy falls back to the UKC behaviour, matching
+// RankCombined's long-standing default.
+func RankCombinedWithTieBreak(rows []CombinedStanding, tieBreak CombinedTieBreak) []CombinedStanding {
+	cmp := compareCombined
+	if tieBreak == TieBreakTiesStand {
+		cmp = func(a, b CombinedStanding) int { return a.Total - b.Total }
+	}
 	out := make([]CombinedStanding, len(rows))
 	copy(out, rows)
 	for i := range out {
@@ -66,13 +100,13 @@ func RankCombined(rows []CombinedStanding) []CombinedStanding {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		if c := compareCombined(out[i], out[j]); c != 0 {
+		if c := cmp(out[i], out[j]); c != 0 {
 			return c > 0
 		}
 		return out[i].AthleteID < out[j].AthleteID
 	})
 	for i := range out {
-		if i > 0 && compareCombined(out[i-1], out[i]) == 0 {
+		if i > 0 && cmp(out[i-1], out[i]) == 0 {
 			out[i].Rank = out[i-1].Rank
 			continue
 		}

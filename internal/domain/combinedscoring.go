@@ -50,8 +50,23 @@ type CombinedScoringTable struct {
 	Name    string                  `json:"name"`
 	Source  string                  `json:"source"`
 	Columns []CombinedScoringColumn `json:"columns"`
+	// TieBreak is the equal-totals ranking policy the table's governing
+	// rule set prescribes. Empty defaults to TieBreakTiesStand: every
+	// WA-formula combined event is governed by TR 39, whose placing rule
+	// makes equal points a tie (OQ-045, verified against the CR&TR 2026
+	// edition).
+	TieBreak CombinedTieBreak `json:"tieBreak,omitempty"`
 
 	index map[combinedScoringKey]*CombinedScoringColumn
+}
+
+// EffectiveTieBreak returns the table's equal-totals policy, defaulting to
+// the WA TR 39 ties-stand rule when the data file names none.
+func (t *CombinedScoringTable) EffectiveTieBreak() CombinedTieBreak {
+	if t.TieBreak == "" {
+		return TieBreakTiesStand
+	}
+	return t.TieBreak
 }
 
 type combinedScoringKey struct {
@@ -82,6 +97,11 @@ func (t *CombinedScoringTable) validate() error {
 	}
 	if len(t.Columns) == 0 {
 		return fmt.Errorf("combined scoring table %q: at least one column is required", t.ID)
+	}
+	switch t.TieBreak {
+	case "", TieBreakTiesStand, TieBreakMajorityThenHighest:
+	default:
+		return fmt.Errorf("combined scoring table %q: unknown tieBreak policy %q (interpreter implements %q and %q)", t.ID, t.TieBreak, TieBreakTiesStand, TieBreakMajorityThenHighest)
 	}
 	t.index = make(map[combinedScoringKey]*CombinedScoringColumn, len(t.Columns))
 	for i := range t.Columns {

@@ -414,6 +414,20 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 		return MeetStandings{}, err
 	}
 
+	// The equal-totals policy follows the meet's governing rule set: a
+	// WA-formula combined-events meet ranks per its combined scoring
+	// table's declared policy (WA TR 39: equal points is a tie — OQ-045),
+	// everything else keeps the UBS Kids Cup Reglement §3 majority rule
+	// RankCombined has always applied.
+	tieBreak := domain.TieBreakMajorityThenHighest
+	if combinedID, ok, err := store.GetMeetCombinedScoringTable(ctx, s.db, meetID); err != nil {
+		return MeetStandings{}, err
+	} else if ok {
+		if table, known := s.combinedTables[combinedID]; known {
+			tieBreak = table.EffectiveTieBreak()
+		}
+	}
+
 	out := MeetStandings{}
 	for _, ev := range events {
 		out.Disciplines = append(out.Disciplines, ev.DisciplineCode)
@@ -497,7 +511,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 			rowByAthlete[r.AthleteID] = r
 		}
 		div := DivisionStanding{CategoryCode: cat.Code}
-		for _, st := range domain.RankCombined(ranked) {
+		for _, st := range domain.RankCombinedWithTieBreak(ranked, tieBreak) {
 			row := rowByAthlete[st.AthleteID]
 			row.Rank = st.Rank
 			row.Total = st.Total

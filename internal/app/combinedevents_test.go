@@ -306,3 +306,60 @@ func findDivisionContaining(standings MeetStandings, athleteID string) DivisionS
 	}
 	return DivisionStanding{}
 }
+
+// TestCombinedEventsEqualTotalsTieStandsTR39 pins the OQ-045 closure at the
+// standings level (SYS-044, UC-013): a WA-formula combined-events meet ranks
+// per its combined scoring table's declared tie policy — WA CR&TR 2026,
+// TR 39: "If two or more athletes achieve an equal number of points for any
+// place in the competition, it shall be determined as a tie." Two
+// heptathletes with equal cumulative totals from different discipline
+// distributions (A the better hurdler, B the better putter; both 1623 pts
+// per the 2001 formula) must share the place — the UKC majority rule, which
+// would put A first on the higher single-discipline score, must NOT apply.
+func TestCombinedEventsEqualTotalsTieStandsTR39(t *testing.T) {
+	meets, results, _ := newTestResultsWithCombinedScoring(t)
+	ctx := context.Background()
+	rec := createHeptathlonMeet(t, meets)
+	a := registerAthlete(t, results, rec.ID, "Anna", "Hürden", domain.SexFemale, 1996)
+	b := registerAthlete(t, results, rec.ID, "Berta", "Kugel", domain.SexFemale, 1997)
+
+	marks := []struct {
+		athlete string
+		disc    string
+		mark    string
+	}{
+		{a, "100mH", "13.20"}, // 1094 pts
+		{a, "SP", "10.00"},    // 529 pts → 1623
+		{b, "100mH", "14.00"}, // 978 pts
+		{b, "SP", "11.75"},    // 645 pts → 1623
+	}
+	totals := map[string]int{}
+	for _, m := range marks {
+		saved, err := results.SaveResult(ctx, office, rec.ID, ResultInput{
+			AthleteID: m.athlete, DisciplineCode: m.disc, Mark: m.mark, Timing: domain.TimingElectronic,
+		})
+		if err != nil {
+			t.Fatalf("SaveResult %s %s: %v", m.disc, m.mark, err)
+		}
+		if saved.Points == nil {
+			t.Fatalf("SaveResult %s %s: no points", m.disc, m.mark)
+		}
+		totals[m.athlete] += *saved.Points
+	}
+	if totals[a] != totals[b] {
+		t.Fatalf("fixture broke: totals %d vs %d must be equal", totals[a], totals[b])
+	}
+
+	standings, err := results.Standings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	div := findDivisionContaining(standings, a)
+	rankOf := map[string]int{}
+	for _, row := range div.Rows {
+		rankOf[row.AthleteID] = row.Rank
+	}
+	if rankOf[a] != 1 || rankOf[b] != 1 {
+		t.Errorf("ranks a=%d b=%d, want both 1 (WA TR 39 ties stand; the meet's combined table declares tieBreak=ties-stand)", rankOf[a], rankOf[b])
+	}
+}

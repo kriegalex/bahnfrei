@@ -351,7 +351,7 @@ func (s *ResultsService) GenerateHeats(ctx context.Context, actor Session, meetI
 			}
 			switch {
 			case len(lockedInHeat) == 0:
-				if groups, ok := rules.LaneGroupsFor(len(heat)); ok {
+				if groups, ok := rules.LaneGroupsForDiscipline(event.DisciplineCode, len(heat)); ok {
 					// The group table's lane numbers are relative to a field
 					// of exactly len(heat); shift onto the track's physical
 					// numbering when it has more lanes than the field uses

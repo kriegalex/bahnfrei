@@ -151,3 +151,62 @@ func ids(rows []CombinedStanding) []string {
 }
 
 func intp(v int) *int { return &v }
+
+// TestRankCombinedTiesStandTR39 pins the OQ-045 closure (SYS-044, UC-013):
+// per the primary WA CR&TR 2026 edition, TR 39 (Combined Events
+// Competitions) final placing provision — "If two or more athletes achieve
+// an equal number of points for any place in the competition, it shall be
+// determined as a tie" — equal totals share the place with NO further
+// comparison. The pre-2020 majority/highest-event tie-break survives only
+// as the UBS Kids Cup Reglement §3 policy (RankCombined's default).
+func TestRankCombinedTiesStandTR39(t *testing.T) {
+	rows := []CombinedStanding{
+		// a: wins discipline 1, loses discipline 2; same 1623 total as b.
+		{AthleteID: "a", Performances: []CombinedPerformance{{Points: intp(1094)}, {Points: intp(529)}}},
+		{AthleteID: "b", Performances: []CombinedPerformance{{Points: intp(978)}, {Points: intp(645)}}},
+		{AthleteID: "c", Performances: []CombinedPerformance{{Points: intp(900)}, {Points: intp(600)}}},
+	}
+
+	stand := RankCombinedWithTieBreak(rows, TieBreakTiesStand)
+	rankOf := map[string]int{}
+	for _, r := range stand {
+		rankOf[r.AthleteID] = r.Rank
+	}
+	if rankOf["a"] != 1 || rankOf["b"] != 1 {
+		t.Errorf("ties-stand: ranks a=%d b=%d, want both 1 (WA TR 39: equal points is a tie)", rankOf["a"], rankOf["b"])
+	}
+	if rankOf["c"] != 3 {
+		t.Errorf("ties-stand: rank c=%d, want 3 (two athletes share first)", rankOf["c"])
+	}
+
+	// Control: the UKC majority/highest policy breaks the same tie — a's
+	// highest single-discipline points (1094) beat b's (978).
+	ukc := RankCombined(rows)
+	ukcRank := map[string]int{}
+	for _, r := range ukc {
+		ukcRank[r.AthleteID] = r.Rank
+	}
+	if ukcRank["a"] != 1 || ukcRank["b"] != 2 {
+		t.Errorf("UKC policy control: ranks a=%d b=%d, want 1 and 2", ukcRank["a"], ukcRank["b"])
+	}
+}
+
+// TestCombinedScoringTableTieBreakPolicy pins the data plumbing: the
+// shipped WA table declares ties-stand, an absent tieBreak defaults to
+// ties-stand (every WA-formula table is governed by TR 39), and an unknown
+// policy fails parsing loudly.
+func TestCombinedScoringTableTieBreakPolicy(t *testing.T) {
+	table, err := BuiltinCombinedScoringTable("wa-combined-events-2001")
+	if err != nil {
+		t.Fatalf("load built-in combined table: %v", err)
+	}
+	if table.TieBreak != TieBreakTiesStand || table.EffectiveTieBreak() != TieBreakTiesStand {
+		t.Errorf("built-in WA table tieBreak = %q, want %q", table.TieBreak, TieBreakTiesStand)
+	}
+	if (&CombinedScoringTable{}).EffectiveTieBreak() != TieBreakTiesStand {
+		t.Error("empty tieBreak must default to ties-stand (TR 39 governs WA-formula tables)")
+	}
+	if _, err := ParseCombinedScoringTable([]byte(`{"id":"x","version":"1","tieBreak":"coin-flip","columns":[{"disciplineCode":"100m","sex":"M","kind":"track","a":1,"b":1,"c":1}]}`)); err == nil {
+		t.Error("unknown tieBreak policy must be rejected")
+	}
+}

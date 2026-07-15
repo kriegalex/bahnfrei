@@ -1,13 +1,14 @@
 {
  "id": "tr20",
- "version": "wa-tr20.4-2024",
+ "version": "wa-tr20-2026.2",
  "name": "World Athletics TR20 seeding, heat and lane-draw rules",
- "source": "WA Seedings, Draws and Qualification in Track Events (TR20), D2.2-D2.4; https://www.northernathletics.co.uk/wp-content/uploads/2025/04/WA-Seeding-Draws-and-Qualifications.pdf",
+ "source": "WA Competition and Technical Rules, 2026 edition (primary PDF, fetched 2026-07-15: https://worldathletics.org/download/download?filename=acdec6c6-1261-4c7f-96d2-92f712707e99.pdf&urlslug=Competition%20and%20Technical%20Rules%20%E2%80%93%202026%20Edition), TR 20.3 (ranking/zigzag heat composition) and TR 20.4 (draw for lanes); supersedes the secondary transcription (northernathletics.co.uk PDF, D2.2-D2.4) this file previously cited",
+ "notes": "OQ-034 closure (2026-07-15), verified against the primary TR 20.4 text. (1) The rank-group → lane-set tables DIFFER by event class: TR 20.4.3 straight races (8 lanes: top4 → 3-6, 5th-6th → 2/7, 7th-8th → 1/8; 9 lanes: top3 → 4-6, 4th-5th → 3/7, 6th-7th → 2/8, 8th-9th → 1/9), TR 20.4.4 200m and 300m races (8 lanes: top3 → 5-7, 4th-6th → 3/4/8, 7th-8th → 1/2; 9 lanes: top4 → 5-8, 5th-7th → 3/4/9, 8th-9th → 1/2), TR 20.4.5 400m races, relays up to 4×400m and 800m started in lanes (8 lanes: top4 → 4-7, 5th-6th → 3/8, 7th-8th → 1/2; 9 lanes: top3 → 5-7, 4th-5th → 4/8, 6th-7th → 3/9, 8th-9th → 1/2). The default laneGroups table is the TR 20.4.5 class; laneGroupClasses assign the straight and 200/300 disciplines their own tables. Judgment calls, flagged: 300mH is placed in the 200/300 class ('200m and 300m races') and 150m (not a WA event; WO 2026 §8.1.2) alongside it — both start on the same part of the bend; 60mH/80mH/100mH/110mH are straight races. (2) TR 20.4.1/20.4.2: lanes are drawn by lot in the FIRST round ('unless the applicable regulations provide otherwise'); the grouped draw applies to rounds after the first, 'where there are several successive rounds'. TR 20.4.6 additionally mandates a by-lot draw for any single-round (final-only) event, but ONLY for competitions under World Rankings definition 1.(a)-(c)/2.(a)-(b) (top-tier internationals); the TR20 interpretation notes state lower-level competitions may use different principles. This implementation retains the grouped draw for seeded fields in every round at club-tier meets (UC-008 #3's ratified worked example) — an organizer wanting a WA-literal first-round/by-lot draw seeds without marks, which already yields the by-lot path. (3) TR 20.4 Note (iii) confirms the unused-inside-lanes shift ('regarding lane 2 as lane 1 and so on') implemented by ShiftForUnusedLanes.",
  "distribution": "serpentine",
  "clubSeparation": true,
  "laneRaceDisciplines": [
-  "60m", "100m", "200m", "300m", "400m", "800m",
-  "100mH", "110mH", "300mH", "400mH",
+  "60m", "80m", "100m", "150m", "200m", "300m", "400m", "800m",
+  "60mH", "80mH", "100mH", "110mH", "300mH", "400mH",
   "4x100m", "4x400m"
  ],
  "laneGroups": {
@@ -15,6 +16,47 @@
    { "rankFrom": 1, "rankTo": 4, "lanes": [4, 5, 6, 7] },
    { "rankFrom": 5, "rankTo": 6, "lanes": [3, 8] },
    { "rankFrom": 7, "rankTo": 8, "lanes": [1, 2] }
+  ],
+  "9": [
+   { "rankFrom": 1, "rankTo": 3, "lanes": [5, 6, 7] },
+   { "rankFrom": 4, "rankTo": 5, "lanes": [4, 8] },
+   { "rankFrom": 6, "rankTo": 7, "lanes": [3, 9] },
+   { "rankFrom": 8, "rankTo": 9, "lanes": [1, 2] }
   ]
- }
+ },
+ "laneGroupClasses": [
+  {
+   "name": "straight",
+   "disciplines": ["60m", "80m", "100m", "60mH", "80mH", "100mH", "110mH"],
+   "laneGroups": {
+    "8": [
+     { "rankFrom": 1, "rankTo": 4, "lanes": [3, 4, 5, 6] },
+     { "rankFrom": 5, "rankTo": 6, "lanes": [2, 7] },
+     { "rankFrom": 7, "rankTo": 8, "lanes": [1, 8] }
+    ],
+    "9": [
+     { "rankFrom": 1, "rankTo": 3, "lanes": [4, 5, 6] },
+     { "rankFrom": 4, "rankTo": 5, "lanes": [3, 7] },
+     { "rankFrom": 6, "rankTo": 7, "lanes": [2, 8] },
+     { "rankFrom": 8, "rankTo": 9, "lanes": [1, 9] }
+    ]
+   }
+  },
+  {
+   "name": "bend-200-300",
+   "disciplines": ["150m", "200m", "300m", "300mH"],
+   "laneGroups": {
+    "8": [
+     { "rankFrom": 1, "rankTo": 3, "lanes": [5, 6, 7] },
+     { "rankFrom": 4, "rankTo": 6, "lanes": [3, 4, 8] },
+     { "rankFrom": 7, "rankTo": 8, "lanes": [1, 2] }
+    ],
+    "9": [
+     { "rankFrom": 1, "rankTo": 4, "lanes": [5, 6, 7, 8] },
+     { "rankFrom": 5, "rankTo": 7, "lanes": [3, 4, 9] },
+     { "rankFrom": 8, "rankTo": 9, "lanes": [1, 2] }
+    ]
+   }
+  }
+ ]
 }

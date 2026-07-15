@@ -69,6 +69,8 @@ For 400m/800m races started in lanes, three separate draws are conducted:
 
 For events longer than 800m, relays longer than 4×400m, or any single-round (final-only) event, lanes/starting positions are drawn by lot. Where a stadium has more lanes than athletes, inside lane(s) remain unused and lane numbering shifts accordingly (e.g. on a 9-lane track with 8 athletes, lane 2 is treated as "lane 1" for Rule 20.4 purposes) ([WA Seedings, Draws and Qualification in Track Events, TR20.4](https://www.northernathletics.co.uk/wp-content/uploads/2025/04/WA-Seeding-Draws-and-Qualifications.pdf)).
 
+> **Verified 2026-07-15 (rule-data pass, OQ-034), primary WA CR&TR 2026 TR 20.4:** the "single-round (final-only) → by lot" clause (TR 20.4.6) applies only to competitions under World Rankings definition 1.(a)-(c)/2.(a)-(b); lower-level meets may use different principles per the TR20 interpretation notes. The rank-group → lane-set tables differ by event class (TR 20.4.3 straight races: top4 → lanes 3–6; TR 20.4.4 200m/300m: top3 → 5–7; TR 20.4.5 400m-class: top4 → 4–7), each with 8- and 9-lane variants — encoded in `internal/domain/data/seeding/tr20.json` v`wa-tr20-2026.2`.
+
 ### D2.4 Advancement ("progression")
 Qualification tables should, where practicable, allow at least the top 2 (ideally top 3) per heat to advance by **place**; remaining slots are filled by **time** ("fastest losers") according to the applicable Technical Regulations or Technical Delegate decision. When athletes qualify by time, only one timing system may be applied for that determination ([WA Seedings, Draws and Qualification, Progression section](https://www.northernathletics.co.uk/wp-content/uploads/2025/04/WA-Seeding-Draws-and-Qualifications.pdf)).
 
@@ -185,6 +187,8 @@ Maximum race distances by category and venue type:
 | U18 | — | Half marathon |
 
 U10/U12/U14 athletes may run at most one race of 600m or longer per competition day; may not enter steeplechase; and U10/U12/U14/U16 athletes may not compete in a discipline reserved for an older category (e.g., 150/200/300/400m/300mH/400mH events are barred for U16-and-younger, except in specific relay/SVM contexts).
+
+> **Verified 2026-07-15 (rule-data pass, OQ-018):** the parenthetical is the literal WO 2026 §1.5e rule — "…dürfen an von Swiss Athletics bewilligten Wettkämpfen in den Disziplinen 150 m, 200 m, 300 m, 400 m, 300 mH und 400 mH nicht starten" (exceptions: SM Staffel, SVM) — confirmed against the primary PDF; the steeple bar is §1.5c. Encoded in `internal/domain/data/category-schemes/swiss-athletics.json` v`wo2026.2`.
 
 ---
 

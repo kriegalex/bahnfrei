@@ -1,10 +1,10 @@
 {
   "id": "swiss-athletics",
-  "version": "wo2026.1",
+  "version": "wo2026.2",
   "name": "Swiss Athletics",
-  "source": "Swiss Athletics WO 2026 §1.1-1.2 (D4.2); WO §1.5 (D4.3), docs/research/domain-athletics.md",
+  "source": "Swiss Athletics WO 2026 (primary PDF, fetched 2026-07-15: https://swiss-athletics.ch/fileadmin/user_upload/www.swiss-athletics.ch/wettkaempfe/Wettkampfsupport/Reglemente_und_Unterlagen/Nationale_Reglemente/WO_2026_d.pdf) §1.1 Kategorien, §1.2 Startberechtigung/Kategorienwechsel, §1.5 Schutzbestimmungen; supersedes the secondary D4.2/D4.3 transcription in docs/research/domain-athletics.md where they differ",
   "transition": "calendar-year",
-  "notes": "Category transition happens at the start of the calendar year the athlete reaches the category's lower age bound (D4.2). Default age = competition year minus birth year. Masters bands and the open Men/Women category are elective for adults 23+: the unbounded Men/Women row resolves first by rank, so an adult's DEFAULT category is always Men/Women; a Masters band is only reached by explicit selection (modelled as start-down, permitted per WO §1.2 note 'anyone may start in the open Men/Women category'). Start-up permission for youth bands and start-down permission for Masters/open-category are per WO §1.2 general note; exact per-category start-up/down ceilings ('eligible to start up to' column, D4.2) are not fully disambiguated by the source text (self-flagged nuance in D4.2) and are approximated here by boolean flags, not age ceilings — open item for the tech lead, see TASK-004 delivery report. Masters start-up (e.g. a 33-year-old entering M35 early) is not evidenced in the source and defaults to false.",
+  "notes": "Category transition happens at the start of the calendar year the athlete reaches the category's lower age bound (WO §1.1: 'Der Übertritt in die nächsthöhere Kategorie erfolgt zu Beginn des Kalenderjahres, in dem die untere Altersgrenze dieser Kategorie erreicht wird'). Default age = competition year minus birth year. VERIFIED against WO 2026 §1.1's Startberechtigung column (OQ-017 closure, 2026-07-15): each youth band admits younger athletes starting up ('U16: 15-jährig und jünger' — startUpAllowed on the target category), Männer/Frauen admits everyone ('alle Jahrgänge' — both flags true), and each Masters band admits only athletes at/above its own lower bound ('M45: 45-jährig und älter' — startDownAllowed true for older athletes starting down, startUpAllowed false: early masters start-up is confirmed NOT permitted, resolving the previously unevidenced default). Youth start-up remains subject to the §1.5 Schutzbestimmungen, which take precedence over all other rules. Masters bands are elective: the unbounded Men/Women row resolves first by rank, so an adult's DEFAULT category is always Men/Women, matching §1.2a's 'In der Kategorie Männer/Frauen sind alle Athletinnen und Athleten startberechtigt'; a Masters band is reached by explicit selection. Source erratum noted: the WO's M80/W80 row prints Startberechtigung '85-jährig und älter', inconsistent with every other row's pattern (lower bound and older) and self-contradictory (it would bar 80-84-year-olds from their own licence category); this file follows the pattern (80+). §1.2b (no participation in different categories at the same Swiss/regional championship) is a per-meet officiating rule, not encoded in this scheme.",
   "categories": [
     {"code": "U10 M", "sex": "M", "minAge": 0, "maxAge": 9, "rank": 1, "label": "Under 10 Men", "startUpAllowed": true},
     {"code": "U10 W", "sex": "W", "minAge": 0, "maxAge": 9, "rank": 1, "label": "Under 10 Women", "startUpAllowed": true},
@@ -22,8 +22,8 @@
     {"code": "U23 W", "sex": "W", "minAge": 20, "maxAge": 22, "rank": 7, "label": "Under 23 Women", "startUpAllowed": true},
     {"code": "Men", "sex": "M", "minAge": 23, "maxAge": null, "rank": 8, "label": "Men (Aktive)", "startUpAllowed": true, "startDownAllowed": true},
     {"code": "Women", "sex": "W", "minAge": 23, "maxAge": null, "rank": 8, "label": "Women (Aktive)", "startUpAllowed": true, "startDownAllowed": true},
-    {"code": "M30", "sex": "M", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters M30", "elective": true},
-    {"code": "W30", "sex": "W", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters W30", "elective": true},
+    {"code": "M30", "sex": "M", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters M30", "elective": true, "startDownAllowed": true},
+    {"code": "W30", "sex": "W", "minAge": 30, "maxAge": 34, "rank": 9, "label": "Masters W30", "elective": true, "startDownAllowed": true},
     {"code": "M35", "sex": "M", "minAge": 35, "maxAge": 39, "rank": 10, "label": "Masters M35", "elective": true, "startDownAllowed": true},
     {"code": "W35", "sex": "W", "minAge": 35, "maxAge": 39, "rank": 10, "label": "Masters W35", "elective": true, "startDownAllowed": true},
     {"code": "M40", "sex": "M", "minAge": 40, "maxAge": 44, "rank": 11, "label": "Masters M40", "elective": true, "startDownAllowed": true},
@@ -45,43 +45,73 @@
     {"code": "M80", "sex": "M", "minAge": 80, "maxAge": null, "rank": 19, "label": "Masters M80", "elective": true, "startDownAllowed": true},
     {"code": "W80", "sex": "W", "minAge": 80, "maxAge": null, "rank": 19, "label": "Masters W80", "elective": true, "startDownAllowed": true}
   ],
-  "disciplineRestrictionsNote": "D4.3's parenthetical example text ('150/200/300/400m/300mH/400mH events are barred for U16-and-younger') is internally inconsistent with observed practice (U16 100m/200m/400m sprints are standard youth events, and are used as illustrative event examples elsewhere in this repo's docs) and is treated as a likely research-note transcription artifact rather than encoded as a rule. Only the unambiguous long-hurdles and steeplechase bars below are encoded; flat-sprint distance restrictions for youth are deferred pending direct WO §1.5 verification (tech-lead follow-up).",
+  "disciplineRestrictionsNote": "VERIFIED against the primary WO 2026 §1.5e (OQ-018 closure, 2026-07-15) — D4.3's parenthetical, previously treated as a likely transcription artifact, is the literal rule: 'Athletinnen und Athleten der Kategorien U10, U12, U14 und U16 dürfen an von Swiss Athletics bewilligten Wettkämpfen in den Disziplinen 150 m, 200 m, 300 m, 400 m, 300 mH und 400 mH nicht starten.' Swiss youth up to U16 sprint 60/80/100 m and run 600/1000 m instead (WO §8.1.1-§8.1.3). The rule's two exceptions — SM Staffel (relay championships; relay codes such as 4x100m/4x200m/4x400m are distinct discipline codes and are not barred here) and SVM (team championship) — are meet-format exceptions an organizer of those specific formats handles via the eligibility override flow, not encoded as scheme data. §1.5d (championships: U10-U16 may start only in disciplines their age class offers, per §8.1.1/8.1.3/9.1.1/9.1.3) is a per-meet programme rule, not a scheme-level bar. The steeplechase bar is §1.5c and covers every steeple distance.",
   "disciplineRestrictions": [
+    {
+      "disciplineCode": "150m",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 150 m at sanctioned meets (exceptions: SM Staffel, SVM)."
+    },
+    {
+      "disciplineCode": "200m",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 200 m at sanctioned meets (exceptions: SM Staffel, SVM)."
+    },
+    {
+      "disciplineCode": "300m",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 300 m at sanctioned meets (exceptions: SM Staffel, SVM)."
+    },
+    {
+      "disciplineCode": "400m",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 400 m at sanctioned meets (exceptions: SM Staffel, SVM)."
+    },
     {
       "disciplineCode": "300mH",
       "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): youth-protection rules bar U16-and-younger from long hurdles events."
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 300 mH at sanctioned meets (exceptions: SM Staffel, SVM)."
     },
     {
       "disciplineCode": "400mH",
       "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W", "U16 M", "U16 W"],
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): youth-protection rules bar U16-and-younger from long hurdles events."
+      "citation": "Swiss Athletics WO 2026 §1.5e: U16 and younger may not start in 400 mH at sanctioned meets (exceptions: SM Staffel, SVM)."
     },
     {
       "disciplineCode": "3000mSC",
       "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W"],
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U10/U12/U14 athletes may not enter steeplechase."
+      "citation": "Swiss Athletics WO 2026 §1.5c: U10/U12/U14 athletes may not take part in steeplechase races."
+    },
+    {
+      "disciplineCode": "2000mSC",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5c: U10/U12/U14 athletes may not take part in steeplechase races."
+    },
+    {
+      "disciplineCode": "1500mSC",
+      "barredCategoryCodes": ["U10 M", "U10 W", "U12 M", "U12 W", "U14 M", "U14 W"],
+      "citation": "Swiss Athletics WO 2026 §1.5c: U10/U12/U14 athletes may not take part in steeplechase races."
     }
   ],
-  "youthProtectionRulesNote": "D4.3 (docs/research/domain-athletics.md, 'Maximum race distances by category and venue type'): stadium/hall max distances of 1000m (U10), 2000m (U12) and 3000m (U14); U16/U18 carry no stadium-distance cap (only the off-stadium/road caps in the same table, out of scope for this stadium-discipline catalog). U10/U12/U14 athletes may run at most one race of 600m or longer per competition day (TASK-017, SYS-014, UC-005 #2/#3).",
+  "youthProtectionRulesNote": "VERIFIED against the primary WO 2026 §1.5a/§1.5b (2026-07-15): stadium/hall max race distances of 1000m (U10), 2000m (U12) and 3000m (U14); U16/U18 carry no stadium-distance cap (only off-stadium/road caps — 10 km U16, half marathon U18 — out of scope for this stadium-discipline catalog). §1.5b: U10/U12/U14 athletes may run at most one race of 600m or longer per competition day (TASK-017, SYS-014, UC-005 #2/#3). §1.5 opens: these protection rules take precedence over all other rules; starts in violation are disqualified and results struck.",
   "youthProtectionRules": [
     {
       "categoryCodes": ["U10 M", "U10 W"],
       "maxStadiumDistanceM": 1000,
       "maxOneRaceAtOrAboveM": 600,
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U10 stadium/hall max race distance 1000m; at most one race ≥600m per competition day."
+      "citation": "Swiss Athletics WO 2026 §1.5a/b: U10 stadium/hall max race distance 1000m; at most one race ≥600m per competition day."
     },
     {
       "categoryCodes": ["U12 M", "U12 W"],
       "maxStadiumDistanceM": 2000,
       "maxOneRaceAtOrAboveM": 600,
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U12 stadium/hall max race distance 2000m; at most one race ≥600m per competition day."
+      "citation": "Swiss Athletics WO 2026 §1.5a/b: U12 stadium/hall max race distance 2000m; at most one race ≥600m per competition day."
     },
     {
       "categoryCodes": ["U14 M", "U14 W"],
       "maxStadiumDistanceM": 3000,
       "maxOneRaceAtOrAboveM": 600,
-      "citation": "Swiss Athletics WO 2026 §1.5 (D4.3): U14 stadium/hall max race distance 3000m; at most one race ≥600m per competition day."
+      "citation": "Swiss Athletics WO 2026 §1.5a/b: U14 stadium/hall max race distance 3000m; at most one race ≥600m per competition day."
     }
   ]
 }

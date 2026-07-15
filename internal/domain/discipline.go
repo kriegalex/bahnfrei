@@ -40,8 +40,15 @@ type DisciplineVariant struct {
 	HurdleHeightM    *float64 `json:"hurdleHeightM,omitempty"`
 	HurdleSpacingM   *float64 `json:"hurdleSpacingM,omitempty"`
 	DistanceToFirstM *float64 `json:"distanceToFirstM,omitempty"`
-	ImplementMassKg  *float64 `json:"implementMassKg,omitempty"`
-	Citation         string   `json:"citation"`
+	// HurdleCount is the number of hurdles on the course for this category
+	// (nil when the variant carries no hurdle layout, or when only the
+	// implement differs). A hurdle variant with a count but no height means
+	// the height is meet-defined within a source-cited range (WO 2026
+	// §8.1.3 footnote: "Die Hürdenhöhe muss in der jeweiligen Ausschreibung
+	// publiziert werden").
+	HurdleCount     *int     `json:"hurdleCount,omitempty"`
+	ImplementMassKg *float64 `json:"implementMassKg,omitempty"`
+	Citation        string   `json:"citation"`
 }
 
 // Discipline is the SyRS §2 Discipline entity: code, family, unit,
