@@ -7,7 +7,7 @@ require (
 	github.com/a-h/templ v0.3.833
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
-	github.com/oklog/ulid/v2 v2.1.1
+	github.com/oklog/ulid/v2 v2.1.2
 	github.com/xuri/excelize/v2 v2.11.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
