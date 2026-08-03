@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	codeberg.org/go-pdf/fpdf v0.12.0
-	github.com/a-h/templ v0.3.833
+	github.com/a-h/templ v0.3.1020
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/oklog/ulid/v2 v2.1.2
