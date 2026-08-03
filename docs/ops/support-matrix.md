@@ -43,38 +43,30 @@ extrapolation) with a memory-confined test harness (`systemd-run … MemoryMax=1
 result capture, corrections) — no operator-visible slowness at any tested load (SYS-120/121 pass
 with wide margin).
 
-**Public live-results viewers (SYS-122) — target NOT met, tracked as OQ-066:**
+**Public live-results viewers (SYS-122) — target met** (DEC-015/TASK-035; a pooled WAL
+read-connection set plus a per-meet public-results render cache, ADR-004 §9):
 
 | Concurrent viewers | p95 page render | Peak heap (confined process) | Memory per viewer |
 |---|---|---|---|
-| 100 (+5 SSE subscribers) | 6.77 s | 6.4 GiB | **64.4 MiB** |
-| 250 (+13 SSE subscribers) | 17.2 s | 9.8 GiB | ~39 MiB (GC-pressure artifact, not a real economy — see the perf doc) |
-| 500+ | — | **OOM-killed at the 12 GiB confinement cap** | — |
-| 2,000 (SYS-122's literal target) | — | **OOM-killed at the 12 GiB confinement cap, ~32 s in** | — |
+| 100 (+5 SSE subscribers) | 185.8 ms | 85.0 MiB | 0.85 MiB |
+| 250 (+13 SSE subscribers) | 210.9 ms | 91.1 MiB | 0.36 MiB |
+| 500 (+25 SSE subscribers) | 251.0 ms | 103.9 MiB | 0.21 MiB |
+| 2,000 (SYS-122's literal target, +100 SSE subscribers) | 343–377 ms | 179–184 MiB | ~0.09 MiB |
 
-**What this means for a deployment today:** the honestly-supportable public-viewer count on a
-reference-class host is on the order of the **100-viewer measurement (≈64 MiB in-flight per
-viewer, ≈6.4 GiB peak heap)** — a small-to-mid club meet's realistic spectator load — not the
-2,000-viewer target SYS-122 specifies. 250 concurrent viewers already approaches double-digit
-seconds of page-render latency and ~10 GiB of heap; treat that as the current practical ceiling,
-not a safe operating point. Above roughly 500 viewers, expect the process to be killed by memory
-pressure on commodity hardware, not a graceful slowdown.
+**What this means for a deployment today:** the reference-class host clears SYS-122's literal
+2,000-concurrent-viewer budget (≤3s p95, ≤0.1% errors) with roughly an 8–9× latency margin, and
+peak process memory stays flat (well under 200 MiB) across the whole 100→2,000-viewer range
+rather than growing with viewer count — 2,000 simultaneous spectators is now a safe, ordinary
+operating point, not a special case requiring a reverse proxy or a smaller expectation.
 
-**Root cause (not a hardware problem — it transfers to any host, including faster ones):**
-uncached per-request results-page rendering (`ResultsService.Standings` recomputes its full
-athletes×disciplines view model on every request) held live by convoyed in-flight requests against
-a single-writer SQLite connection. **SSE live-update delivery itself is fine at every tested
-scale** (27 ms–1.9 s p95, well inside its own budget) — the bottleneck is exclusively the
-synchronous page-render path, not the live-update fan-out.
+**Why this holds** (transfers to any host, including slower ones): the results page's expensive
+work — the athletes×disciplines standings computation and the HTML render — now happens once per
+result change (invalidated by the same event that drives the SSE live-refresh push), not once per
+viewer; concurrent viewers share that one cached render and a pooled set of read-only SQLite
+connections instead of convoying behind the single writer connection. **SSE live-update delivery**
+remains fine at every tested scale (11–39 ms p95, well inside its 10s budget) and is unchanged by
+this fix.
 
-**Path to closing OQ-066** (a founder/tech-lead architecture decision, not attempted in this
-release): pooled read connections plus per-meet caching of the rendered public results
-page/fragment, invalidated on the existing results-changed event — one render per result change
-instead of one per viewer — and/or redefining the SYS-122 "reference hosting size" to include a
-caching reverse proxy in front of the hub.
-
-**Operator recommendation until OQ-066 closes:** for any meet where public spectator traffic might
-exceed ~100–150 concurrent viewers (a live-streamed regional meet, a large school event), plan for
-either a caching reverse proxy in front of the hub or accept degraded/unavailable public results
-under peak load — competition-day capture and office operation are unaffected either way, since
-they don't share this bottleneck.
+**Operator guidance:** no special provisioning is needed for expected public spectator traffic —
+competition-day capture, office operation and public results all run on the one binary with no
+external caching layer required.

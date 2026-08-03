@@ -56,9 +56,10 @@ issue, until a fix is available.
 This is a defect (bug) policy, not a feature-request or roadmap process — see
 `docs/delivery/work-breakdown.md` and `docs/requirements/open-questions-and-assumptions.md` for how
 new work and open questions are tracked. A known **architectural limitation that is documented as
-such** (e.g. the SYS-122 public-viewer capacity gap tracked in OQ-066 and
-`docs/ops/support-matrix.md`) is not a "known unfixed defect" under this policy in the sense that
-blocks a release — it is a disclosed, measured limitation with an open question for how to close
-it, not a silent bug. The distinction matters: silence about a real limitation would violate this
-policy's intent even if no single defect report names it, which is why OQ-066 is documented
+such**, with a measured extent and an open question tracking how (or whether) it will close, is not
+a "known unfixed defect" under this policy in the sense that blocks a release — it is a disclosed
+limitation, not a silent bug (e.g. OQ-066 documented the SYS-122 public-viewer capacity gap while it
+was open, with the measured numbers in `docs/ops/support-matrix.md`, until DEC-015/TASK-035 closed
+it). The distinction matters: silence about a real limitation would violate this policy's intent
+even if no single defect report names it, which is why open questions like this are documented
 publicly rather than left implicit.

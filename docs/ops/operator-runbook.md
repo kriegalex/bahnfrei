@@ -125,6 +125,6 @@ means for your meet's privacy notice and your obligations as the data controller
 ## 6. Support & known limits
 
 See `docs/ops/support-matrix.md` for supported OS/browsers and the **actually measured** public
-live-results viewer capacity (the 2,000-concurrent-viewer target is not yet met — OQ-066); see
-`docs/ops/defect-policy.md` for how defects are triaged and what "no known critical/high defects at
-release" means in practice.
+live-results viewer capacity (the 2,000-concurrent-viewer target is met — SYS-122, DEC-015/
+TASK-035); see `docs/ops/defect-policy.md` for how defects are triaged and what "no known
+critical/high defects at release" means in practice.

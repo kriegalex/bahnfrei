@@ -1,11 +1,13 @@
 # TASK-027 — Performance & recovery: results and environment caveats
 
-**Date of record:** 2026-07-13
+**Date of record:** 2026-07-13 (TASK-027 baseline); SYS-122 re-measured 2026-08-03 (TASK-035)
 **Scope:** SYS-120/121 benchmarks, SYS-130 recovery drill, SYS-105 egress-blocked
 public-asset check, SYS-122 2,000-concurrent-viewer load test (UC-017 #4).
 **Traceability:** rows SYS-105/120/121/122/130 in `docs/requirements/traceability-matrix.md`.
-**Open questions raised:** OQ-066 (SYS-122 unmeetable on current read architecture),
-OQ-067 (no entry-search feature exists to benchmark).
+**Open questions raised:** OQ-066 (SYS-122 unmeetable on the original read architecture;
+resolved by DEC-015/TASK-035 — see Deliverable 4), OQ-067 (no entry-search feature exists to
+benchmark), OQ-094 (TASK-035: the render cache's staleness ceiling for writes outside its
+invalidation hook).
 
 ## How to run
 
@@ -144,53 +146,58 @@ new external tool — justification in the file header) against the real
 `web.Server` over loopback TCP, backed by the same SYS-120 reference corpus.
 Two tests: `TestSYS122ViewerScalingProfile` (100/250/500 viewers, memory- and
 latency-instrumented) and `TestSYS122TwoThousandConcurrentViewers` (the
-literal budget assertion — **deliberately not weakened**).
+literal budget assertion).
 
-Measured 2026-07-13 (confined scope, 12 GiB cap / GOMEMLIMIT=10GiB):
+The original 2026-07-13 measurement recorded this budget as **unmeetable on
+the then-current read architecture** (evidence preserved in OQ-066's history
+and the OOM incident above) and named the fix: a pooled WAL read-connection
+set plus a per-meet render cache for the public results page/fragment,
+invalidated by the existing results-changed bus event. **DEC-015/TASK-035
+implemented that fix** (`store.Store.ReadDB()`, `internal/web/publiccache.go`
+— see ADR-004 §9); it is now measurably met with wide margin.
+
+Measured 2026-08-03 (confined scope, 12 GiB cap / GOMEMLIMIT=10GiB, post
+TASK-035):
 
 | Concurrent viewers | p95 page render | Errors | SSE delivery p95 | Peak heap (process) | Per-viewer |
 |---|---|---|---|---|---|
-| 100 (+5 SSE) | 6.77 s | 0 | 27 ms | 6.4 GiB | 64.4 MiB |
-| 250 (+13 SSE) | 17.2 s | 0 | 49 ms | 9.8 GiB | 39.1 MiB* |
-| 500 (+25 SSE) | — | — | — | **OOM-killed at 12 GiB cap** | — |
-| 2,000 (+100 SSE), single mandated attempt | — | — | — | **OOM-killed at 12 GiB cap, ~32 s in** | — |
-| 2,000 (unconfined, incident run, pre-fix harness) | >90 s (0/2000 completed in window) | — | **1.88 s** (100/100 observed, 0 errors) | ~27 GB RSS → host OOM | ~13.5 MiB avg |
+| 100 (+5 SSE) | 185.8 ms | 0 | 39.0 ms | 85.0 MiB | 0.85 MiB |
+| 250 (+13 SSE) | 210.9 ms | 0 | 11.3 ms | 91.1 MiB | 0.36 MiB |
+| 500 (+25 SSE) | 251.0 ms | 0 | 11.8 ms | 103.9 MiB | 0.21 MiB |
+| 2,000 (+100 SSE), literal SYS-122 assertion | 343–377 ms (two consecutive runs) | 0 | ~12 ms | 179–184 MiB | ~0.09 MiB |
 
-\* lower per-viewer figure at 250 is GOMEMLIMIT-forced GC aggressiveness, not a
-real economy; the unconstrained in-flight cost is the 100-viewer figure.
+**Verdict vs SYS-122: PASS**, roughly 8–9× inside the 3 s p95 budget at the
+full 2,000-viewer scale, 0 errors at every scale (budget ≤0.1%).
+`TestSYS122TwoThousandConcurrentViewers` is green — the assertion text and
+budget constants are unchanged from the original (never weakened); only the
+server-side architecture changed.
 
-**Verdict vs SYS-122: FAIL — recorded as unmet, with evidence, in OQ-066.**
-- p95 render scales linearly at ≈69 ms of queueing per queued request (single
-  SQLite connection, `store.Open` `SetMaxOpenConns(1)`); extrapolated 2,000
-  viewers ≈ **2.3 min p95** vs the 3 s budget (~45×).
-- Memory: ~64 MiB in-flight per viewer (uncached per-request
-  `Standings` recomputation at reference scale); 2,000 viewers ≈ **125 GiB** —
-  does not fit any reasonable hosting size. "Does not fit in 12 GiB at 2,000
-  (or even 500) viewers; 64 MiB/viewer measured at 100" is the honest
-  verification outcome for this architecture.
-- Error budget: 0 errors at every scale that ran to completion — the failure
-  mode is latency/memory, never 5xx.
-- **SYS-071 under load PASSES**: SSE delivery p95 1.9 s with 100 subscribers
-  under full 2,000-viewer pressure (budget ≤10 s); 27–49 ms at profiled scales.
-  The live-update fan-out (`web.Bus`) is not the bottleneck.
-- Server-vs-harness attribution: peak heap is process-wide (the test binary
-  hosts both), but the harness side is O(KiB) per client (io.Discard body
-  sinks, one small bufio reader per SSE connection, no response buffering);
-  the ~64 MiB/viewer slope tracks the server's per-request view-model and
-  render cost, corroborated by its disappearance when no request is in
-  flight (`runtime.GC()`+`FreeOSMemory()` between scales returns heap to
-  baseline).
-
-Path to green (OQ-066, founder/tech-lead decision — read path only, the
-ratified single-writer invariant is untouched): pooled WAL read connections
-(necessary, not sufficient) + per-meet caching of the rendered public results
-page/fragment invalidated by the existing results-changed bus event (the fix
-that actually meets the budget: one render per result change instead of one
-per viewer), and/or defining the SYS-122 "reference hosting size" to include a
-caching reverse proxy.
+- Peak heap is now **flat, not linear, in viewer count** (85–184 MiB across a
+  20× range of viewers): the per-meet render cache turns "one render per
+  viewer" into "one render per result change" (one query + one template
+  render per cache build, shared read-only by every concurrent viewer of
+  that meet+locale), so the old ~64 MiB/viewer in-flight cost is gone —
+  what remains scales with concurrent HTTP connections, not with rendering.
+- p95 render is now dominated by ordinary per-request overhead (CSRF cookie
+  issuance, connection handling), not queueing or recomputation — flat
+  across 100→2,000 viewers (186–377 ms) rather than the old linear queueing
+  growth (~69 ms per queued request behind the single connection).
+- **SYS-071 under load still PASSES**, and improved further: SSE delivery
+  p95 ~12 ms at 100 subscribers under full 2,000-viewer pressure (budget
+  ≤10 s; was 1.9 s pre-fix) — `web.Bus` was never the bottleneck and is
+  unchanged by this amendment.
+- A caution from the implementation, kept here for future maintainers of
+  this cache: an earlier version of the fix cached the rendered fragment as
+  `[]byte` and converted it to a `string` per request for `templ.Raw`/
+  `io.WriteString`; that conversion copies, which silently reintroduced an
+  O(viewers) allocation of the whole rendered page and OOM-killed the
+  2,000-viewer run within 5 seconds (12 GiB cap, confirmed via
+  `journalctl --user`: `oom-kill`, 12G memory peak). Caching the fragment as
+  an immutable Go `string` (shared by reference, not copied) fixed it — see
+  `publicResultsCacheEntry`'s doc comment in `internal/web/publiccache.go`.
 
 Related note for OQ-077 (no in-flight feedback on long operations): every
 OPERATOR-facing operation measured in this task sits at ≤76 ms p95 at reference
-scale — nothing an operator does today is slow enough to need a progress
-affordance; the only measured slowness is the public read path under load,
-which has no operator UI. No change to OQ-077's risk assessment.
+scale, and the public read path is now also inside its own budget with wide
+margin — nothing measured in this task needs a progress affordance. No change
+to OQ-077's risk assessment.
