@@ -59,14 +59,14 @@ func (s *Store) Check(ctx context.Context) (*CheckReport, error) {
 	for rows.Next() {
 		var line string
 		if err := rows.Scan(&line); err != nil {
-			rows.Close()
+			rows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; the repo's errcheck policy (.golangci.yml) exempts (*sql.Rows).Close for this reason
 			return nil, err
 		}
 		if line != "ok" {
 			r.Integrity = append(r.Integrity, line)
 		}
 	}
-	rows.Close()
+	rows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; rows.Err() is checked immediately below, per the repo's errcheck policy (.golangci.yml)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *Store) Check(ctx context.Context) (*CheckReport, error) {
 	for fkRows.Next() {
 		r.FKViolations++
 	}
-	fkRows.Close()
+	fkRows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; fkRows.Err() is checked immediately below, per the repo's errcheck policy (.golangci.yml)
 	if err := fkRows.Err(); err != nil {
 		return nil, err
 	}

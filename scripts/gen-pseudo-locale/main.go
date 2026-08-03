@@ -22,7 +22,7 @@ import (
 
 func main() {
 	dir := filepath.Join("internal", "web", "i18n", "locales")
-	ref, err := os.ReadFile(filepath.Join(dir, "de.json"))
+	ref, err := os.ReadFile(filepath.Join(dir, "de.json")) // #nosec G304 -- fixed in-repo path, dev tool run from the repo root
 	if err != nil {
 		fatal(err)
 	}
@@ -35,6 +35,7 @@ func main() {
 		fatal(err)
 	}
 	target := filepath.Join(dir, string(i18n.Pseudo)+".json")
+	// #nosec G306 -- committed locale JSON, not sensitive; must stay world-readable like the rest of the repo
 	if err := os.WriteFile(target, append(out, '\n'), 0o644); err != nil {
 		fatal(err)
 	}

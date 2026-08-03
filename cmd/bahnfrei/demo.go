@@ -23,7 +23,7 @@ const (
 	demoOrganizerUser = "organizer"
 	demoOrganizerPass = "demo-organizer-pw"
 	demoOfficeUser    = "office"
-	demoOfficePass    = "demo-office-pw"
+	demoOfficePass    = "demo-office-pw" // #nosec G101 -- printed demo-mode credential (DEC-011), not a real secret; documented above as never for real meets
 	demoOfficialUser  = "official"
 	demoOfficialPass  = "demo-official-pw"
 )
@@ -60,7 +60,7 @@ func runDemo(ctx context.Context, args []string, out io.Writer) error {
 	if _, err := os.Stat(dbPath); err == nil {
 		return fmt.Errorf("demo: %s already holds a database; refusing to seed a non-fresh data dir", cfg.dataDir)
 	}
-	if err := os.MkdirAll(cfg.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.dataDir, 0o750); err != nil {
 		return fmt.Errorf("demo: create data dir: %w", err)
 	}
 

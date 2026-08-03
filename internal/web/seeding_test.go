@@ -405,3 +405,34 @@ func TestSeedingRequiresOfficeCapabilityHTTP(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckInConfirmRejectsOffOriginRefererOQ079 pins the check-in redirect
+// handlers to the sameOriginRedirectTarget guard (the OQ-079 class, found
+// unguarded here by the OQ-078 gosec pass): a crafted off-origin Referer
+// must never survive into the redirect Location.
+func TestCheckInConfirmRejectsOffOriginRefererOQ079(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+
+	token := csrfTokenFrom(t, bodyString(t, mustGet(t, client, base+"/meets/"+meetID)))
+	form := url.Values{"version": {"1"}, "csrf_token": {token}}
+	req, err := http.NewRequest(http.MethodPost, base+"/meets/"+meetID+"/entries/no-such-entry/confirm", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "https://evil.example/phish")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("confirm with off-origin Referer = %d, want 303", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Errorf("redirect Location = %q, want %q (off-origin Referer must not survive)", loc, "/")
+	}
+}

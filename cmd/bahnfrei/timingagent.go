@@ -88,7 +88,7 @@ type timingAgentClient struct {
 func newTimingAgentClient(cfg timingAgentConfig) *timingAgentClient {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if cfg.insecureSkipVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // opt-in flag, documented for the venue-self-signed-cert case (OQ-050)
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- opt-in --insecure-skip-verify flag, documented for the venue-self-signed-cert case (OQ-050); never the default
 	}
 	return &timingAgentClient{
 		http:    &http.Client{Transport: transport, Timeout: 30 * time.Second},
@@ -98,7 +98,7 @@ func newTimingAgentClient(cfg timingAgentConfig) *timingAgentClient {
 
 func (c *timingAgentClient) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	return c.http.Do(req)
+	return c.http.Do(req) // #nosec G704 -- req targets c.baseURL, an operator-supplied --hub-url CLI flag on the operator's own machine, not attacker-controlled input
 }
 
 // uploadResult is the JSON shape the hub's /agent/v1/meets/{id}/lif|csv
@@ -112,7 +112,7 @@ type uploadResult struct {
 // upload uploads one .lif or .csv file's bytes.
 func (c *timingAgentClient) upload(ctx context.Context, format, filename string, data []byte) (uploadResult, error) {
 	url := fmt.Sprintf("%s/agent/v1/meets/%s/%s", c.baseURL, c.meetID, format)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data)) // #nosec G704 -- c.baseURL/c.meetID come from operator-supplied --hub-url/--meet CLI flags on the operator's own machine, not attacker-controlled input
 	if err != nil {
 		return uploadResult{}, err
 	}
@@ -142,7 +142,7 @@ type exportManifest struct {
 
 func (c *timingAgentClient) manifest(ctx context.Context) (exportManifest, error) {
 	url := fmt.Sprintf("%s/agent/v1/meets/%s/exports/manifest", c.baseURL, c.meetID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) // #nosec G704 -- c.baseURL/c.meetID come from operator-supplied --hub-url/--meet CLI flags on the operator's own machine, not attacker-controlled input
 	if err != nil {
 		return exportManifest{}, err
 	}
@@ -164,7 +164,7 @@ func (c *timingAgentClient) manifest(ctx context.Context) (exportManifest, error
 
 func (c *timingAgentClient) downloadExport(ctx context.Context, kind string) ([]byte, error) {
 	url := fmt.Sprintf("%s/agent/v1/meets/%s/exports/%s", c.baseURL, c.meetID, kind)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) // #nosec G704 -- c.baseURL/c.meetID come from operator-supplied --hub-url/--meet CLI flags on the operator's own machine, not attacker-controlled input
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func scanAndUploadLIFFiles(ctx context.Context, client *timingAgentClient, watch
 			continue // unchanged since the last cycle
 		}
 
-		data, err := os.ReadFile(path) //nolint:gosec // watchDir is an operator-supplied local directory, not user input
+		data, err := os.ReadFile(path) // #nosec G304 -- path is under watchDir, an operator-supplied --watch-dir CLI flag on the operator's own machine, not user input
 		if err != nil {
 			fmt.Fprintf(out, "timing-agent: read %s: %v\n", path, err)
 			continue
@@ -279,7 +279,9 @@ func pollAndWriteExports(ctx context.Context, client *timingAgentClient, watchDi
 			return fmt.Errorf("downloaded %s hash %s does not match manifest hash %s (transfer error?)", kind, got, hash)
 		}
 		target := filepath.Join(watchDir, "lynx."+kind)
-		if err := os.WriteFile(target, data, 0o644); err != nil { //nolint:gosec // a start-list file the timing PC reads, not a secret
+		// 0600: the exported start list carries athlete names (personal data, nFADP/GDPR); owner-only is
+		// sufficient since the timing PC's software runs under the same local operator account.
+		if err := os.WriteFile(target, data, 0o600); err != nil { // #nosec G703 -- target is under watchDir, an operator-supplied --watch-dir CLI flag, joined with one of the fixed literals "ppl"/"sch"/"evt" above, not user input
 			return fmt.Errorf("write %s: %w", target, err)
 		}
 		fmt.Fprintf(out, "timing-agent: wrote %s (%d bytes)\n", target, len(data))

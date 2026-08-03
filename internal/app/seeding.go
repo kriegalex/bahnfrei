@@ -327,7 +327,7 @@ func (s *ResultsService) GenerateHeats(ctx context.Context, actor Session, meetI
 		}
 	}
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- non-security randomness: drawing lanes by lot, not a token/secret
 	laned := req.TrackLanes > 0 && rules.IsLaneRace(event.DisciplineCode)
 
 	for hi, heat := range heats {

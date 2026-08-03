@@ -231,7 +231,7 @@ func sanitizeFilenamePart(name string) string {
 	for _, r := range name {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			out = append(out, byte(r))
+			out = append(out, byte(r)) // #nosec G115 -- r is bounded to 'a'-'z'/'0'-'9' by the case guard above, well within byte range
 			lastHyphen = false
 		case r >= 'A' && r <= 'Z':
 			out = append(out, byte(r-'A'+'a'))

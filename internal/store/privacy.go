@@ -317,6 +317,9 @@ func RedactAuditPII(ctx context.Context, tx *sql.Tx, entityType string, entityID
 		placeholders[i] = "?"
 		args = append(args, id)
 	}
+	// #nosec G202 -- placeholders is a slice of the fixed literal "?" (one per entityIDs
+	// element, set above), never an interpolated value; every entityIDs value itself is
+	// passed as a bound arg via execArgs below, not concatenated into the query text.
 	query := `UPDATE audit_log SET before_json = ?, after_json = ?
 		WHERE entity_type = ? AND entity_id IN (` + strings.Join(placeholders, ",") + `)
 		AND (before_json IS NOT NULL OR after_json IS NOT NULL)`

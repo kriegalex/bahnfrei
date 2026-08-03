@@ -165,10 +165,10 @@ func loadOrGenerateSelfSigned(certPath, keyPath string, domains []string) (tls.C
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("generate self-signed cert: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(certPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
 		return tls.Certificate{}, fmt.Errorf("create TLS cache dir: %w", err)
 	}
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil { // #nosec G306 -- certPEM is the public certificate only (no key material); the paired private key is written 0600 below
 		return tls.Certificate{}, fmt.Errorf("write local cert: %w", err)
 	}
 	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {

@@ -89,10 +89,10 @@ func (s *Server) handleCheckInConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
 	if err := s.results.ConfirmCheckIn(r.Context(), actor, meetID, entryID, version); err != nil {
-		http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
+		http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther) // #nosec G710 -- sameOriginRedirectTarget (routes.go) rejects any non-root-relative/off-host value and falls back to "/"
 		return
 	}
-	http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
+	http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther) // #nosec G710 -- sameOriginRedirectTarget (routes.go) rejects any non-root-relative/off-host value and falls back to "/"
 }
 
 func (s *Server) handleCheckInReinstate(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +104,7 @@ func (s *Server) handleCheckInReinstate(w http.ResponseWriter, r *http.Request) 
 	}
 	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
 	_ = s.results.ReinstateEntry(r.Context(), actor, meetID, entryID, version)
-	http.Redirect(w, r, r.Header.Get("Referer"), http.StatusSeeOther)
+	http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther) // #nosec G710 -- sameOriginRedirectTarget (routes.go) rejects any non-root-relative/off-host value and falls back to "/"
 }
 
 func (s *Server) handleCheckInClose(w http.ResponseWriter, r *http.Request) {

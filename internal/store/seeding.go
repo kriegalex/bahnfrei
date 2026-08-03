@@ -174,7 +174,7 @@ func EnsureRoundUnitCount(ctx context.Context, db DBTX, roundID string, count in
 		var u UnitRecord
 		var sched sql.NullString
 		if err := rows.Scan(&u.ID, &u.RoundID, &sched, &u.Location, &u.Version); err != nil {
-			rows.Close()
+			rows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; the repo's errcheck policy (.golangci.yml) exempts (*sql.Rows).Close for this reason
 			return nil, err
 		}
 		existing = append(existing, u)
@@ -182,7 +182,7 @@ func EnsureRoundUnitCount(ctx context.Context, db DBTX, roundID string, count in
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	rows.Close()
+	rows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; rows.Err() was already checked above, per the repo's errcheck policy (.golangci.yml)
 
 	for len(existing) < count {
 		u, err := CreateUnit(ctx, db, domain.Unit{RoundID: roundID})

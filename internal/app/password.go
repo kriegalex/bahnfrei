@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -104,8 +105,18 @@ func decodeHash(encoded string) (decodedHash, error) {
 	if err != nil {
 		return decodedHash{}, fmt.Errorf("%w: key: %v", ErrMalformedHash, err)
 	}
-	p.SaltLen = uint32(len(salt))
-	p.KeyLen = uint32(len(key))
+	// Bounds-checked before each narrowing conversion: a malformed or
+	// adversarial encoding could in principle decode to a slice longer than
+	// uint32 can represent, which would silently wrap below.
+	saltLen, keyLen := len(salt), len(key)
+	if saltLen > math.MaxUint32 {
+		return decodedHash{}, ErrMalformedHash
+	}
+	p.SaltLen = uint32(saltLen)
+	if keyLen > math.MaxUint32 {
+		return decodedHash{}, ErrMalformedHash
+	}
+	p.KeyLen = uint32(keyLen)
 	return decodedHash{params: p, salt: salt, key: key}, nil
 }
 

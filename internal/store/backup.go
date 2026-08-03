@@ -73,7 +73,7 @@ type BackupManifest struct {
 // table) so the single file the operator downloads carries its own
 // provenance and verification data; there is no sidecar to lose.
 func (s *Store) Backup(ctx context.Context, destPath, appVersion string) (BackupManifest, error) {
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 		return BackupManifest{}, fmt.Errorf("backup: create destination dir: %w", err)
 	}
 	// VACUUM INTO refuses to write over an existing file; destPath is
@@ -178,7 +178,7 @@ func hashTable(ctx context.Context, db *sql.DB, h hash.Hash, table string) error
 		return err
 	}
 	cols, err := colRows.Columns()
-	colRows.Close()
+	colRows.Close() // #nosec G104 -- Close on a read-only result set has no actionable failure mode; the repo's errcheck policy (.golangci.yml) exempts (*sql.Rows).Close for this reason
 	if err != nil {
 		return err
 	}
@@ -187,6 +187,9 @@ func hashTable(ctx context.Context, db *sql.DB, h hash.Hash, table string) error
 	for i := range cols {
 		orderBy[i] = strconv.Itoa(i + 1)
 	}
+	// #nosec G201 -- table comes from businessTables() (sqlite_master enumeration of our
+	// own migration-created names, never user input, per its doc comment); orderBy is
+	// built purely from strconv.Itoa(i+1) column-index literals above.
 	query := fmt.Sprintf(`SELECT * FROM %q ORDER BY %s`, table, strings.Join(orderBy, ","))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {

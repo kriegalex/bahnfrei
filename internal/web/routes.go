@@ -337,7 +337,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	// Successful login clears the failure counter for this source.
 	s.loginLimiter.reset(ip)
 
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is deliberately conditional on r.TLS, not a literal true: TLSModeLocal's self-signed venue deployments and TLSModeOff (dev/e2e-only) still need the cookie sent over plain HTTP
 		Name:     sessionCookieName,
 		Value:    session.Token,
 		Path:     "/",
@@ -353,12 +353,13 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookieName); err == nil {
 		s.auth.Logout(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is deliberately conditional on r.TLS, matching handleLogin's session cookie (self-signed venue / dev-only plaintext modes)
 		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
 		MaxAge:   -1,
 	})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -372,7 +373,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLocaleSwitch(w http.ResponseWriter, r *http.Request) {
 	lang := i18n.Locale(r.URL.Query().Get("lang"))
 	if s.cats.Has(lang) {
-		http.SetCookie(w, &http.Cookie{
+		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is deliberately conditional on r.TLS: this non-sensitive locale preference still needs to be set over plain HTTP in venue-local self-signed / dev-only modes
 			Name:     localeCookieName,
 			Value:    string(lang),
 			Path:     "/",
@@ -380,7 +381,7 @@ func (s *Server) handleLocaleSwitch(w http.ResponseWriter, r *http.Request) {
 			Secure:   r.TLS != nil,
 		})
 	}
-	http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther)
+	http.Redirect(w, r, sameOriginRedirectTarget(r.Header.Get("Referer"), r.Host), http.StatusSeeOther) // #nosec G710 -- sameOriginRedirectTarget (below) rejects any non-root-relative/off-host value and falls back to "/"
 }
 
 // sameOriginRedirectTarget closes OQ-079: redirecting to the raw Referer

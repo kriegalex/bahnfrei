@@ -232,7 +232,7 @@ func ensureCSRFCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 		return "", err
 	}
 	tok := base64.RawURLEncoding.EncodeToString(b)
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is deliberately conditional on r.TLS, matching the session cookie: self-signed venue-local and dev-only plaintext modes still need this cookie set
 		Name:     csrfCookieName,
 		Value:    tok,
 		Path:     "/",

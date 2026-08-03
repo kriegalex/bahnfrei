@@ -103,14 +103,17 @@ func runRestore(ctx context.Context, args []string, out io.Writer) error {
 		return fmt.Errorf("stat %s: %w", dbPath, err)
 	}
 
-	if err := os.MkdirAll(cfg.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.dataDir, 0o750); err != nil {
 		return fmt.Errorf("create data dir %s: %w", cfg.dataDir, err)
 	}
 	data, err := os.ReadFile(cfg.from)
 	if err != nil {
 		return fmt.Errorf("read backup artifact %s: %w", cfg.from, err)
 	}
-	if err := os.WriteFile(dbPath, data, 0o644); err != nil {
+	// dbPath is cfg.dataDir (an operator-supplied --data-dir CLI flag) joined
+	// with the fixed filename "bahnfrei.db", not user input; 0600 because the
+	// restored database holds athlete personal data (nFADP/GDPR).
+	if err := os.WriteFile(dbPath, data, 0o600); err != nil { // #nosec G703 -- see comment above: dbPath is operator-supplied --data-dir + a fixed filename
 		return fmt.Errorf("write %s: %w", dbPath, err)
 	}
 

@@ -108,7 +108,7 @@ type serveDeps struct {
 // auth/RBAC), the i18n catalogs and the SSE bus into a web.Server, per
 // architecture.md §3 (web goes through app, never store directly).
 func buildServer(cfg serveConfig) (serveDeps, error) {
-	if err := os.MkdirAll(cfg.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.dataDir, 0o750); err != nil {
 		return serveDeps{}, fmt.Errorf("create data dir %s: %w", cfg.dataDir, err)
 	}
 

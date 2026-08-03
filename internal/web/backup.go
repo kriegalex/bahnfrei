@@ -43,7 +43,7 @@ func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := os.Open(dest)
+	f, err := os.Open(dest) // #nosec G304 -- dest is server-generated: os.MkdirTemp above plus the fixed filename "backup.db", never derived from request input
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
