@@ -351,9 +351,15 @@
                 }
                 backoff = 0; // success resets backoff
             }
-            catch {
+            catch (err) {
                 scheduleRetry();
-                await refreshIndicator();
+                // fetch() rejects with a TypeError when the server is unreachable — a
+                // state navigator.onLine cannot see (it is link-layer only: the venue
+                // AP can be up while the meet server is down or unroutable). Show
+                // "offline" so the indicator never claims Online while queued captures
+                // cannot leave the device (SYS-087). HTTP-level failures keep the
+                // onLine-derived state: the server answered, it is just unhappy.
+                await refreshIndicator(err instanceof TypeError ? "offline" : undefined);
                 return;
             }
             if (appliedAny && REFRESH_URL) {
