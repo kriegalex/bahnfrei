@@ -39,7 +39,12 @@ var ErrConflict = store.ErrVersionConflict
 // summary (SYS-006). Every mutation is authorized (CapOrganizeMeet) and
 // audited.
 type MeetService struct {
-	db             *sql.DB
+	db *sql.DB
+	// readDB is the pooled WAL read-connection set (ADR-004 read-path
+	// amendment, TASK-035/OQ-066), wired via SetReadDB — normally
+	// store.Store.ReadDB(). Meet() uses it (readConn); every write still
+	// goes through db. Falls back to db when unset.
+	readDB         *sql.DB
 	catalog        *domain.DisciplineCatalog
 	schemes        map[string]*domain.CategoryScheme
 	tables         map[string]*domain.ScoringTable
@@ -54,6 +59,20 @@ type MeetService struct {
 // that names one (CreateMeetFromTemplate reports the unknown reference).
 func (s *MeetService) SetCombinedScoringTables(tables map[string]*domain.CombinedScoringTable) {
 	s.combinedTables = tables
+}
+
+// SetReadDB wires the pooled WAL read-connection set (ADR-004 read-path
+// amendment, TASK-035/OQ-066) — normally store.Store.ReadDB(). Optional:
+// without it, readConn falls back to the writer connection.
+func (s *MeetService) SetReadDB(db *sql.DB) { s.readDB = db }
+
+// readConn returns the pooled read connection for read-only queries,
+// falling back to the writer connection when no read pool has been wired.
+func (s *MeetService) readConn() *sql.DB {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
 }
 
 // NewMeetService wires a MeetService. catalog, schemes, tables and
@@ -370,17 +389,22 @@ type MeetDetail struct {
 	Units     []TimetableEntry
 }
 
-// Meet loads a meet with its sessions, programme and units.
+// Meet loads a meet with its sessions, programme and units. Read-only
+// throughout: uses the pooled read connection (ADR-004 read-path
+// amendment, TASK-035/OQ-066) — this backs every public meet page
+// (overview, timetable, start lists, results) as well as the operator
+// meet-detail view, so pooling it benefits both.
 func (s *MeetService) Meet(ctx context.Context, meetID string) (MeetDetail, error) {
-	rec, err := store.GetMeet(ctx, s.db, meetID)
+	db := s.readConn()
+	rec, err := store.GetMeet(ctx, db, meetID)
 	if err != nil {
 		return MeetDetail{}, err
 	}
 	d := MeetDetail{MeetRecord: rec}
-	if d.Sessions, err = store.ListSessions(ctx, s.db, meetID); err != nil {
+	if d.Sessions, err = store.ListSessions(ctx, db, meetID); err != nil {
 		return MeetDetail{}, err
 	}
-	events, err := store.ListEvents(ctx, s.db, meetID)
+	events, err := store.ListEvents(ctx, db, meetID)
 	if err != nil {
 		return MeetDetail{}, err
 	}
@@ -390,12 +414,12 @@ func (s *MeetService) Meet(ctx context.Context, meetID string) (MeetDetail, erro
 			pe.DisciplineName = disc.Name
 			pe.Family = disc.Family
 		}
-		if pe.Rounds, err = store.ListRounds(ctx, s.db, ev.ID); err != nil {
+		if pe.Rounds, err = store.ListRounds(ctx, db, ev.ID); err != nil {
 			return MeetDetail{}, err
 		}
 		d.Programme = append(d.Programme, pe)
 	}
-	if d.Units, err = store.ListMeetUnits(ctx, s.db, meetID); err != nil {
+	if d.Units, err = store.ListMeetUnits(ctx, db, meetID); err != nil {
 		return MeetDetail{}, err
 	}
 	return d, nil

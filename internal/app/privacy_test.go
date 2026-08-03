@@ -36,14 +36,14 @@ func TestSetConsentSYS103UC023_2_3(t *testing.T) {
 	}
 
 	t.Run("deny: field official cannot change consent", func(t *testing.T) {
-		err := results.SetConsent(ctx, fieldOfficial, p.AthleteID, true)
+		err := results.SetConsent(ctx, fieldOfficial, meet.ID, p.AthleteID, true)
 		if _, ok := err.(ErrForbidden); !ok {
 			t.Fatalf("SetConsent by field official: err = %v, want ErrForbidden", err)
 		}
 	})
 
 	t.Run("allow: office withdraws consent, reflected on the next Standings() read", func(t *testing.T) {
-		if err := results.SetConsent(ctx, office, p.AthleteID, true); err != nil {
+		if err := results.SetConsent(ctx, office, meet.ID, p.AthleteID, true); err != nil {
 			t.Fatalf("SetConsent: %v", err)
 		}
 		standings, err := results.Standings(ctx, meet.ID)
@@ -57,7 +57,7 @@ func TestSetConsentSYS103UC023_2_3(t *testing.T) {
 	})
 
 	t.Run("allow: office restores consent", func(t *testing.T) {
-		if err := results.SetConsent(ctx, office, p.AthleteID, false); err != nil {
+		if err := results.SetConsent(ctx, office, meet.ID, p.AthleteID, false); err != nil {
 			t.Fatalf("SetConsent: %v", err)
 		}
 		standings, err := results.Standings(ctx, meet.ID)
@@ -91,7 +91,7 @@ func TestSetConsentSYS103UC023_2_3(t *testing.T) {
 	})
 
 	t.Run("deny: unknown athlete id", func(t *testing.T) {
-		if err := results.SetConsent(ctx, office, "does-not-exist", true); err == nil {
+		if err := results.SetConsent(ctx, office, meet.ID, "does-not-exist", true); err == nil {
 			t.Fatal("expected an error for an unknown athlete id")
 		}
 	})

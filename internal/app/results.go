@@ -22,7 +22,16 @@ var ErrDuplicateParticipant = store.ErrDuplicateParticipant
 // standings (UC-033 #2–#4; SYS-053/052), plus the attempt-level field and
 // track capture flows on top (TASK-008, UC-010/UC-011).
 type ResultsService struct {
-	db            *sql.DB
+	db *sql.DB
+	// readDB is the pooled WAL read-connection set (ADR-004 read-path
+	// amendment, TASK-035/OQ-066), wired via SetReadDB — normally
+	// store.Store.ReadDB(). Only the read-only query paths behind the
+	// public results/start-list surfaces use it (readConn); every write
+	// still goes through db, preserving the ADR-004 §2 single-writer
+	// invariant untouched. Falls back to db when unset, matching every
+	// other SetXxx wiring hook's "additive, never breaks an existing
+	// caller" convention (see SetPrivacy in internal/web/server.go).
+	readDB        *sql.DB
 	catalog       *domain.DisciplineCatalog
 	schemes       map[string]*domain.CategoryScheme
 	tables        map[string]*domain.ScoringTable
@@ -71,6 +80,22 @@ func (s *ResultsService) SetCombinedScoringTables(tables map[string]*domain.Comb
 // WR/AR/NR/MR reference to flag against.
 func (s *ResultsService) SetRecordLists(lists map[string]*domain.RecordList) {
 	s.recordLists = lists
+}
+
+// SetReadDB wires the pooled WAL read-connection set (ADR-004 read-path
+// amendment, TASK-035/OQ-066) — normally store.Store.ReadDB(). Optional:
+// without it, readConn falls back to the writer connection (correct, just
+// not pooled — every existing caller and test keeps working unchanged).
+func (s *ResultsService) SetReadDB(db *sql.DB) { s.readDB = db }
+
+// readConn returns the pooled read connection for the read-only
+// public-surface queries that use it, falling back to the writer
+// connection when no read pool has been wired.
+func (s *ResultsService) readConn() *sql.DB {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
 }
 
 // NewResultsService wires a ResultsService; catalog, schemes, tables and
@@ -180,20 +205,27 @@ func (s *ResultsService) RegisterParticipant(ctx context.Context, actor Session,
 	return store.ParticipantRow{Participant: p, Athlete: athlete.Athlete}, nil
 }
 
-// Participants lists a meet's registered athletes.
+// Participants lists a meet's registered athletes. Read-only: uses the
+// pooled read connection (ADR-004 read-path amendment, TASK-035) since
+// this backs the public start-list page as well as operator rosters.
 func (s *ResultsService) Participants(ctx context.Context, meetID string) ([]store.ParticipantRow, error) {
-	return store.ListParticipants(ctx, s.db, meetID)
+	return store.ListParticipants(ctx, s.readConn(), meetID)
 }
 
 // SetConsent updates an athlete's SYS-103 publication-consent flags
 // (UC-023 #3: "consent flags changed mid-meet" must reach public surfaces
-// within one publication cycle — every public read recomputes standings
-// live, so the very next request already reflects this write). Office
-// level and above (CapPrivacyActions); audited with the new flag values
-// only, never the athlete's name (the audit row already carries the
-// athlete's ID as EntityID, which is enough to look the change up without
-// duplicating identity into the log body).
-func (s *ResultsService) SetConsent(ctx context.Context, actor Session, athleteID string, withdrawn bool) error {
+// within one publication cycle). meetID drives the same live-update hook
+// every capture write fires (notifyChanged): the web layer's per-meet
+// public-results render cache (ADR-004 read-path amendment, TASK-035)
+// invalidates on it, so this write's very next public request already
+// reflects it — the same promise this held before that cache existed,
+// restored explicitly now that "every public read recomputes standings
+// live" is no longer true by default. Office level and above
+// (CapPrivacyActions); audited with the new flag values only, never the
+// athlete's name (the audit row already carries the athlete's ID as
+// EntityID, which is enough to look the change up without duplicating
+// identity into the log body).
+func (s *ResultsService) SetConsent(ctx context.Context, actor Session, meetID, athleteID string, withdrawn bool) error {
 	if err := Authorize(actor.Role, CapPrivacyActions); err != nil {
 		return err
 	}
@@ -231,17 +263,19 @@ func (s *ResultsService) SetConsent(ctx context.Context, actor Session, athleteI
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("set consent: %w", err)
 	}
+	s.notifyChanged(meetID)
 	return nil
 }
 
 // ClubNamesFor resolves the club names of the given participants' club
-// IDs (presentation joins for roster and start lists).
+// IDs (presentation joins for roster and start lists). Read-only: pooled
+// read connection (ADR-004 read-path amendment, TASK-035).
 func (s *ResultsService) ClubNamesFor(ctx context.Context, rows []store.ParticipantRow) (map[string]string, error) {
 	var ids []string
 	for _, p := range rows {
 		ids = append(ids, p.Athlete.ClubIDs...)
 	}
-	return store.ClubNames(ctx, s.db, ids)
+	return store.ClubNames(ctx, s.readConn(), ids)
 }
 
 // ResultInput is one settled mark for an athlete in one of the meet's
@@ -391,9 +425,16 @@ type MeetStandings struct {
 // #2–#4; SYS-052 split presentation of a mixed-category field): every
 // participant is resolved to their division by the meet's category scheme,
 // scored results align to the meet's disciplines, and each division ranks
-// per the series rules (domain.RankCombined).
+// per the series rules (domain.RankCombined). Read-only throughout: uses
+// the pooled read connection (ADR-004 read-path amendment, TASK-035/
+// OQ-066) — this is the query the public results page's per-meet render
+// cache (internal/web) wraps, so most of its call volume is now one
+// render per result change rather than one per viewer, but every cache
+// miss (and every operator/standings-page caller) still benefits from not
+// convoying behind the single writer connection.
 func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStandings, error) {
-	meet, err := store.GetMeet(ctx, s.db, meetID)
+	db := s.readConn()
+	meet, err := store.GetMeet(ctx, db, meetID)
 	if err != nil {
 		return MeetStandings{}, err
 	}
@@ -401,15 +442,15 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 	if !ok {
 		return MeetStandings{}, fmt.Errorf("meet %s references unknown category scheme %q", meetID, meet.CategorySchemeID)
 	}
-	events, err := store.ListEvents(ctx, s.db, meetID)
+	events, err := store.ListEvents(ctx, db, meetID)
 	if err != nil {
 		return MeetStandings{}, err
 	}
-	participants, err := store.ListParticipants(ctx, s.db, meetID)
+	participants, err := store.ListParticipants(ctx, db, meetID)
 	if err != nil {
 		return MeetStandings{}, err
 	}
-	results, err := store.ListMeetResults(ctx, s.db, meetID)
+	results, err := store.ListMeetResults(ctx, db, meetID)
 	if err != nil {
 		return MeetStandings{}, err
 	}
@@ -420,7 +461,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 	// everything else keeps the UBS Kids Cup Reglement §3 majority rule
 	// RankCombined has always applied.
 	tieBreak := domain.TieBreakMajorityThenHighest
-	if combinedID, ok, err := store.GetMeetCombinedScoringTable(ctx, s.db, meetID); err != nil {
+	if combinedID, ok, err := store.GetMeetCombinedScoringTable(ctx, db, meetID); err != nil {
 		return MeetStandings{}, err
 	} else if ok {
 		if table, known := s.combinedTables[combinedID]; known {
@@ -468,7 +509,7 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 	for _, p := range participants {
 		clubIDs = append(clubIDs, p.Athlete.ClubIDs...)
 	}
-	clubNames, err := store.ClubNames(ctx, s.db, clubIDs)
+	clubNames, err := store.ClubNames(ctx, db, clubIDs)
 	if err != nil {
 		return MeetStandings{}, err
 	}

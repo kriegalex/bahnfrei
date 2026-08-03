@@ -111,10 +111,13 @@ func NewAtPath(tb testing.TB, sessionTTL time.Duration, dbPath string) Fixture {
 	results.SetSeriesUploadTemplates(seriesUploads)
 	results.SetImportMappingProfiles(importProfiles)
 	results.SetRecordLists(recordLists)
+	results.SetReadDB(st.ReadDB())
+	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
+	meets.SetReadDB(st.ReadDB())
 	return Fixture{
 		Auth:     app.NewAuthService(st.DB(), sessions, FastPasswordParams),
 		Sessions: sessions,
-		Meets:    app.NewMeetService(st.DB(), catalog, schemes, tables, templates),
+		Meets:    meets,
 		Results:  results,
 		Backup:   app.NewBackupService(st),
 		Privacy:  app.NewPrivacyService(st.DB()),

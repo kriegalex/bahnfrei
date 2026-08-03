@@ -90,7 +90,9 @@ func runDemo(ctx context.Context, args []string, out io.Writer) error {
 	sessions := app.NewSessionManager(time.Hour) // seeding only; "serve" wires its own
 	auth := app.NewAuthService(st.DB(), sessions, app.DefaultPasswordParams)
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
+	meets.SetReadDB(st.ReadDB())
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
+	results.SetReadDB(st.ReadDB())
 
 	meetID, captured, err := seedDemo(ctx, auth, meets, results)
 	if err != nil {

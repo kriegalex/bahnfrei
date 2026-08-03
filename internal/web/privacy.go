@@ -83,7 +83,7 @@ func (s *Server) handlePrivacyConsentToggle(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	withdrawn := r.FormValue("withdrawn") == "true"
-	if err := s.results.SetConsent(r.Context(), actor, athleteID, withdrawn); err != nil {
+	if err := s.results.SetConsent(r.Context(), actor, meetID, athleteID, withdrawn); err != nil {
 		http.Redirect(w, r, "/meets/"+meetID+"/privacy?err=invalid", http.StatusSeeOther)
 		return
 	}

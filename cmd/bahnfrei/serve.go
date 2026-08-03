@@ -157,10 +157,12 @@ func buildServer(cfg serveConfig) (serveDeps, error) {
 	}
 	meets := app.NewMeetService(st.DB(), catalog, schemes, tables, templates)
 	meets.SetCombinedScoringTables(combinedTables)
+	meets.SetReadDB(st.ReadDB())
 	results := app.NewResultsService(st.DB(), catalog, schemes, tables, templates)
 	results.SetSeriesUploadTemplates(seriesUploads)
 	results.SetImportMappingProfiles(importProfiles)
 	results.SetCombinedScoringTables(combinedTables)
+	results.SetReadDB(st.ReadDB())
 	backup := app.NewBackupService(st)
 	privacy := app.NewPrivacyService(st.DB())
 
