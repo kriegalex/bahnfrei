@@ -101,6 +101,106 @@ func TestUKCTemplateRosterStandingsFlow(t *testing.T) {
 	}
 }
 
+// TestUC033FinalStandingsWebSurfacesSweep pins TASK-036/DEC-016/OQ-020's
+// web-surface sweep: the operator standings page, the PDF result list and
+// the public results page all show PROVISIONAL labeling (and still rank an
+// incomplete athlete by partial total) before the division's series is
+// complete, and switch to FINAL labeling (with the missing-discipline
+// athlete unranked and marked "aufg.") the moment every unit is announced
+// — without any of the three surfaces re-implementing the completeness
+// check (they all resolve through ResultsService.CurrentStandings).
+func TestUC033FinalStandingsWebSurfacesSweep(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	ctx := context.Background()
+
+	resp := postForm(t, client, base+"/meets/from-template", base+"/meets/from-template", url.Values{
+		"template": {"ubs-kids-cup"}, "date": {"2026-08-15"}, "venue": {"Le Mouret"},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	meetID := strings.TrimPrefix(loc, "/meets/")
+
+	officeActor := app.Session{AccountID: "01TEST", Username: "office", Role: app.RoleCompetitionOffice}
+	full, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, app.ParticipantInput{
+		FirstName: "Fiona", LastName: "Full", BirthYear: 2015, Sex: domain.SexFemale, Bib: "1",
+	})
+	if err != nil {
+		t.Fatalf("RegisterParticipant full: %v", err)
+	}
+	gap, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, app.ParticipantInput{
+		FirstName: "Gina", LastName: "Gap", BirthYear: 2015, Sex: domain.SexFemale, Bib: "2",
+	})
+	if err != nil {
+		t.Fatalf("RegisterParticipant gap: %v", err)
+	}
+	for _, in := range []app.ResultInput{
+		{AthleteID: full.AthleteID, DisciplineCode: "60m", Mark: "10.00", Timing: domain.TimingElectronic},
+		{AthleteID: full.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"},
+		{AthleteID: full.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"},
+		{AthleteID: gap.AthleteID, DisciplineCode: "60m", Status: domain.StatusDNS},
+		{AthleteID: gap.AthleteID, DisciplineCode: "ZoneLJ", Status: domain.StatusNM},
+		{AthleteID: gap.AthleteID, DisciplineCode: "BallThrow200g", Status: domain.StatusNM},
+	} {
+		if _, err := deps.results.SaveResult(ctx, officeActor, meetID, in); err != nil {
+			t.Fatalf("SaveResult(%s, %s): %v", in.AthleteID, in.DisciplineCode, err)
+		}
+	}
+
+	// Before announcement: provisional labeling everywhere, gap still ranked.
+	standingsBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/standings"))
+	if !strings.Contains(standingsBody, "Zwischenstand") {
+		t.Errorf("standings page before announcement misses the provisional label: %s", standingsBody)
+	}
+	pdfResp := mustGet(t, client, base+"/meets/"+meetID+"/standings.pdf")
+	_ = pdfResp.Body.Close()
+	if pdfResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET standings.pdf (provisional) = %d, want 200", pdfResp.StatusCode)
+	}
+	publicBody := bodyString(t, mustGet(t, client, base+"/m/"+meetID+"/results"))
+	if !strings.Contains(publicBody, "Zwischenstand") {
+		t.Errorf("public results page before announcement misses the provisional label: %s", publicBody)
+	}
+
+	// Announce every discipline's unit — the series is complete.
+	detail, err := deps.meets.Meet(ctx, meetID)
+	if err != nil {
+		t.Fatalf("Meet: %v", err)
+	}
+	for _, disc := range []string{"60m", "ZoneLJ", "BallThrow200g"} {
+		var unitID string
+		for _, u := range detail.Units {
+			if u.DisciplineCode == disc {
+				unitID = u.UnitID
+			}
+		}
+		if unitID == "" {
+			t.Fatalf("meet has no %s unit", disc)
+		}
+		if _, err := deps.results.AnnounceUnitResults(ctx, officeActor, meetID, unitID); err != nil {
+			t.Fatalf("AnnounceUnitResults(%s): %v", disc, err)
+		}
+	}
+
+	standingsBody = bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/standings"))
+	if !strings.Contains(standingsBody, "Finalstand") {
+		t.Errorf("standings page after announcement misses the final label: %s", standingsBody)
+	}
+	if !strings.Contains(standingsBody, "aufg.") {
+		t.Errorf("standings page after announcement misses the unranked-missing marker: %s", standingsBody)
+	}
+	publicBody = bodyString(t, mustGet(t, client, base+"/m/"+meetID+"/results"))
+	if !strings.Contains(publicBody, "Finalstand") || !strings.Contains(publicBody, "aufg.") {
+		t.Errorf("public results page after announcement misses final labeling/marker: %s", publicBody)
+	}
+	pdfResp = mustGet(t, client, base+"/meets/"+meetID+"/standings.pdf")
+	pdfData := bodyString(t, pdfResp)
+	if pdfResp.StatusCode != http.StatusOK || !strings.HasPrefix(pdfData, "%PDF") {
+		t.Fatalf("GET standings.pdf (final) = %d, does not look like a PDF", pdfResp.StatusCode)
+	}
+}
+
 // TestRosterAndStandingsRequireOfficeRole: the day-of-competition surfaces
 // are gated at competition-office level (SYS-090).
 func TestRosterAndStandingsRequireOfficeRole(t *testing.T) {

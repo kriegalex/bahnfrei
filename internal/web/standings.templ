@@ -125,6 +125,7 @@ templ standingsPage(p PageData, v standingsView) {
 		if len(v.Divisions) == 0 {
 			<p>{ p.T("standings.empty") }</p>
 		} else {
+			<p><strong>{ v.StatusLabel }</strong></p>
 			<p>{ p.T("standings.gap_legend") }</p>
 			for _, div := range v.Divisions {
 				<h2>{ div.Code }</h2>

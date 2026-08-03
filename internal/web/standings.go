@@ -205,6 +205,7 @@ type divisionView struct {
 type standingsView struct {
 	MeetID                string
 	MeetName              string
+	StatusLabel           string
 	Disciplines           []string
 	Divisions             []divisionView
 	SeriesUploadAvailable bool
@@ -217,7 +218,11 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	standings, err := s.results.Standings(r.Context(), meetID)
+	// TASK-036/DEC-016: FINAL semantics (unranked-at-bottom, the 1-point
+	// floor) once the division's series is complete, PROVISIONAL
+	// otherwise — same completeness rule every other standings-derived
+	// surface applies (public results, PDF, series-upload export).
+	standings, err := s.results.CurrentStandings(r.Context(), meetID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
@@ -226,6 +231,7 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 	v := standingsView{
 		MeetID:                detail.ID,
 		MeetName:              detail.Name,
+		StatusLabel:           standingsStatusLabel(p, standings.Final),
 		SeriesUploadAvailable: s.results.SeriesUploadAvailable(r.Context(), meetID),
 	}
 	for _, code := range standings.Disciplines {
@@ -235,12 +241,12 @@ func (s *Server) handleStandings(w http.ResponseWriter, r *http.Request) {
 		dv := divisionView{Code: div.CategoryCode}
 		for _, row := range div.Rows {
 			rv := standingRowView{
-				Rank:      strconv.Itoa(row.Rank),
+				Rank:      rankLabel(row),
 				Bib:       row.Bib,
 				Name:      row.FirstName + " " + row.LastName,
 				Club:      row.ClubName,
 				BirthYear: strconv.Itoa(row.BirthYear),
-				Total:     strconv.Itoa(row.Total),
+				Total:     totalLabel(p, row),
 			}
 			for _, m := range row.Marks {
 				cell := markCellView{Mark: markOrGap(m), Flags: strings.Join(m.RecordFlags, ", ")}
@@ -289,6 +295,48 @@ func markOrGap(m domain.CombinedPerformance) string {
 	default:
 		return "–"
 	}
+}
+
+// standingsStatusLabel renders the provisional/final line every "final
+// list" surface shows (TASK-036, DEC-016/OQ-020): "Finalstand" is the
+// literal header word the evidenced LV Langenthal Gesamtrangliste uses
+// once a division's series is complete; live/in-progress standings are
+// labeled provisional.
+func standingsStatusLabel(p PageData, final bool) string {
+	if final {
+		return p.T("standings.final")
+	}
+	return p.T("standings.provisional")
+}
+
+// rankLabel renders a standings row's rank cell: the numeric competition
+// rank, or a blank cell when the row is unranked (TASK-036, DEC-016/OQ-020)
+// — the evidenced LV Langenthal Gesamtrangliste's unranked rows carry no
+// rank number at all, in either sense (missing discipline or
+// out-of-competition).
+func rankLabel(row app.StandingRow) string {
+	if row.Rank == 0 {
+		return ""
+	}
+	return strconv.Itoa(row.Rank)
+}
+
+// totalLabel renders a standings row's total cell: the numeric total, or
+// the Swiss TAF3 unranked marker (TASK-036, DEC-016/OQ-020) when the row is
+// unranked — "n.a." for an out-of-competition participant (evidenced: LV
+// Langenthal Gesamtrangliste 17.05.2025, Thome Lauriane W12 — every mark
+// present, still unranked), "aufg." for a participant missing a series
+// discipline entirely (evidenced: the same list's "aufg." rows, e.g. Joao
+// Daniella M14). A PROVISIONAL row is never unranked outside the
+// out-of-competition case (Standings always ranks by partial total).
+func totalLabel(p PageData, row app.StandingRow) string {
+	if row.Rank > 0 {
+		return strconv.Itoa(row.Total)
+	}
+	if row.OutOfCompetition {
+		return p.T("standings.unranked_out_of_competition")
+	}
+	return p.T("standings.unranked_missing")
 }
 
 // renderMeetError maps app-layer errors onto the workspace's error pages.

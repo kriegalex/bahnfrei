@@ -203,7 +203,11 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 	if err != nil {
 		return publicResultsView{}, err
 	}
-	standings, err := s.results.Standings(r.Context(), meetID)
+	// TASK-036/DEC-016: FINAL semantics (unranked-at-bottom, the 1-point
+	// floor) once the division's series is complete, PROVISIONAL
+	// otherwise — the public page never re-implements the completeness
+	// check.
+	standings, err := s.results.CurrentStandings(r.Context(), meetID)
 	if err != nil {
 		return publicResultsView{}, err
 	}
@@ -214,7 +218,7 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 		MeetName:   d.Name,
 		Venue:      d.Venue,
 		Dates:      formatDateRange(p, d.StartDate, d.EndDate),
-		StatusLine: p.T("meet.status." + string(d.Status)),
+		StatusLine: p.T("meet.status."+string(d.Status)) + " · " + standingsStatusLabel(p, standings.Final),
 	}
 	// SYS-076: anything other than an explicit "primary" positioning
 	// carries the unofficial-results label — the conservative default.
@@ -240,12 +244,12 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 			first, last := domain.PublicDisplayNameFor(row.Consent, row.FirstName, row.LastName)
 			club := domain.PublicDisplayClubFor(row.Consent, row.ClubName)
 			rv := standingRowView{
-				Rank:      strconv.Itoa(row.Rank),
+				Rank:      rankLabel(row),
 				Bib:       row.Bib,
 				Name:      strings.TrimSpace(first + " " + last),
 				Club:      club,
 				BirthYear: strconv.Itoa(row.BirthYear),
-				Total:     strconv.Itoa(row.Total),
+				Total:     totalLabel(p, row),
 			}
 			for _, m := range row.Marks {
 				cell := markCellView{Mark: markOrGap(m), Flags: strings.Join(m.RecordFlags, ", ")}

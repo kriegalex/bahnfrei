@@ -125,7 +125,11 @@ func (s *Server) handleResultListPDF(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	standings, err := s.results.Standings(r.Context(), meetID)
+	// TASK-036/DEC-016: FINAL semantics (unranked-at-bottom, the 1-point
+	// floor) once the division's series is complete, PROVISIONAL
+	// otherwise — the printed list never re-implements the completeness
+	// check.
+	standings, err := s.results.CurrentStandings(r.Context(), meetID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
@@ -154,6 +158,7 @@ func (s *Server) resultListDocument(p PageData, meetName string, standings app.M
 	header := pdf.Header{
 		DocTitle:         p.T("standings.title"),
 		MeetName:         meetName,
+		Subtitle:         standingsStatusLabel(p, standings.Final),
 		GeneratedAtLabel: p.T("pdf.generated"),
 		GeneratedAt:      time.Now(),
 	}
@@ -182,7 +187,7 @@ func (s *Server) resultListDocument(p PageData, meetName string, standings app.M
 			first, last := domain.PublicDisplayNameFor(row.Consent, row.FirstName, row.LastName)
 			club := domain.PublicDisplayClubFor(row.Consent, row.ClubName)
 			cells := []string{
-				strconv.Itoa(row.Rank), row.Bib, strings.TrimSpace(first + " " + last),
+				rankLabel(row), row.Bib, strings.TrimSpace(first + " " + last),
 				club, strconv.Itoa(row.BirthYear),
 			}
 			for _, m := range row.Marks {
@@ -197,7 +202,7 @@ func (s *Server) resultListDocument(p PageData, meetName string, standings app.M
 				}
 				cells = append(cells, cell)
 			}
-			cells = append(cells, strconv.Itoa(row.Total))
+			cells = append(cells, totalLabel(p, row))
 			rows = append(rows, cells)
 		}
 		sections = append(sections, pdf.Section{Heading: div.CategoryCode, Columns: cols, Rows: rows})
