@@ -559,8 +559,18 @@ is the requirement.)*
 2. **Given** UKC results for one athlete (e.g., 60 m `8.42`, long jump `4.12`, ball `38.50`),
    **when** saved, **then** the points per discipline and total equal the official UKC points
    table values (reference fixtures from the published table), and division standings update.
-3. **Given** an athlete missing one discipline, **then** their total ranks per series rules
-   (fixture-verified) and the standings show the gap explicitly.
+3. **Given** live/in-progress capture, **when** an athlete is missing a discipline, **then**
+   the (provisional) standings still rank them by their partial total, the gap shown explicitly.
+   **Given** the division's series is complete (every discipline's results announced) and FINAL
+   standings are computed, **then** a discipline the athlete attempted but recorded no valid
+   result for scores the official 1-point floor and still counts as present (fixture-verified
+   against the published points table), while an athlete missing a discipline entirely — no
+   result at all, not even an invalid-attempt status — is listed **unranked at the bottom** of
+   the division instead of ranked by partial total: the official TAF3 convention (DEC-016,
+   fixture-verified against the LV Langenthal official Rangliste, 17.05.2025,
+   https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf). Every rendering
+   surface (public results, printed result lists, series-upload export, omx snapshot) applies
+   FINAL semantics once the series is complete and PROVISIONAL labeling otherwise.
 4. **Given** the completed meet, **when** results are exported/printed, **then** per-division
    ranking lists (classement) match the observed federation presentation structure: rank, bib,
    name, club, birth year, per-discipline marks, points, total (C7.3).

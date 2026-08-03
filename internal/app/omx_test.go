@@ -216,3 +216,114 @@ func TestOMXRelayTeamRoundTrip(t *testing.T) {
 		t.Errorf("reimported relay composition = %v, want 4 legs", importedTeam.Composition)
 	}
 }
+
+// resultsServiceForStore wires a bare ResultsService (built-in catalog/
+// schemes/tables/templates, no series-upload/import/record extras) against
+// an arbitrary store — TestOMXRoundTripPreservesFinalStandingsSYS073UC033's
+// need to compute FinalStandings against a freshly re-imported meet's own
+// store, mirroring buildCaptureCrashServices' minimal wiring.
+func resultsServiceForStore(t *testing.T, st *store.Store) *ResultsService {
+	t.Helper()
+	catalog, err := domain.BuiltinDisciplineCatalog()
+	if err != nil {
+		t.Fatalf("BuiltinDisciplineCatalog: %v", err)
+	}
+	schemes, err := domain.BuiltinCategorySchemes()
+	if err != nil {
+		t.Fatalf("BuiltinCategorySchemes: %v", err)
+	}
+	tables, err := domain.BuiltinScoringTables()
+	if err != nil {
+		t.Fatalf("BuiltinScoringTables: %v", err)
+	}
+	templates, err := domain.BuiltinMeetTemplates()
+	if err != nil {
+		t.Fatalf("BuiltinMeetTemplates: %v", err)
+	}
+	return NewResultsService(st.DB(), catalog, schemes, tables, templates)
+}
+
+// TestOMXRoundTripPreservesFinalStandingsSYS073UC033 sweeps the fourth
+// TASK-036 rendering surface (public results, PDF result lists,
+// series-upload export are covered elsewhere): the omx/v1 snapshot is a
+// raw round-trip of captured results/statuses and unit announcements
+// (internal/exchange.Document — UnitDoc.AnnouncedAt, ResultDoc.Status/
+// Points), never a baked-in standings computation, so recomputing FINAL
+// standings (UC-033 #3, DEC-016/OQ-020) against a freshly re-imported meet
+// must reproduce the original meet's FinalStandings exactly: the
+// unranked-at-bottom tail and the 1-point floor both survive because
+// BuildOMXDocument/ImportOMXDocument already carry what FinalStandings
+// needs generically, with no omx-specific standings logic required.
+func TestOMXRoundTripPreservesFinalStandingsSYS073UC033(t *testing.T) {
+	meets, results, src := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+
+	full := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Fiona", LastName: "Full", BirthYear: 2015, Sex: domain.SexFemale, Bib: "1",
+	})
+	gap := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Gina", LastName: "Gap", BirthYear: 2015, Sex: domain.SexFemale, Bib: "2",
+	})
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "60m", Mark: "10.00", Timing: domain.TimingElectronic})
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"})
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"})
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "60m", Status: domain.StatusDNS})
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "ZoneLJ", Status: domain.StatusNM})
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "BallThrow200g", Status: domain.StatusNM})
+	announceAllUKCUnits(t, results, meets, rec.ID)
+
+	original, err := results.FinalStandings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("FinalStandings (original): %v", err)
+	}
+
+	doc, err := BuildOMXDocument(ctx, src.DB(), rec.ID, ukcDay())
+	if err != nil {
+		t.Fatalf("BuildOMXDocument: %v", err)
+	}
+	dst := openFreshStore(t)
+	newMeetID, err := ImportOMXDocument(ctx, dst.DB(), doc)
+	if err != nil {
+		t.Fatalf("ImportOMXDocument: %v", err)
+	}
+	reimported, err := resultsServiceForStore(t, dst).FinalStandings(ctx, newMeetID)
+	if err != nil {
+		t.Fatalf("FinalStandings (reimported): %v", err)
+	}
+
+	// omx/v1 does not carry the participant bib (OQ-057, internal/app/
+	// omx.go's ImportOMXDocument comment) and remaps every id to a fresh
+	// one on import, so rows are matched by last name — the one identity
+	// that survives verbatim — not bib or AthleteID.
+	origGap, reimpGap := findRowByLastName(t, original, "W11", "Gap"), findRowByLastName(t, reimported, "W11", "Gap")
+	if origGap.Rank != 0 || reimpGap.Rank != 0 {
+		t.Fatalf("gap rank before/after round-trip = %d/%d, want both 0 (unranked)", origGap.Rank, reimpGap.Rank)
+	}
+	if origGap.Total != 2 || reimpGap.Total != 2 {
+		t.Errorf("gap total before/after round-trip = %d/%d, want both 2 (the 1-pt floor survives)", origGap.Total, reimpGap.Total)
+	}
+	origFull, reimpFull := findRowByLastName(t, original, "W11", "Full"), findRowByLastName(t, reimported, "W11", "Full")
+	if origFull.Rank != reimpFull.Rank || origFull.Total != reimpFull.Total || !reimpFull.Complete {
+		t.Errorf("full row before/after round-trip = %+v / %+v, want identical rank/total and still complete", origFull, reimpFull)
+	}
+}
+
+// findRowByLastName looks a standings row up by last name — the identity
+// that survives an omx round-trip verbatim, unlike bib (OQ-057) or
+// AthleteID (every id is remapped on import).
+func findRowByLastName(t *testing.T, st MeetStandings, division, lastName string) StandingRow {
+	t.Helper()
+	for _, div := range st.Divisions {
+		if div.CategoryCode != division {
+			continue
+		}
+		for _, row := range div.Rows {
+			if row.LastName == lastName {
+				return row
+			}
+		}
+	}
+	t.Fatalf("no row lastName %q in division %q (have %+v)", lastName, division, st.Divisions)
+	return StandingRow{}
+}

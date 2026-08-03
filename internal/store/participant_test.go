@@ -79,3 +79,53 @@ func TestUpdateParticipantBibSYS018UC006_1_2(t *testing.T) {
 		t.Errorf("GetParticipantByAthlete(unknown) = %v, want ErrNotFound", err)
 	}
 }
+
+// TestUpdateParticipantOutOfCompetition covers the TASK-036/DEC-016/OQ-020
+// investigation's ausser-Konkurrenz flag (0020_out_of_competition.sql):
+// defaults to false for every ordinary registration, round-trips through
+// both GetParticipantByAthlete and ListParticipants once set, and is
+// version-guarded like every other participant field.
+func TestUpdateParticipantOutOfCompetition(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	meet := testMeet(t, s)
+	athlete := entryFixtureAthlete(t, s, "Anna")
+
+	p, err := EnsureParticipant(ctx, s.DB(), meet.ID, athlete.ID)
+	if err != nil {
+		t.Fatalf("EnsureParticipant: %v", err)
+	}
+	if p.OutOfCompetition {
+		t.Fatal("a fresh registration must default to out_of_competition = false")
+	}
+
+	newVersion, err := UpdateParticipantOutOfCompetition(ctx, s.DB(), p.ID, p.Version, true)
+	if err != nil {
+		t.Fatalf("UpdateParticipantOutOfCompetition: %v", err)
+	}
+	if newVersion != p.Version+1 {
+		t.Fatalf("new version = %d, want %d", newVersion, p.Version+1)
+	}
+
+	got, err := GetParticipantByAthlete(ctx, s.DB(), meet.ID, athlete.ID)
+	if err != nil {
+		t.Fatalf("GetParticipantByAthlete: %v", err)
+	}
+	if !got.OutOfCompetition {
+		t.Error("GetParticipantByAthlete does not reflect the out-of-competition flag")
+	}
+
+	rows, err := ListParticipants(ctx, s.DB(), meet.ID)
+	if err != nil {
+		t.Fatalf("ListParticipants: %v", err)
+	}
+	if len(rows) != 1 || !rows[0].OutOfCompetition {
+		t.Errorf("ListParticipants = %+v, want one row with OutOfCompetition = true", rows)
+	}
+
+	// Stale version is rejected, like every other optimistic-concurrency
+	// participant update.
+	if _, err := UpdateParticipantOutOfCompetition(ctx, s.DB(), p.ID, p.Version, false); !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("stale-version update = %v, want ErrVersionConflict", err)
+	}
+}

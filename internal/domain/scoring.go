@@ -77,6 +77,19 @@ type ScoringTable struct {
 	Source   string          `json:"source"`
 	Rounding string          `json:"rounding"`
 	Columns  []ScoringColumn `json:"columns"`
+	// NoValidAttemptFloor is the points a discipline the athlete was
+	// present for but recorded no valid result in still scores (UC-033 #3,
+	// DEC-016/OQ-020) — the official "ogV" ("ohne gültigen Versuch") rule
+	// observed in the LV Langenthal Gesamtrangliste, 17.05.2025
+	// (https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf):
+	// 1 point, not 0. Zero (the default, every table but ubs-kids-cup.json)
+	// means no floor — such a discipline then still scores 0, unchanged
+	// from the pre-DEC-016 behaviour. Applied by
+	// internal/app.ResultsService.Standings against
+	// domain.AttemptedNoValidResult, not by this type itself (the floor is
+	// a standings-presentation rule, not a mark-scoring one: Points stays
+	// unset by ScoringTable.Points itself).
+	NoValidAttemptFloor int `json:"noValidAttemptFloor,omitempty"`
 
 	index map[scoringKey]*ScoringColumn
 }
@@ -110,6 +123,9 @@ func (t *ScoringTable) validate() error {
 	}
 	if t.Rounding != RoundingNextLowerPoints {
 		return fmt.Errorf("scoring table %q: unsupported rounding rule %q (interpreter implements %q)", t.ID, t.Rounding, RoundingNextLowerPoints)
+	}
+	if t.NoValidAttemptFloor < 0 {
+		return fmt.Errorf("scoring table %q: noValidAttemptFloor must not be negative", t.ID)
 	}
 	if len(t.Columns) == 0 {
 		return fmt.Errorf("scoring table %q: at least one column is required", t.ID)

@@ -2,7 +2,7 @@
   "id": "ubs-kids-cup",
   "version": "2026.1",
   "name": "UBS Kids Cup series upload (organizer template)",
-  "source": "ASSUMPTION (SYS-077, unverified against the byte-for-byte official file — see OQ-023, docs/requirements/open-questions-and-assumptions.md): modeled on two verified primary sources fetched 2026-07-10. (1) The Mille Gruyère/Visana Sprint 'Anleitung und Funktionen des Tools der Nachwuchsserien' (organizer manual, §3.1 'Excel') confirms a downloadable 'Vorlage Resultatimport' Excel template exists for the non-TAF3 youth-series results-upload path: 'Werten Sie Ihren Wettkampf mit ihrem eigenen Excel [...] aus. Fuer die Uebermittlung der Resultate an uns verwenden Sie bitte die Vorlage Resultatimport [...] und laden Sie die ausgefuellte Datei anschliessend [...] hoch.' https://www.mille-gruyere.ch/fileadmin/user_upload/www.mille-gruyere.ch/Veranstalter/Dokumente_Downloads/Anleitung_und_Funktionen_des_Tools_der_Nachwuchsserien_MG.pdf (2) A real UBS Kids Cup TAF3 result-list export (Gesamtrangliste, Leichtathletik-Vereinigung Langenthal, 17 May 2025) shows the column semantics this template mirrors: Rang/StNr/Name/Jg/Nat/Verein, then a mark+points pair per discipline (60M, BAL, WEZ), then a combined Punkte total, with PB flagged. https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf The exact column layout of the official 'Vorlage Resultatimport' file itself could not be retrieved offline; swap this file for the verified template once obtained (SYS-077 CON-01: a data-file change, not a code change).",
+  "source": "ASSUMPTION (SYS-077, unverified against the byte-for-byte official file — see OQ-023, docs/requirements/open-questions-and-assumptions.md): modeled on two verified primary sources fetched 2026-07-10. (1) The Mille Gruyère/Visana Sprint 'Anleitung und Funktionen des Tools der Nachwuchsserien' (organizer manual, §3.1 'Excel') confirms a downloadable 'Vorlage Resultatimport' Excel template exists for the non-TAF3 youth-series results-upload path: 'Werten Sie Ihren Wettkampf mit ihrem eigenen Excel [...] aus. Fuer die Uebermittlung der Resultate an uns verwenden Sie bitte die Vorlage Resultatimport [...] und laden Sie die ausgefuellte Datei anschliessend [...] hoch.' https://www.mille-gruyere.ch/fileadmin/user_upload/www.mille-gruyere.ch/Veranstalter/Dokumente_Downloads/Anleitung_und_Funktionen_des_Tools_der_Nachwuchsserien_MG.pdf (2) A real UBS Kids Cup TAF3 result-list export (Gesamtrangliste, Leichtathletik-Vereinigung Langenthal, 17 May 2025) shows the column semantics this template mirrors: Rang/StNr/Name/Jg/Nat/Verein, then a mark+points pair per discipline (60M, BAL, WEZ), then a combined Punkte total, with PB flagged. https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf The exact column layout of the official 'Vorlage Resultatimport' file itself could not be retrieved offline; swap this file for the verified template once obtained (SYS-077 CON-01: a data-file change, not a code change). unrankedMissingLabel/unrankedOutOfCompetitionLabel: DEC-016/OQ-020, the same Gesamtrangliste's 'aufg.' rows (e.g. Joao Daniella, M14) and 'n.a.' row (Thome Lauriane, W12 — every mark present, still unranked).",
   "sheetName": "Rangliste",
   "identityColumns": [
     {"field": "division", "header": "Kategorie"},
@@ -19,5 +19,7 @@
   "trailingColumns": [
     {"field": "total", "header": "Total"}
   ],
-  "missingMarkPlaceholder": "–"
+  "missingMarkPlaceholder": "–",
+  "unrankedMissingLabel": "aufg.",
+  "unrankedOutOfCompetitionLabel": "n.a."
 }

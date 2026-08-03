@@ -267,6 +267,49 @@ func (s *ResultsService) SetConsent(ctx context.Context, actor Session, meetID, 
 	return nil
 }
 
+// SetOutOfCompetition flags or clears a participant's ausser
+// Konkurrenz/hors concours status (TASK-036, DEC-016/OQ-020 investigation
+// of the LV Langenthal Gesamtrangliste's "n.a." row with every discipline
+// mark present, Thome Lauriane W12): the athlete's marks stay captured and
+// visible, but Standings/FinalStandings never assign them a numeric rank
+// while the flag is set. Office level and above (CapOfficeActions,
+// matching RegisterParticipant/bib assignment); audited with the new flag
+// value. There is deliberately no dedicated operator-UI toggle yet
+// (OQ-091) — this is the callable capability the flag needed to exist and
+// be correctly interpreted by standings; wiring a roster-page control is
+// left to a follow-up.
+func (s *ResultsService) SetOutOfCompetition(ctx context.Context, actor Session, meetID, athleteID string, outOfCompetition bool) error {
+	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
+		return err
+	}
+	p, err := store.GetParticipantByAthlete(ctx, s.db, meetID, athleteID)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set out of competition: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.UpdateParticipantOutOfCompetition(ctx, tx, p.ID, p.Version, outOfCompetition); err != nil {
+		return err
+	}
+	after, _ := json.Marshal(map[string]bool{"out_of_competition": outOfCompetition})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "participant.out_of_competition.update",
+		EntityType: "participant", EntityID: p.ID, After: string(after),
+	}); err != nil {
+		return fmt.Errorf("audit out-of-competition update: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("set out of competition: %w", err)
+	}
+	s.notifyChanged(meetID)
+	return nil
+}
+
 // ClubNamesFor resolves the club names of the given participants' club
 // IDs (presentation joins for roster and start lists). Read-only: pooled
 // read connection (ADR-004 read-path amendment, TASK-035).
@@ -406,6 +449,10 @@ type StandingRow struct {
 	Total     int
 	Complete  bool
 	Consent   domain.PublicationConsent
+	// OutOfCompetition mirrors store.Participant.OutOfCompetition
+	// (TASK-036, DEC-016/OQ-020 investigation): true rows never hold a
+	// numeric Rank (0), in provisional or final standings alike.
+	OutOfCompetition bool
 }
 
 // DivisionStanding is one division's ranked list.
@@ -419,20 +466,126 @@ type DivisionStanding struct {
 type MeetStandings struct {
 	Disciplines []string // catalog codes, event order
 	Divisions   []DivisionStanding
+	// Final is true when this is a FINAL standings computation
+	// (ResultsService.FinalStandings — UC-033 #3, DEC-016/OQ-020): a
+	// division-complete rendering where a discipline missing entirely
+	// leaves its athlete unranked at the bottom, rather than the
+	// PROVISIONAL rank-by-partial-total behaviour Standings always
+	// returns. Renderers use it to label the list accordingly.
+	Final bool
 }
 
-// Standings computes the meet's per-division combined standings (UC-033
-// #2–#4; SYS-052 split presentation of a mixed-category field): every
-// participant is resolved to their division by the meet's category scheme,
-// scored results align to the meet's disciplines, and each division ranks
-// per the series rules (domain.RankCombined). Read-only throughout: uses
-// the pooled read connection (ADR-004 read-path amendment, TASK-035/
-// OQ-066) — this is the query the public results page's per-meet render
-// cache (internal/web) wraps, so most of its call volume is now one
-// render per result change rather than one per viewer, but every cache
-// miss (and every operator/standings-page caller) still benefits from not
-// convoying behind the single writer connection.
+// Standings computes the meet's PROVISIONAL per-division combined standings
+// (UC-033 #2–#4; SYS-052 split presentation of a mixed-category field):
+// every participant is resolved to their division by the meet's category
+// scheme, scored results align to the meet's disciplines, and each division
+// ranks per the series rules (domain.RankCombinedWithTieBreak) — a missing
+// discipline still ranks by partial total, the live/in-progress behaviour
+// UC-033 #3 keeps unchanged (DEC-016/OQ-020: the meet is ongoing, so every
+// athlete is temporarily "incomplete" at some point). Renderers label this
+// "provisional". See FinalStandings for the FINAL, division-complete
+// rendering.
 func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStandings, error) {
+	return s.standings(ctx, meetID, false)
+}
+
+// FinalStandings computes FINAL per-division combined standings (UC-033
+// #3, DEC-016/OQ-020): the official TAF3 convention observed in the LV
+// Langenthal Gesamtrangliste (17.05.2025) — an athlete missing a discipline
+// entirely is listed unranked at the bottom instead of ranked by partial
+// total, and a discipline attempted with no valid result scores the
+// scoring table's NoValidAttemptFloor and still counts as present. Callers
+// needing "final once the division's series is complete, else provisional"
+// should call CurrentStandings instead, which applies SeriesComplete for
+// them; call this directly only when final semantics are wanted
+// unconditionally (e.g. an explicit "close out and finalize" action).
+func (s *ResultsService) FinalStandings(ctx context.Context, meetID string) (MeetStandings, error) {
+	return s.standings(ctx, meetID, true)
+}
+
+// CurrentStandings returns FINAL standings once every discipline feeding
+// them has been announced (SeriesComplete) and PROVISIONAL standings
+// otherwise — the single decision point every "final list" rendering
+// surface (public results, PDF result lists, series-upload export) shares,
+// so none of them re-implement the completeness check (TASK-036).
+func (s *ResultsService) CurrentStandings(ctx context.Context, meetID string) (MeetStandings, error) {
+	complete, err := s.SeriesComplete(ctx, meetID)
+	if err != nil {
+		return MeetStandings{}, err
+	}
+	if complete {
+		return s.FinalStandings(ctx, meetID)
+	}
+	return s.Standings(ctx, meetID)
+}
+
+// SeriesComplete reports whether every one of meetID's events has had every
+// round/unit's results announced (SYS-047) — the "division's series is
+// complete" trigger UC-033 #3/DEC-016 gates FINAL standings on. Unlike
+// disciplineUnit (the single-capturable-unit assumption template meets
+// like the UKC's make), this walks every round and unit an event has, so a
+// heats-based meet (TASK-018 seeding: multiple units per discipline) is
+// handled correctly instead of erroring — it is complete only once every
+// heat/final of every event is announced. A meet with no events, or an
+// event with no rounds/units scheduled yet, is never complete. The
+// event/round/unit walk is read-only and uses the pooled read connection
+// (ADR-004 §9); the per-unit announcement lookup (protestState) stays on
+// the writer connection with every other announcement read.
+func (s *ResultsService) SeriesComplete(ctx context.Context, meetID string) (bool, error) {
+	db := s.readConn()
+	events, err := store.ListEvents(ctx, db, meetID)
+	if err != nil {
+		return false, err
+	}
+	if len(events) == 0 {
+		return false, nil
+	}
+	for _, ev := range events {
+		rounds, err := store.ListRounds(ctx, db, ev.ID)
+		if err != nil {
+			return false, err
+		}
+		if len(rounds) == 0 {
+			return false, nil
+		}
+		for _, rd := range rounds {
+			units, err := store.ListRoundUnits(ctx, db, rd.ID)
+			if err != nil {
+				return false, err
+			}
+			if len(units) == 0 {
+				return false, nil
+			}
+			for _, u := range units {
+				state, err := s.protestState(ctx, u.ID)
+				if err != nil {
+					return false, err
+				}
+				if !state.Announced {
+					return false, nil
+				}
+			}
+		}
+	}
+	return true, nil
+}
+
+// standings is the shared computation behind Standings/FinalStandings: the
+// two only differ in which domain ranking rule closes out each division
+// (RankCombinedWithTieBreak vs FinalRankCombined) and the floor/missing-
+// discipline handling that rule implies. Applying the scoring table's
+// NoValidAttemptFloor (DEC-016/OQ-020) to a present-but-no-valid-attempt
+// discipline happens here for BOTH modes: it corrects the points table
+// interpretation itself (a scoring fix, not a final-only presentation
+// rule), so a live standings total already reflects the official "ogV"
+// floor the moment that discipline's series settles. Read-only throughout:
+// uses the pooled read connection (ADR-004 §9, TASK-035/OQ-066) — this is
+// the query the public results page's per-meet render cache (internal/web)
+// wraps, so most of its call volume is one render per result change rather
+// than one per viewer, but every cache miss (and every operator/standings-
+// page caller) still benefits from not convoying behind the single writer
+// connection.
+func (s *ResultsService) standings(ctx context.Context, meetID string, final bool) (MeetStandings, error) {
 	db := s.readConn()
 	meet, err := store.GetMeet(ctx, db, meetID)
 	if err != nil {
@@ -469,7 +622,17 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 		}
 	}
 
-	out := MeetStandings{}
+	// The scoring table's NoValidAttemptFloor (DEC-016/OQ-020), if any —
+	// only a plain (non-combined-events) meet's own table declares one;
+	// meet.ScoringTableID is empty for a WA combined-events meet (which
+	// scores through combinedID above instead), so the lookup naturally
+	// resolves to 0 (no floor) for those.
+	floorPoints := 0
+	if table, ok := s.tables[meet.ScoringTableID]; ok {
+		floorPoints = table.NoValidAttemptFloor
+	}
+
+	out := MeetStandings{Final: final}
 	for _, ev := range events {
 		out.Disciplines = append(out.Disciplines, ev.DisciplineCode)
 	}
@@ -495,11 +658,19 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 		if !ok {
 			continue
 		}
+		points := r.Points
+		if points == nil && floorPoints > 0 && domain.AttemptedNoValidResult(r.Status) {
+			// UC-033 #3, DEC-016/OQ-020: present but no valid attempt
+			// ("ogV") scores the table's floor, not 0 — applied here so it
+			// reaches both provisional and final totals identically.
+			floor := floorPoints
+			points = &floor
+		}
 		vec[i] = domain.CombinedPerformance{
 			DisciplineCode: r.DisciplineCode,
 			Mark:           r.Mark,
 			Status:         r.Status,
-			Points:         r.Points,
+			Points:         points,
 			RecordFlags:    r.RecordFlags,
 		}
 	}
@@ -527,15 +698,16 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 			club = clubNames[p.Athlete.ClubIDs[0]]
 		}
 		byDivision[cat.Code] = append(byDivision[cat.Code], StandingRow{
-			Bib:       p.Bib,
-			AthleteID: p.AthleteID,
-			FirstName: p.Athlete.FirstName,
-			LastName:  p.Athlete.LastName,
-			ClubName:  club,
-			BirthYear: p.Athlete.BirthYear,
-			Sex:       p.Athlete.Sex,
-			Marks:     perAthlete[p.AthleteID],
-			Consent:   p.Athlete.Consent,
+			Bib:              p.Bib,
+			AthleteID:        p.AthleteID,
+			FirstName:        p.Athlete.FirstName,
+			LastName:         p.Athlete.LastName,
+			ClubName:         club,
+			BirthYear:        p.Athlete.BirthYear,
+			Sex:              p.Athlete.Sex,
+			Marks:            perAthlete[p.AthleteID],
+			Consent:          p.Athlete.Consent,
+			OutOfCompetition: p.OutOfCompetition,
 		})
 	}
 
@@ -548,11 +720,17 @@ func (s *ResultsService) Standings(ctx context.Context, meetID string) (MeetStan
 		ranked := make([]domain.CombinedStanding, len(rows))
 		rowByAthlete := make(map[string]StandingRow, len(rows))
 		for i, r := range rows {
-			ranked[i] = domain.CombinedStanding{AthleteID: r.AthleteID, Performances: r.Marks}
+			ranked[i] = domain.CombinedStanding{
+				AthleteID: r.AthleteID, Performances: r.Marks, OutOfCompetition: r.OutOfCompetition,
+			}
 			rowByAthlete[r.AthleteID] = r
 		}
+		rankFn := domain.RankCombinedWithTieBreak
+		if final {
+			rankFn = domain.FinalRankCombined
+		}
 		div := DivisionStanding{CategoryCode: cat.Code}
-		for _, st := range domain.RankCombinedWithTieBreak(ranked, tieBreak) {
+		for _, st := range rankFn(ranked, tieBreak) {
 			row := rowByAthlete[st.AthleteID]
 			row.Rank = st.Rank
 			row.Total = st.Total

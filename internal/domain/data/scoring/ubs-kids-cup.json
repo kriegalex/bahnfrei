@@ -2,8 +2,9 @@
  "id": "ubs-kids-cup",
  "version": "2025",
  "name": "Swiss Athletics Wertungstabelle 2025 — Version UBS Kids Cup",
- "source": "Official PDF: https://www.ubs-kidscup.ch/fileadmin/ubskidscup/downloads/UBS_Kids_Cup_Wertungstabelle_Disziplinen.pdf (fetched 2026-07-08); rounding and ranking rules: UBS Kids Cup Reglement (Stand Dezember 2025), §3 Punktewertung/Rangierung. Extracted by scripts/extract-ukc-scoring-table.py.",
+ "source": "Official PDF: https://www.ubs-kidscup.ch/fileadmin/ubskidscup/downloads/UBS_Kids_Cup_Wertungstabelle_Disziplinen.pdf (fetched 2026-07-08); rounding and ranking rules: UBS Kids Cup Reglement (Stand Dezember 2025), §3 Punktewertung/Rangierung. Extracted by scripts/extract-ukc-scoring-table.py. noValidAttemptFloor: DEC-016/OQ-020, the LV Langenthal Gesamtrangliste 17.05.2025 (https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf) shows a discipline attempted with no valid mark ('ogV') scoring 1 point, not 0 (e.g. Geiser Lukas, W9: 60m 10.53 -> 210 pts, ZoneLJ/BallThrow200g both ogV -> 1 pt each, total 212).",
  "rounding": "next-lower-points",
+ "noValidAttemptFloor": 1,
  "columns": [
   {
    "disciplineCode": "60m",

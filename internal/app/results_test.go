@@ -269,8 +269,11 @@ func TestUC033_2_ScoringAndStandings(t *testing.T) {
 }
 
 // TestUC033_3_MissingDiscipline: an athlete missing one discipline still
-// ranks by total per the series convention (OQ-020) and the standings
-// mark the gap explicitly.
+// ranks by total in PROVISIONAL (live/in-progress) standings — the
+// live/in-progress half of UC-033 #3/DEC-016/OQ-020, unchanged by
+// TASK-036 — and the standings mark the gap explicitly. See
+// TestUC033FinalStandingsUnrankedIncomplete for the FINAL-standings
+// counterpart, where the same gap instead unranks the row.
 func TestUC033_3_MissingDiscipline(t *testing.T) {
 	meets, results, _ := newTestResults(t)
 	ctx := context.Background()
@@ -312,6 +315,200 @@ func TestUC033_3_MissingDiscipline(t *testing.T) {
 	if fullRow.Total > gapRow.Total && (fullRow.Rank != 1 || gapRow.Rank != 2) {
 		t.Errorf("ranking does not follow totals: gap %d/%d, full %d/%d",
 			gapRow.Rank, gapRow.Total, fullRow.Rank, fullRow.Total)
+	}
+}
+
+// announceAllUKCUnits closes out a UKC meet's three combined-scoring units
+// (SYS-047) so SeriesComplete/CurrentStandings switch to FINAL semantics —
+// the "division's series is complete" trigger UC-033 #3/DEC-016 gates on.
+func announceAllUKCUnits(t *testing.T, results *ResultsService, meets *MeetService, meetID string) {
+	t.Helper()
+	for _, disc := range []string{"60m", "ZoneLJ", "BallThrow200g"} {
+		unitID := unitOf(t, results, meets, meetID, disc)
+		if _, err := results.AnnounceUnitResults(context.Background(), office, meetID, unitID); err != nil {
+			t.Fatalf("AnnounceUnitResults(%s): %v", disc, err)
+		}
+	}
+}
+
+// TestUC033FinalStandingsUnrankedIncomplete pins UC-033 #3/DEC-016/OQ-020
+// end to end (RegisterParticipant → SaveResult → AnnounceUnitResults →
+// FinalStandings/CurrentStandings). The domain-level fixture tests
+// (TestUC033FinalStandingsUnrankedIncomplete and
+// TestUC033FinalStandingsAttemptedNoValidResultStillRanks in
+// internal/domain/combined_test.go) reproduce the LV Langenthal official
+// Gesamtrangliste's exact evidenced marks/totals; this test exercises the
+// same "gap" shape (one DNS discipline plus two NM/"ogV" ones) through the
+// real capture/announce/standings service pipeline with simple round
+// marks, since the points-table-accurate values are already covered by
+// TestUKCScoringOfficialFixtures. "full" completes normally and stays
+// ranked; "gap" mirrors the evidence's unranked "aufg." row (Joao
+// Daniella): 60m DNS — never attempted, ZoneLJ/BallThrow200g NM —
+// attempted, no valid mark, 1 pt each per the table's NoValidAttemptFloor;
+// unranked, no rank, in the FINAL list only.
+func TestUC033FinalStandingsUnrankedIncomplete(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+
+	full := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Fiona", LastName: "Full", BirthYear: 2015, Sex: domain.SexFemale, Bib: "1",
+	})
+	gap := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Gina", LastName: "Gap", BirthYear: 2015, Sex: domain.SexFemale, Bib: "2",
+	})
+
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "60m", Mark: "10.00", Timing: domain.TimingElectronic})
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"})
+	save(t, results, rec.ID, ResultInput{AthleteID: full.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"})
+
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "60m", Status: domain.StatusDNS})
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "ZoneLJ", Status: domain.StatusNM})
+	save(t, results, rec.ID, ResultInput{AthleteID: gap.AthleteID, DisciplineCode: "BallThrow200g", Status: domain.StatusNM})
+
+	// Before the series is complete: provisional semantics apply, and both
+	// rows still rank (unchanged pre-TASK-036 behaviour — mirroring
+	// TestUC033_3_MissingDiscipline).
+	if complete, err := results.SeriesComplete(ctx, rec.ID); err != nil || complete {
+		t.Fatalf("SeriesComplete before announcement = %v, %v; want false, nil", complete, err)
+	}
+	live, err := results.CurrentStandings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("CurrentStandings (live): %v", err)
+	}
+	if live.Final {
+		t.Error("CurrentStandings before announcement reports Final = true")
+	}
+	if findRow(t, live, "W11", "2").Rank == 0 {
+		t.Error("provisional standings must still rank an incomplete athlete (unchanged pre-TASK-036 behaviour)")
+	}
+
+	announceAllUKCUnits(t, results, meets, rec.ID)
+
+	if complete, err := results.SeriesComplete(ctx, rec.ID); err != nil || !complete {
+		t.Fatalf("SeriesComplete after announcement = %v, %v; want true, nil", complete, err)
+	}
+	final, err := results.CurrentStandings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("CurrentStandings (final): %v", err)
+	}
+	if !final.Final {
+		t.Fatal("CurrentStandings after every unit is announced reports Final = false")
+	}
+
+	fullRow := findRow(t, final, "W11", "1")
+	if fullRow.Rank != 1 || !fullRow.Complete {
+		t.Errorf("full: rank=%d complete=%v, want 1/true", fullRow.Rank, fullRow.Complete)
+	}
+
+	gapRow := findRow(t, final, "W11", "2")
+	if gapRow.Rank != 0 {
+		t.Errorf("gap: rank=%d, want 0 (unranked — a missing 60m result, not merely ogV, per DEC-016/OQ-020)", gapRow.Rank)
+	}
+	if gapRow.Complete {
+		t.Error("gap row reports Complete despite the DNS 60m")
+	}
+	if gapRow.Total != 2 {
+		t.Errorf("gap total = %d, want 2 (1 pt floor each for the two NM/ogV disciplines, DEC-016/OQ-020)", gapRow.Total)
+	}
+	if gapRow.Marks[1].Points == nil || *gapRow.Marks[1].Points != 1 {
+		t.Errorf("gap ZoneLJ (NM/ogV) points = %v, want 1 (the table's NoValidAttemptFloor)", gapRow.Marks[1].Points)
+	}
+	if gapRow.Marks[0].Points != nil {
+		t.Errorf("gap 60m (DNS) points = %v, want nil (DNS never floors)", gapRow.Marks[0].Points)
+	}
+
+	// The live floor fix is not final-only: a provisional read taken now
+	// (the series is complete, but Standings ignores that) shows the same
+	// floored total, just still ranked (partial-total policy).
+	stillLive, err := results.Standings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Standings (provisional, post-announcement): %v", err)
+	}
+	if row := findRow(t, stillLive, "W11", "2"); row.Total != 2 || row.Rank == 0 {
+		t.Errorf("provisional gap row = %+v, want total 2 and still ranked (floor applies to both modes)", row)
+	}
+
+	// Sweep: the series-upload export renders the same FINAL unranked
+	// marker in place of a numeric rank/total (TASK-036 surface sweep).
+	f, _ := openSeriesUpload(t, results, rec.ID)
+	rows, err := f.GetRows(f.GetSheetList()[0])
+	if err != nil {
+		t.Fatalf("GetRows: %v", err)
+	}
+	var gapExportRow []string
+	for _, row := range rows[1:] {
+		if len(row) > 2 && row[2] == "2" { // StNr column
+			gapExportRow = row
+		}
+	}
+	if gapExportRow == nil {
+		t.Fatalf("gap participant (StNr 2) missing from series-upload export")
+	}
+	if gapExportRow[1] != "aufg." { // Rang column
+		t.Errorf("gap export rank cell = %q, want \"aufg.\" (final unranked-missing marker)", gapExportRow[1])
+	}
+	if last := gapExportRow[len(gapExportRow)-1]; last != "aufg." { // Total column
+		t.Errorf("gap export total cell = %q, want \"aufg.\"", last)
+	}
+}
+
+// TestSetOutOfCompetition covers TASK-036's DEC-016/OQ-020 investigation
+// flag end to end: office-role authorization, the audit trail, and the
+// standings effect — an out-of-competition athlete's marks stay visible
+// and Complete, but they never hold a numeric Rank, in provisional or
+// final standings alike (mirroring the LV Langenthal Gesamtrangliste's
+// Thome Lauriane row: every mark present, still unranked "n.a.").
+func TestSetOutOfCompetition(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+
+	ooc := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Thome", LastName: "Lauriane", BirthYear: 2015, Sex: domain.SexFemale, Bib: "1",
+	})
+	rival := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Other", LastName: "Athlete", BirthYear: 2015, Sex: domain.SexFemale, Bib: "2",
+	})
+	save(t, results, rec.ID, ResultInput{AthleteID: ooc.AthleteID, DisciplineCode: "60m", Mark: "8.79", Timing: domain.TimingElectronic})
+	save(t, results, rec.ID, ResultInput{AthleteID: ooc.AthleteID, DisciplineCode: "ZoneLJ", Mark: "4.38"})
+	save(t, results, rec.ID, ResultInput{AthleteID: ooc.AthleteID, DisciplineCode: "BallThrow200g", Mark: "26.60"})
+	save(t, results, rec.ID, ResultInput{AthleteID: rival.AthleteID, DisciplineCode: "60m", Mark: "10.00", Timing: domain.TimingElectronic})
+	save(t, results, rec.ID, ResultInput{AthleteID: rival.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"})
+	save(t, results, rec.ID, ResultInput{AthleteID: rival.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"})
+
+	if err := results.SetOutOfCompetition(ctx, fieldOfficial, rec.ID, ooc.AthleteID, true); err == nil {
+		t.Error("SetOutOfCompetition as a field official: want authorization error (office capability required)")
+	}
+	if err := results.SetOutOfCompetition(ctx, office, rec.ID, ooc.AthleteID, true); err != nil {
+		t.Fatalf("SetOutOfCompetition: %v", err)
+	}
+
+	st, err := results.Standings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	oocRow := findRow(t, st, "W11", "1")
+	if oocRow.Rank != 0 {
+		t.Errorf("provisional out-of-competition rank = %d, want 0 (never ranked, even mid-meet)", oocRow.Rank)
+	}
+	if !oocRow.OutOfCompetition || !oocRow.Complete {
+		t.Errorf("out-of-competition row = %+v, want OutOfCompetition and Complete both true (marks stay visible)", oocRow)
+	}
+	if rivalRow := findRow(t, st, "W11", "2"); rivalRow.Rank != 1 {
+		t.Errorf("rival rank = %d, want 1 (the sole ranked athlete)", rivalRow.Rank)
+	}
+
+	announceAllUKCUnits(t, results, meets, rec.ID)
+	final, err := results.FinalStandings(ctx, rec.ID)
+	if err != nil {
+		t.Fatalf("FinalStandings: %v", err)
+	}
+	if row := findRow(t, final, "W11", "1"); row.Rank != 0 {
+		t.Errorf("final out-of-competition rank = %d, want 0 (still never ranked)", row.Rank)
+	}
+	if row := findRow(t, final, "W11", "2"); row.Rank != 1 {
+		t.Errorf("final rival rank = %d, want 1", row.Rank)
 	}
 }
 

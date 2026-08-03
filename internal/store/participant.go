@@ -21,6 +21,11 @@ type Participant struct {
 	AthleteID string
 	Bib       string
 	Version   int64
+	// OutOfCompetition marks a registration ausser Konkurrenz/hors concours
+	// (TASK-036, DEC-016/OQ-020 investigation, 0020_out_of_competition.sql):
+	// the athlete's marks are still captured and shown, but they never hold
+	// a numeric rank in standings, provisional or final.
+	OutOfCompetition bool
 }
 
 // ParticipantRow is a participant joined with the athlete person data that
@@ -54,9 +59,9 @@ func RegisterParticipant(ctx context.Context, db DBTX, meetID, athleteID, bib st
 // GetParticipantByAthlete looks up an athlete's participant row at meetID.
 func GetParticipantByAthlete(ctx context.Context, db DBTX, meetID, athleteID string) (Participant, error) {
 	var p Participant
-	err := db.QueryRowContext(ctx, `SELECT id, meet_id, athlete_id, bib, version
+	err := db.QueryRowContext(ctx, `SELECT id, meet_id, athlete_id, bib, version, out_of_competition
 		FROM participants WHERE meet_id = ? AND athlete_id = ?`, meetID, athleteID).
-		Scan(&p.ID, &p.MeetID, &p.AthleteID, &p.Bib, &p.Version)
+		Scan(&p.ID, &p.MeetID, &p.AthleteID, &p.Bib, &p.Version, &p.OutOfCompetition)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Participant{}, ErrNotFound
@@ -92,12 +97,20 @@ func UpdateParticipantBib(ctx context.Context, db DBTX, id string, expectedVersi
 	return v, err
 }
 
+// UpdateParticipantOutOfCompetition sets a participant's ausser
+// Konkurrenz/hors concours flag under optimistic concurrency (TASK-036,
+// DEC-016/OQ-020 investigation; 0020_out_of_competition.sql).
+func UpdateParticipantOutOfCompetition(ctx context.Context, db DBTX, id string, expectedVersion int64, outOfCompetition bool) (int64, error) {
+	return OptimisticUpdate(ctx, db, "participants", id, expectedVersion,
+		Set{Column: "out_of_competition", Value: outOfCompetition})
+}
+
 // ListParticipants returns a meet's participants with their athlete data
 // including SYS-103 consent flags, ordered by bib then name for stable
 // start lists.
 func ListParticipants(ctx context.Context, db DBTX, meetID string) ([]ParticipantRow, error) {
 	rows, err := db.QueryContext(ctx, `SELECT
-		p.id, p.meet_id, p.athlete_id, p.bib, p.version,
+		p.id, p.meet_id, p.athlete_id, p.bib, p.version, p.out_of_competition,
 		a.id, a.first_name, a.last_name, a.birth_date, a.birth_year, a.sex,
 		a.nationality, a.club_ids, a.external_ids,
 		a.results_publication_withdrawn, a.photo_consent_given, a.extended_data_consent_given,
@@ -116,7 +129,7 @@ func ListParticipants(ctx context.Context, db DBTX, meetID string) ([]Participan
 		var a AthleteRecord
 		var birthDate, consentRecordedAt, anonymizedAt sql.NullString
 		var sex, clubs, ext string
-		if err := rows.Scan(&r.ID, &r.MeetID, &r.AthleteID, &r.Bib, &r.Version,
+		if err := rows.Scan(&r.ID, &r.MeetID, &r.AthleteID, &r.Bib, &r.Version, &r.OutOfCompetition,
 			&a.ID, &a.FirstName, &a.LastName, &birthDate, &a.BirthYear, &sex,
 			&a.Nationality, &clubs, &ext,
 			&a.Consent.ResultsPublicationWithdrawn, &a.Consent.PhotoConsentGiven, &a.Consent.ExtendedDataConsentGiven,

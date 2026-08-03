@@ -88,6 +88,17 @@ type SeriesUploadTemplate struct {
 	// NM, DQ, …) renders in place of this placeholder when the athlete has
 	// one.
 	MissingMarkPlaceholder string `json:"missingMarkPlaceholder"`
+
+	// UnrankedMissingLabel/UnrankedOutOfCompetitionLabel fill the rank and
+	// total columns of a FINAL-standings row TASK-036/DEC-016 leaves
+	// unranked, mirroring the official TAF3 convention (LV Langenthal
+	// Gesamtrangliste, 17.05.2025): "aufg." for a participant missing a
+	// series discipline entirely, "n.a." for one flagged out-of-competition
+	// (OQ-090/OQ-091). Both optional — an unset label falls back to
+	// MissingMarkPlaceholder, and a provisional (not yet complete) export
+	// never uses either since rows still rank by partial total.
+	UnrankedMissingLabel          string `json:"unrankedMissingLabel,omitempty"`
+	UnrankedOutOfCompetitionLabel string `json:"unrankedOutOfCompetitionLabel,omitempty"`
 }
 
 // ParseSeriesUploadTemplate decodes and validates a series-upload template

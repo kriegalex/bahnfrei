@@ -65,7 +65,10 @@ func (s *ResultsService) SeriesUploadExport(ctx context.Context, meetID string) 
 		return nil, "", ErrNoSeriesUploadTemplate
 	}
 
-	standings, err := s.Standings(ctx, meetID)
+	// TASK-036/DEC-016: FINAL semantics (unranked-at-bottom, the 1-point
+	// floor) once the division's series is complete, PROVISIONAL
+	// otherwise — the export never re-implements the completeness check.
+	standings, err := s.CurrentStandings(ctx, meetID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -154,21 +157,41 @@ func seriesUploadHeaders(tpl *domain.SeriesUploadTemplate, discNames []string) [
 func seriesUploadRowValues(tpl *domain.SeriesUploadTemplate, divisionCode string, r StandingRow) []any {
 	out := make([]any, 0, len(tpl.IdentityColumns)+2*len(r.Marks)+len(tpl.TrailingColumns))
 	for _, c := range tpl.IdentityColumns {
-		out = append(out, seriesUploadFieldValue(c.Field, divisionCode, r))
+		out = append(out, seriesUploadFieldValue(tpl, c.Field, divisionCode, r))
 	}
 	for _, m := range r.Marks {
 		out = append(out, seriesUploadMarkCell(tpl, m))
 		out = append(out, seriesUploadPointsCell(m))
 	}
 	for _, c := range tpl.TrailingColumns {
-		out = append(out, seriesUploadFieldValue(c.Field, divisionCode, r))
+		out = append(out, seriesUploadFieldValue(tpl, c.Field, divisionCode, r))
 	}
 	return out
 }
 
-func seriesUploadFieldValue(field domain.SeriesUploadColumnField, divisionCode string, r StandingRow) any {
+// seriesUploadUnrankedLabel is the rank/total cell text for a FINAL,
+// unranked row (TASK-036, DEC-016/OQ-020: r.Rank == 0) — the template's
+// unrankedMissingLabel/unrankedOutOfCompetitionLabel, falling back to
+// MissingMarkPlaceholder if a template leaves them unset. A PROVISIONAL
+// row is never unranked (Standings always ranks by partial total), so this
+// only ever fires against CurrentStandings' FINAL output.
+func seriesUploadUnrankedLabel(tpl *domain.SeriesUploadTemplate, r StandingRow) string {
+	label := tpl.UnrankedMissingLabel
+	if r.OutOfCompetition {
+		label = tpl.UnrankedOutOfCompetitionLabel
+	}
+	if label == "" {
+		label = tpl.MissingMarkPlaceholder
+	}
+	return label
+}
+
+func seriesUploadFieldValue(tpl *domain.SeriesUploadTemplate, field domain.SeriesUploadColumnField, divisionCode string, r StandingRow) any {
 	switch field {
 	case domain.SeriesUploadFieldRank:
+		if r.Rank == 0 {
+			return seriesUploadUnrankedLabel(tpl, r)
+		}
 		return r.Rank
 	case domain.SeriesUploadFieldBib:
 		return r.Bib
@@ -185,6 +208,9 @@ func seriesUploadFieldValue(field domain.SeriesUploadColumnField, divisionCode s
 	case domain.SeriesUploadFieldDivision:
 		return divisionCode
 	case domain.SeriesUploadFieldTotal:
+		if r.Rank == 0 {
+			return seriesUploadUnrankedLabel(tpl, r)
+		}
 		return r.Total
 	default:
 		return "" // unreachable: SeriesUploadTemplate.Validate rejects unknown fields

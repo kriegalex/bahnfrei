@@ -32,6 +32,13 @@ type CombinedStanding struct {
 	Total        int
 	Rank         int
 	Complete     bool // every discipline has a scoring result
+	// OutOfCompetition marks an athlete competing ausser Konkurrenz/hors
+	// concours (DEC-016/OQ-020 investigation of the LV Langenthal evidence's
+	// "n.a." row with every mark present — Thome Lauriane, W12,
+	// https://lvl.ch/images/resultate/2025/Gesamtrangliste_UBSKidsCup_2025.pdf):
+	// marks are still captured and shown, but the athlete never holds a
+	// numeric Rank, in provisional or final standings alike.
+	OutOfCompetition bool
 }
 
 // CombinedTieBreak names the equal-totals ranking policy a combined-events
@@ -81,38 +88,113 @@ func RankCombined(rows []CombinedStanding) []CombinedStanding {
 // (WA TR 39: equal points for any place is a tie — SYS-044/UC-013 combined
 // events). An unknown policy falls back to the UKC behaviour, matching
 // RankCombined's long-standing default.
+//
+// This is the PROVISIONAL ranking rule (UC-033 #3, DEC-016): every row
+// still ranks by its (possibly partial) total, missing disciplines
+// contributing 0 — the meet is ongoing and every athlete is temporarily
+// "incomplete" at some point, so nothing here can wait for completeness.
+// A row with OutOfCompetition set never holds a numeric Rank in either
+// mode; see FinalRankCombined for the additional FINAL-only rule (a
+// discipline missing entirely, as opposed to attempted with no valid
+// result, makes a row unranked once the division's series is complete).
 func RankCombinedWithTieBreak(rows []CombinedStanding, tieBreak CombinedTieBreak) []CombinedStanding {
 	cmp := compareCombined
 	if tieBreak == TieBreakTiesStand {
 		cmp = func(a, b CombinedStanding) int { return a.Total - b.Total }
 	}
-	out := make([]CombinedStanding, len(rows))
-	copy(out, rows)
-	for i := range out {
-		out[i].Total = 0
-		out[i].Complete = len(out[i].Performances) > 0
-		for _, p := range out[i].Performances {
-			if p.Points == nil {
-				out[i].Complete = false
-				continue
-			}
-			out[i].Total += *p.Points
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if c := cmp(out[i], out[j]); c != 0 {
-			return c > 0
-		}
-		return out[i].AthleteID < out[j].AthleteID
-	})
-	for i := range out {
-		if i > 0 && cmp(out[i-1], out[i]) == 0 {
-			out[i].Rank = out[i-1].Rank
+	var eligible, ooc []CombinedStanding
+	for _, r := range rows {
+		r.Total, r.Complete = combinedTotal(r.Performances)
+		if r.OutOfCompetition {
+			r.Rank = 0
+			ooc = append(ooc, r)
 			continue
 		}
-		out[i].Rank = i + 1
+		eligible = append(eligible, r)
 	}
-	return out
+	sort.SliceStable(eligible, func(i, j int) bool {
+		if c := cmp(eligible[i], eligible[j]); c != 0 {
+			return c > 0
+		}
+		return eligible[i].AthleteID < eligible[j].AthleteID
+	})
+	for i := range eligible {
+		if i > 0 && cmp(eligible[i-1], eligible[i]) == 0 {
+			eligible[i].Rank = eligible[i-1].Rank
+			continue
+		}
+		eligible[i].Rank = i + 1
+	}
+	sort.SliceStable(ooc, func(i, j int) bool { return ooc[i].AthleteID < ooc[j].AthleteID })
+	return append(eligible, ooc...)
+}
+
+// FinalRankCombined computes FINAL combined-event standings (UC-033 #3,
+// DEC-016/OQ-020): the official TAF3 convention observed in the LV
+// Langenthal Gesamtrangliste, 17.05.2025 (https://lvl.ch/images/resultate/
+// 2025/Gesamtrangliste_UBSKidsCup_2025.pdf). Unlike the provisional rule
+// (RankCombinedWithTieBreak), a row missing at least one discipline
+// entirely — no captured result at all, not even an invalid-attempt status
+// — is excluded from ranking and appended after every ranked row (Rank 0,
+// deterministic AthleteID order), matching the evidence's unranked
+// "aufg." rows (e.g. Joao Daniella, M14). A discipline the athlete
+// attempted but produced no valid result for (AttemptedNoValidResult) is
+// NOT "missing" here — the evidence's "ogV" rows still rank normally once
+// every other discipline is complete (e.g. Geiser Lukas, W9, rank 28 with
+// two ogV disciplines) — callers apply the scoring table's
+// NoValidAttemptFloor before calling this so such a discipline already
+// carries Points. OutOfCompetition rows are always unranked too (the
+// evidence's Thome Lauriane row: every mark present, still "n.a." —
+// OQ-090/OQ-091 track the residual investigation).
+func FinalRankCombined(rows []CombinedStanding, tieBreak CombinedTieBreak) []CombinedStanding {
+	var rankable, unranked []CombinedStanding
+	for _, r := range rows {
+		total, complete := combinedTotal(r.Performances)
+		if !r.OutOfCompetition && complete {
+			rankable = append(rankable, r)
+			continue
+		}
+		r.Total, r.Complete, r.Rank = total, complete, 0
+		unranked = append(unranked, r)
+	}
+	ranked := RankCombinedWithTieBreak(rankable, tieBreak)
+	sort.SliceStable(unranked, func(i, j int) bool { return unranked[i].AthleteID < unranked[j].AthleteID })
+	return append(ranked, unranked...)
+}
+
+// combinedTotal sums a row's known discipline points and reports whether
+// every discipline has one — the shared totals/completeness computation
+// both ranking functions apply identically.
+func combinedTotal(perf []CombinedPerformance) (total int, complete bool) {
+	complete = len(perf) > 0
+	for _, p := range perf {
+		if p.Points == nil {
+			complete = false
+			continue
+		}
+		total += *p.Points
+	}
+	return total, complete
+}
+
+// AttemptedNoValidResult reports whether status marks a discipline the
+// athlete was present for and attempted, but which produced no valid
+// result: NM/NH (field — every trial failed) or DNF (track — started, no
+// valid time), or R (retired without ever posting a valid mark). A scoring
+// table's NoValidAttemptFloor (UC-033 #3, DEC-016/OQ-020 — the official
+// "ogV" rule, 1 point in the evidenced UKC table) applies to these.
+// StatusNone (never captured) and StatusDNS (did not start) do not — those
+// are the "missing discipline" FinalRankCombined lists unranked at the
+// bottom. StatusDQ is excluded too: a disqualification is a rule
+// violation, not merely "no valid attempt", and the evidence has no DQ row
+// to confirm either treatment.
+func AttemptedNoValidResult(status QualificationStatus) bool {
+	switch status {
+	case StatusNM, StatusNH, StatusDNF, StatusR:
+		return true
+	default:
+		return false
+	}
 }
 
 // compareCombined returns >0 when a ranks ahead of b, <0 when b ranks ahead
