@@ -42,6 +42,9 @@ type Server struct {
 	// loginLimiter throttles brute-force login attempts (SYS-092, ASVS L2
 	// V2.2.1). See internal/web/ratelimit.go.
 	loginLimiter *loginRateLimiter
+	// publicResults is the per-meet public-results render cache (ADR-004
+	// read-path amendment, TASK-035/OQ-066). See publiccache.go.
+	publicResults *publicResultsCache
 }
 
 // SetPrivacy wires the TASK-023 data-subject-rights/retention service
@@ -61,11 +64,15 @@ func (s *Server) SetPrivacy(p *app.PrivacyService) *Server {
 // instance backup (SYS-084, UC-020 #3).
 func New(cfg Config, auth *app.AuthService, sess *app.SessionManager, meets *app.MeetService, results *app.ResultsService, backup *app.BackupService, cats i18n.Catalogs, bus *Bus) *Server {
 	s := &Server{cfg: cfg, auth: auth, sess: sess, meets: meets, results: results, backup: backup, cats: cats, bus: bus,
-		loginLimiter: newLoginRateLimiter(loginFailLimit, loginFailWindow)}
-	// Every committed capture write fans out to the meet's SSE topic — the
-	// capture and (later) public live pages refresh from it (UC-011 #4,
-	// SYS-071).
+		loginLimiter:  newLoginRateLimiter(loginFailLimit, loginFailWindow),
+		publicResults: newPublicResultsCache()}
+	// Every committed capture write (and consent change, SYS-103) fans out
+	// to the meet's SSE topic — the capture and public live pages refresh
+	// from it (UC-011 #4, SYS-071) — and invalidates that meet's public-
+	// results render cache (ADR-004 read-path amendment, TASK-035/OQ-066),
+	// so the very next request rebuilds instead of serving a stale render.
 	results.OnResultsChanged(func(meetID string) {
+		s.publicResults.invalidate(meetID)
 		bus.Publish("meet-"+meetID, Event{Name: "results", Data: `{"meet":"` + meetID + `"}`})
 	})
 	s.httpSrv = &http.Server{

@@ -175,7 +175,14 @@ templ publicResultsFragment(p PageData, v publicResultsView) {
 // refresh URL the live-refresh island (/static/public-live.js) reads —
 // only that section swaps on a "results" event, so the page chrome never
 // flickers.
-templ publicResultsPage(p PageData, v publicResultsView) {
+// resultsSection is the results-fragment content: normally
+// publicResultsFragment(p, v) itself, but the handler may pass a
+// pre-rendered templ.Raw(...) of the same output instead (ADR-004
+// read-path amendment, TASK-035/OQ-066's per-meet render cache) — one
+// code path either way, since the cached bytes are always exactly what
+// publicResultsFragment(p, v) would have produced (see public.go's
+// cachedPublicResults).
+templ publicResultsPage(p PageData, v publicResultsView, resultsSection templ.Component) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("public.results.title") }</h1>
 		<p>{ v.Venue } · { v.Dates }</p>
@@ -186,7 +193,7 @@ templ publicResultsPage(p PageData, v publicResultsView) {
 			data-sse-event="results"
 			data-sse-refresh={ "/m/" + v.MeetID + "/results/live" }
 		>
-			@publicResultsFragment(p, v)
+			@resultsSection
 		</section>
 		<script src="/static/public-live.js"></script>
 	}

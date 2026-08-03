@@ -4,9 +4,13 @@
 package web
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/a-h/templ"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 )
@@ -257,28 +261,67 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 	return v, nil
 }
 
-// handlePublicResults serves the full public results page (UC-017 #2).
+// cachedPublicResults resolves meetID's public-results view AND its
+// pre-rendered results-fragment HTML through the per-meet render cache
+// (ADR-004 read-path amendment, TASK-035/OQ-066), building both together
+// on a miss — shared by the full page and the live-refresh fragment (see
+// buildPublicResultsView's own doc comment: one code path for both
+// remains true, only the result may now be reused across viewers). The
+// fragment is rendered ONCE here (per cache build, not per request) from
+// a locale-only PageData (no session fields: publicResultsFragment only
+// ever reads p.T(...)), so it is safe to reuse verbatim across every
+// viewer of the same (meet, locale) regardless of their own session/CSRF
+// state; it comes back as a string specifically so callers can hand it
+// straight to templ.Raw/io.WriteString with no copy (see
+// publicResultsCacheEntry's doc comment).
+func (s *Server) cachedPublicResults(r *http.Request, meetID string) (publicResultsView, string, error) {
+	loc := localeFromContext(r.Context())
+	key := publicResultsCacheKey{meetID: meetID, locale: loc}
+	e, err := s.publicResults.getOrBuild(key, func() (publicResultsCacheEntry, error) {
+		v, err := s.buildPublicResultsView(r, meetID)
+		if err != nil {
+			return publicResultsCacheEntry{}, err
+		}
+		var buf bytes.Buffer
+		if err := publicResultsFragment(PageData{Locale: loc, Cats: s.cats}, v).Render(r.Context(), &buf); err != nil {
+			return publicResultsCacheEntry{}, err
+		}
+		return publicResultsCacheEntry{view: v, fragmentHTML: buf.String()}, nil
+	})
+	if err != nil {
+		return publicResultsView{}, "", err
+	}
+	return e.view, e.fragmentHTML, nil
+}
+
+// handlePublicResults serves the full public results page (UC-017 #2):
+// page shell rendered fresh per request (nav, login state, CSRF token —
+// all session-specific), the results section spliced in as the cached,
+// pre-rendered fragment (templ.Raw) rather than recomputed.
 func (s *Server) handlePublicResults(w http.ResponseWriter, r *http.Request) {
-	v, err := s.buildPublicResultsView(r, r.PathValue("id"))
+	v, frag, err := s.cachedPublicResults(r, r.PathValue("id"))
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
 	}
 	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("public.results.title")
-	_ = publicResultsPage(p, v).Render(r.Context(), w)
+	_ = publicResultsPage(p, v, templ.Raw(frag)).Render(r.Context(), w)
 }
 
 // handlePublicResultsLive serves just the results fragment the public
 // results page's live-refresh island swaps in on the meet's "results" SSE
 // event (UC-017 #1, SYS-071): a fresh fetch of this endpoint is what
-// proves a confirmed result reaches an already-open public page.
+// proves a confirmed result reaches an already-open public page — the
+// per-meet render cache is invalidated by that same event (server.go)
+// before any client's live-refresh fetch can land, so this never serves a
+// stale render for the update it is proving. Serves the cached string
+// directly (no per-request template walk, no copy).
 func (s *Server) handlePublicResultsLive(w http.ResponseWriter, r *http.Request) {
-	v, err := s.buildPublicResultsView(r, r.PathValue("id"))
+	_, frag, err := s.cachedPublicResults(r, r.PathValue("id"))
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	p := basePageData(r, s.cats)
-	_ = publicResultsFragment(p, v).Render(r.Context(), w)
+	_, _ = io.WriteString(w, frag)
 }
