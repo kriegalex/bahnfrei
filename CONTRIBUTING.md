@@ -44,24 +44,27 @@ preferred (ADR-001 §4). An automated licence scan gates CI.
 - **Go** ≥ 1.26 (the only hard requirement; the project builds to a single static binary).
 - **TypeScript** is used for small client-side islands only — no SPA framework, no bundler
   churn (ADR-003).
-- Build and test:
+- Build and test (quick loop):
 
 ```
 go build ./...
 go vet ./...
 go test ./...
-./scripts/check-license-headers.sh
 ```
 
-CI additionally gates on `golangci-lint` (v2, config in `.golangci.yml` — including the
-architecture dependency rules), the SYS-140 coverage thresholds
-(`scripts/check-coverage.sh`: ≥90% domain, ≥80% overall), a dependency licence allowlist,
-and `govulncheck`. To reproduce the coverage gate locally:
+- Full merge gate — the same checks CI runs, one command (run before pushing):
 
 ```
-go test -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
-./scripts/check-coverage.sh coverage.out
+./scripts/check-gate.sh            # SKIP_E2E=1 to skip the Playwright suite
 ```
+
+CI gates on the 3-OS build/test matrix (with `-shuffle=on`), `golangci-lint` (v2, pinned
+version in `ci.yml`, config in `.golangci.yml` — including the architecture dependency
+rules), `gosec`, the SYS-140 coverage thresholds (`scripts/check-coverage.sh`: ≥90%
+domain, ≥83% overall, measured with `-race -covermode=atomic -coverpkg=./...` — the gate
+script always regenerates the profile; a stale `coverage.out` lies), the design-token and
+licence-header checks, a dependency licence allowlist, `govulncheck`, TS island typecheck
++ committed-JS freshness, and the Playwright E2E suite.
 
 ## How changes land
 

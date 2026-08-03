@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Bahnfrei contributors
+#
+# Dependency freshness (SYS-141 posture): weekly PRs for Go modules, GitHub
+# Actions, and the E2E toolchain, so security bumps like GO-2026-5970
+# (x/text, 2026-08-03) arrive as reviewable PRs instead of red CI on main.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: weekly
+    # Playwright pins the browser build; bump it deliberately, alone.
+    groups:
+      e2e-dev:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@playwright/test"

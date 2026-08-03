@@ -42,10 +42,11 @@ consistent with how every other document in this repository cites IDs.
 
 1. Confirm the defect-policy gate: no known, unfixed Critical/High-severity defect
    (`docs/ops/defect-policy.md` §2).
-2. Confirm the machine-checkable gate is green on the release commit: `go build ./... && go vet
-   ./...`, `go test -race ./...`, `scripts/check-coverage.sh` (≥83% overall / ≥90% domain,
-   SYS-140), `scripts/check-license-headers.sh`, `scripts/check-style-tokens.sh`, and the
-   Playwright E2E suite (`e2e/`).
+2. Confirm the machine-checkable gate is green on the release commit: run
+   `scripts/check-gate.sh` (build, vet, lint, gosec, `-race -shuffle=on` tests with the
+   SYS-140 coverage floors — ≥83% overall / ≥90% domain, licence-header, design-token and
+   `govulncheck` checks, TS-island freshness, and the Playwright E2E suite), and verify the
+   CI run on the same commit is green.
 3. Move the `CHANGELOG.md` `[Unreleased]` section's entries under a new dated version heading.
 4. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` (annotated, signed if the maintainer's key setup
    supports it — see §4 for the current unsigned-artifact stance either way).

@@ -4,7 +4,9 @@
 # TASK-002 CI gates (SYS-140, SYS-141, ADR-001 §3–4): 3-OS build matrix,
 # lint, TS typecheck, tests + coverage thresholds, dependency licence scan,
 # vulnerability scan. Governance gates (SPDX/DCO) live in governance.yml.
-# style-conformance (TASK-032, SYS-116) is the design-token gate.
+# style-conformance (TASK-032, SYS-116) is the design-token gate; sast
+# (gosec, SYS-092, OQ-078) is the own-code security scan.
+# scripts/check-gate.sh reproduces this workflow locally — keep them in sync.
 name: ci
 
 on:
@@ -14,6 +16,12 @@ on:
 
 permissions:
   contents: read
+
+# Superseded runs on the same ref are cancelled (except on main, where every
+# push must produce a complete gate record).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-test:
@@ -29,7 +37,9 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./...
+      # -shuffle=on guards against inter-test order dependence (hidden
+      # shared state); the seed is printed on failure for reproduction.
+      - run: go test -shuffle=on ./...
 
   coverage:
     runs-on: ubuntu-latest
@@ -39,7 +49,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Test with race detector and coverage
-        run: go test -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
+        run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out -coverpkg=./... ./...
       - name: Enforce SYS-140 coverage gates
         run: ./scripts/check-coverage.sh coverage.out
 
@@ -50,9 +60,29 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      # Pinned: an unpinned "latest" turned main red twice when new linter
+      # versions landed mid-stream (2026-07-10, 2026-07-14). Bump deliberately
+      # in its own commit, fixing new findings in the same change.
+      # v2.12.2 has an SA5011 regression (t.Fatal no longer modeled as
+      # terminating, false positives on nil-guarded test code) — stay on
+      # v2.12.1 until a fixed release is verified.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.12.1
+
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Own-code security SAST (SYS-092, closes OQ-078); complements
+      # govulncheck's dependency half. Every accepted finding carries an
+      # inline justified "#nosec Gxxx -- reason". Pinned — keep in lockstep
+      # with GOSEC_VERSION in scripts/check-gate.sh.
+      - name: gosec
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.28.0 -quiet -exclude-generated ./...
 
   style-conformance:
     runs-on: ubuntu-latest
@@ -103,6 +133,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 26
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
       - name: Install E2E dependencies
         working-directory: e2e
         run: npm ci
