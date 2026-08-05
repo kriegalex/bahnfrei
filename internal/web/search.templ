@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Bahnfrei contributors
+
+package web
+
+// searchForm renders the DEC-021/TASK-038 operator roster/entries search
+// box: a plain GET form (no JS needed — progressive enhancement, matching
+// every other list filter in this app) submitting the "q" query-param back
+// to action. query is the current value (redisplayed after submit so the
+// filter survives a reload); labelKey/submitKey/clearKey name this
+// screen's localized label, submit-button and clear-link text. The input
+// is a standard labelled text control — reachable and operable
+// keyboard-only via native tab order (SYS-114), styled by base.css's
+// generic `input`/`button` selectors (docs/architecture/design-system.md
+// §2), no bespoke markup.
+templ searchForm(p PageData, action, query, labelKey, submitKey, clearKey string) {
+	<form action={ templ.URL(action) } method="get" role="search" class="search-form">
+		<label>
+			{ p.T(labelKey) }
+			<input type="search" name="q" value={ query }/>
+		</label>
+		<button type="submit">{ p.T(submitKey) }</button>
+		if query != "" {
+			<a href={ templ.URL(action) }>{ p.T(clearKey) }</a>
+		}
+	</form>
+}

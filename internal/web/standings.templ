@@ -42,8 +42,13 @@ templ rosterPage(p PageData, v rosterView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("roster.title") }</h1>
 		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
+		@searchForm(p, "/meets/"+v.MeetID+"/roster", v.Query, "roster.search.label", "roster.search.submit", "roster.search.clear")
 		if len(v.Rows) == 0 {
-			<p>{ p.T("roster.empty") }</p>
+			if v.Query != "" {
+				<p>{ p.T("roster.search.no_results", "q", v.Query) }</p>
+			} else {
+				<p>{ p.T("roster.empty") }</p>
+			}
 		} else {
 			<table>
 				<thead>

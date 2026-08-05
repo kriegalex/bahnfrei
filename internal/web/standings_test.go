@@ -201,6 +201,88 @@ func TestUC033FinalStandingsWebSurfacesSweep(t *testing.T) {
 	}
 }
 
+// TestRosterSearchFilterDEC021SYS120SYS114 covers TASK-038/DEC-021's roster
+// search box (SYS-120's "entry search" budgeted interaction, SYS-114's
+// expert-use keyboard-reachable filter): a name/bib/club query narrows the
+// roster server-side, case-insensitively, an unmatched query yields the
+// distinct "no results" state (not the "no participants at all" empty
+// state), and the empty query (the box's default) still renders the full,
+// unfiltered roster.
+func TestRosterSearchFilterDEC021SYS120SYS114(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	ctx := context.Background()
+
+	resp := postForm(t, client, base+"/meets/from-template", base+"/meets/from-template", url.Values{
+		"template": {"ubs-kids-cup"}, "date": {"2026-08-15"}, "venue": {"Le Mouret"},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	meetID := strings.TrimPrefix(loc, "/meets/")
+
+	officeActor := app.Session{AccountID: "01TEST", Username: "office", Role: app.RoleCompetitionOffice}
+	for _, in := range []app.ParticipantInput{
+		{FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Club: "LC Fribourg", Bib: "101"},
+		{FirstName: "Beat", LastName: "Meier", BirthYear: 2013, Sex: domain.SexMale, Club: "STV Bern", Bib: "202"},
+	} {
+		if _, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, in); err != nil {
+			t.Fatalf("RegisterParticipant %s: %v", in.LastName, err)
+		}
+	}
+	rosterURL := base + loc + "/roster"
+
+	// Empty query ("q" absent, and "q="): the unfiltered roster, unchanged
+	// from the pre-search behavior.
+	for _, u := range []string{rosterURL, rosterURL + "?q="} {
+		body := bodyString(t, mustGet(t, client, u))
+		if !strings.Contains(body, "Anna Muster") || !strings.Contains(body, "Beat Meier") {
+			t.Errorf("GET %s misses an unfiltered roster row: %s", u, body)
+		}
+	}
+
+	// Case-insensitive name match narrows to one row.
+	body := bodyString(t, mustGet(t, client, rosterURL+"?q=anna"))
+	if !strings.Contains(body, "Anna Muster") {
+		t.Errorf("name search misses the match: %s", body)
+	}
+	if strings.Contains(body, "Beat Meier") {
+		t.Errorf("name search leaked the non-matching row: %s", body)
+	}
+
+	// Bib match.
+	body = bodyString(t, mustGet(t, client, rosterURL+"?q=202"))
+	if !strings.Contains(body, "Beat Meier") || strings.Contains(body, "Anna Muster") {
+		t.Errorf("bib search = %s, want only Beat Meier", body)
+	}
+
+	// Club match, mixed case.
+	body = bodyString(t, mustGet(t, client, rosterURL+"?q=fribourg"))
+	if !strings.Contains(body, "Anna Muster") || strings.Contains(body, "Beat Meier") {
+		t.Errorf("club search = %s, want only Anna Muster", body)
+	}
+
+	// A query matching nobody renders the search's own "no results" state,
+	// distinct from the meet-has-no-participants-at-all empty state.
+	resp = mustGet(t, client, rosterURL+"?q=nonexistent-query")
+	body = bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET roster?q=nonexistent-query = %d, want 200", resp.StatusCode)
+	}
+	if strings.Contains(body, "Anna Muster") || strings.Contains(body, "Beat Meier") {
+		t.Errorf("no-match search leaked a row: %s", body)
+	}
+	if !strings.Contains(body, "nonexistent-query") {
+		t.Errorf("no-match search does not name the query back to the operator: %s", body)
+	}
+
+	// The search box itself is a plain, always-reachable text input (SYS-114
+	// keyboard-only operability): no JS-only affordance gates it.
+	if !strings.Contains(body, `name="q"`) {
+		t.Errorf("roster page misses the search input: %s", body)
+	}
+}
+
 // TestRosterAndStandingsRequireOfficeRole: the day-of-competition surfaces
 // are gated at competition-office level (SYS-090).
 func TestRosterAndStandingsRequireOfficeRole(t *testing.T) {

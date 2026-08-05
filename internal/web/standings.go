@@ -93,6 +93,10 @@ type rosterView struct {
 	MeetID   string
 	MeetName string
 	Rows     []rosterRowView
+	// Query is the DEC-021/TASK-038 roster search box's current value (the
+	// "q" query-param), redisplayed so the search state survives a page
+	// reload/bookmark like every other list filter in this app.
+	Query string
 }
 
 func (s *Server) rosterView(r *http.Request, meetID string) (rosterView, error) {
@@ -100,7 +104,8 @@ func (s *Server) rosterView(r *http.Request, meetID string) (rosterView, error) 
 	if err != nil {
 		return rosterView{}, err
 	}
-	v := rosterView{MeetID: detail.ID, MeetName: detail.Name}
+	q := searchQuery(r)
+	v := rosterView{MeetID: detail.ID, MeetName: detail.Name, Query: q}
 	participants, err := s.results.Participants(r.Context(), meetID)
 	if err != nil {
 		return rosterView{}, err
@@ -113,6 +118,9 @@ func (s *Server) rosterView(r *http.Request, meetID string) (rosterView, error) 
 		club := ""
 		if len(p.Athlete.ClubIDs) > 0 {
 			club = clubs[p.Athlete.ClubIDs[0]]
+		}
+		if !app.MatchesParticipantSearch(q, p.Athlete.FirstName, p.Athlete.LastName, p.Bib, club) {
+			continue
 		}
 		v.Rows = append(v.Rows, rosterRowView{
 			Bib:       p.Bib,
