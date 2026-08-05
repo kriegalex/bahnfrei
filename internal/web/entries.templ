@@ -100,6 +100,23 @@ templ entriesPage(p PageData, v entriesView) {
 				<p class="hint" id="entries-seed-hint">{ p.T("entries.hint.seed") }</p>
 				@fieldError("seed", v.IndividualForm.Errors)
 				<label>
+					{ p.T("entries.licence") }
+					<input
+						type="text"
+						name="licence"
+						value={ v.IndividualForm.Licence }
+						if v.IndividualForm.Errors.Has("licence") {
+							aria-invalid="true"
+							aria-describedby={ "entries-licence-hint " + fieldErrorID("licence") }
+						} else {
+							aria-describedby="entries-licence-hint"
+						}
+					/>
+				</label>
+				@helpIcon(p, "entries.licence")
+				<p class="hint" id="entries-licence-hint">{ p.T("entries.hint.licence") }</p>
+				@fieldError("licence", v.IndividualForm.Errors)
+				<label>
 					<input type="checkbox" name="publication_withdrawn" value="true" checked?={ v.IndividualForm.PublicationWithdrawn }/>
 					{ p.T("roster.publication_withdrawn") }
 				</label>
@@ -122,6 +139,7 @@ templ entriesPage(p PageData, v entriesView) {
 								<th>{ p.T("roster.sex") }</th>
 								<th>{ p.T("entries.event") }</th>
 								<th>{ p.T("entries.seed") }</th>
+								<th>{ p.T("entries.licence") }</th>
 								<th>{ p.T("privacy.withdrawn_col") }</th>
 							</tr>
 						</thead>
@@ -145,6 +163,7 @@ templ entriesPage(p PageData, v entriesView) {
 										</select>
 									</td>
 									<td><input type="text" name={ "bulk_seed_" + intToStr(int64(i)) }/></td>
+									<td><input type="text" name={ "bulk_licence_" + intToStr(int64(i)) } aria-label={ p.T("entries.licence") }/></td>
 									<td><input type="checkbox" name={ "bulk_publication_withdrawn_" + intToStr(int64(i)) } value="true" aria-label={ p.T("roster.publication_withdrawn") }/></td>
 								</tr>
 							}

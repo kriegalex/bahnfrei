@@ -88,6 +88,7 @@ type individualEntryFormView struct {
 	Sex                  string
 	Club                 string
 	Seed                 string
+	Licence              string
 	PublicationWithdrawn bool
 	Errors               FieldErrors
 }
@@ -297,6 +298,8 @@ func entryFlashKey(err error) string {
 		return "closed"
 	case errors.Is(err, app.ErrNotRelayEntry):
 		return "not_relay"
+	case errors.Is(err, app.ErrInvalidLicenceNo):
+		return "licence_invalid"
 	case errors.Is(err, app.ErrConflict):
 		return "conflict"
 	default:
@@ -334,6 +337,7 @@ func (s *Server) handleEntryIndividualSubmit(w http.ResponseWriter, r *http.Requ
 		Sex:                  r.FormValue("sex"),
 		Club:                 strings.TrimSpace(r.FormValue("club")),
 		Seed:                 strings.TrimSpace(r.FormValue("seed")),
+		Licence:              strings.TrimSpace(r.FormValue("licence")),
 		PublicationWithdrawn: r.FormValue("publication_withdrawn") == "true",
 	}
 
@@ -354,6 +358,11 @@ func (s *Server) handleEntryIndividualSubmit(w http.ResponseWriter, r *http.Requ
 	if form.Seed == "" {
 		errs["seed"] = p.T("entries.field_error.seed.required")
 	}
+	// DEC-023/TASK-039: the licence number is optional — only a non-empty
+	// value that fails domain.ValidLicenceNo is a field error.
+	if form.Licence != "" && !domain.ValidLicenceNo(form.Licence) {
+		errs["licence"] = p.T("entries.field_error.licence.invalid")
+	}
 	if len(errs) > 0 {
 		form.Errors = errs
 		s.renderEntriesFormError(w, r, p, meetID, form)
@@ -368,18 +377,27 @@ func (s *Server) handleEntryIndividualSubmit(w http.ResponseWriter, r *http.Requ
 		Sex:             domain.Sex(form.Sex),
 		Club:            form.Club,
 		SeedPerformance: form.Seed,
+		LicenceNo:       form.Licence,
 		// SYS-103/UC-023 (TASK-023): the entry flow collects the
 		// publication-consent choice up front, mirroring the roster form.
 		PublicationWithdrawn: form.PublicationWithdrawn,
 	}
 	if _, err := s.results.SubmitIndividualEntry(r.Context(), actor, meetID, in); err != nil {
-		// ErrSeedPerformanceRequired is the one SubmitIndividualEntry
-		// business error that names a single field; the rest (deadline
-		// passed, entry limit reached, duplicate, entries closed) are
-		// whole-form/state conditions with no one field to fix, so they
-		// keep the existing page-level flash redirect.
+		// ErrSeedPerformanceRequired/ErrInvalidLicenceNo are the
+		// SubmitIndividualEntry business errors that name a single field;
+		// the rest (deadline passed, entry limit reached, duplicate,
+		// entries closed) are whole-form/state conditions with no one
+		// field to fix, so they keep the existing page-level flash
+		// redirect. ErrInvalidLicenceNo is defense-in-depth here (SYS-011
+		// "including by direct request forgery") — the web-layer check
+		// above already catches this for a normal form submit.
 		if errors.Is(err, app.ErrSeedPerformanceRequired) {
 			form.Errors = FieldErrors{"seed": p.T("entries.field_error.seed.required")}
+			s.renderEntriesFormError(w, r, p, meetID, form)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidLicenceNo) {
+			form.Errors = FieldErrors{"licence": p.T("entries.field_error.licence.invalid")}
 			s.renderEntriesFormError(w, r, p, meetID, form)
 			return
 		}
@@ -426,6 +444,8 @@ func (s *Server) handleEntryBulkSubmit(w http.ResponseWriter, r *http.Request) {
 			Sex:             domain.Sex(r.FormValue("bulk_sex" + suffix)),
 			EventID:         r.FormValue("bulk_event" + suffix),
 			SeedPerformance: strings.TrimSpace(r.FormValue("bulk_seed" + suffix)),
+			// DEC-023/TASK-039: optional per-line licence number.
+			LicenceNo: strings.TrimSpace(r.FormValue("bulk_licence" + suffix)),
 			// SYS-103/UC-023 (TASK-023): per-line consent — per person,
 			// never per batch.
 			PublicationWithdrawn: r.FormValue("bulk_publication_withdrawn"+suffix) == "true",
