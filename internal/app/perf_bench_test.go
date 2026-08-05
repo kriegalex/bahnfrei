@@ -107,20 +107,58 @@ func TestSYS120ReferenceScaleOperatorBudgets(t *testing.T) {
 
 	t.Run("ParticipantRosterSearch", func(t *testing.T) {
 		// SYS-120 names "entry search" as an operator-visible interaction.
-		// No dedicated search/filter endpoint exists anywhere in the repo
-		// today (confirmed absent — grep for "Search" across internal/app
-		// and internal/web finds nothing): the closest existing operation
-		// an operator uses to find an entry among many is the full
-		// roster/participants list (the office roster page reads exactly
-		// this), so it stands in as the search-proxy benchmark here. If a
-		// dedicated filtered search ships later, add its own budget test
-		// alongside this one rather than replacing it.
+		// This sub-test predates DEC-021/TASK-038's dedicated filtered
+		// search (see "ParticipantSearch" below, its real budget): it
+		// stayed as the plain full-list load's own budget rather than being
+		// replaced, per its original note ("if a dedicated filtered search
+		// ships later, add its own budget test alongside this one rather
+		// than replacing it") — the unfiltered roster/bib-assignment list
+		// load is still a real operator-visible interaction in its own
+		// right (the page's first paint, before any query is typed).
 		samples := timeReps(t, 20, func() {
 			if _, err := fix.Results.Participants(ctx, lf.MeetID); err != nil {
 				t.Fatalf("Participants: %v", err)
 			}
 		})
-		assertBudget(t, "SYS-120 participant roster load (entry-search proxy)", samples, 2*time.Second)
+		assertBudget(t, "SYS-120 participant roster load (unfiltered list)", samples, 2*time.Second)
+	})
+
+	t.Run("ParticipantSearch", func(t *testing.T) {
+		// DEC-021/TASK-038's real "entry search" budget, superseding the
+		// full-roster proxy above for the actually-budgeted interaction:
+		// times the same Participants + ClubNamesFor + filter pipeline
+		// internal/web's roster and bib-assignment handlers run server-side
+		// per request (standings.go's rosterView, entries.go's bibsView),
+		// filtered by app.MatchesParticipantSearch. The query narrows
+		// SeedLargeMeet's 1,500-athlete corpus to one of its 24 synthetic
+		// clubs (~62 athletes) by club-name substring — a realistic
+		// "find my club" operator query, not a match-everything/
+		// match-nothing degenerate case.
+		const query = "Club 05"
+		samples := timeReps(t, 20, func() {
+			rows, err := fix.Results.Participants(ctx, lf.MeetID)
+			if err != nil {
+				t.Fatalf("Participants: %v", err)
+			}
+			clubNames, err := fix.Results.ClubNamesFor(ctx, rows)
+			if err != nil {
+				t.Fatalf("ClubNamesFor: %v", err)
+			}
+			matched := 0
+			for _, p := range rows {
+				club := ""
+				if len(p.Athlete.ClubIDs) > 0 {
+					club = clubNames[p.Athlete.ClubIDs[0]]
+				}
+				if app.MatchesParticipantSearch(query, p.Athlete.FirstName, p.Athlete.LastName, p.Bib, club) {
+					matched++
+				}
+			}
+			if matched == 0 || matched == len(rows) {
+				t.Fatalf("search query %q matched %d of %d participants, want a real (non-degenerate) narrowing — fixture may have changed", query, matched, len(rows))
+			}
+		})
+		assertBudget(t, "SYS-120 participant search (club-name filter)", samples, 2*time.Second)
 	})
 
 	t.Run("ResultSave", func(t *testing.T) {
