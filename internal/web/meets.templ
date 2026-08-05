@@ -216,33 +216,48 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			<strong>{ d.Status }</strong>
 		</p>
 		<p>
-			<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
+			// TASK-043 (OQ-111, SYS-090/091/114): this hub is open to
+			// competition-office sessions as well as organizers. Actions
+			// gated organize()-only in routes.go (edit, entry-standard
+			// exceptions, bibs, fees, sanctioning) are hidden behind
+			// p.CanOrganize so every link this page renders resolves for
+			// the session that sees it — office-level actions (roster,
+			// standings, officials, privacy, timing, entries, entries
+			// import/eligibility) and the public read pages render for
+			// both.
+			if p.CanOrganize {
+				<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
+			}
 			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/privacy") }>{ p.T("privacy.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/timing") }>{ p.T("timing.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/entries") }>{ p.T("entries.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
+			if p.CanOrganize {
+				<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
+			}
 			<a href={ templ.URL("/meets/" + d.ID + "/entries/import") }>{ p.T("import.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
+			if p.CanOrganize {
+				<a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a> ·
+				<a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a> ·
+				<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
+			}
 			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/startlists") }>{ p.T("public.nav.startlists") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/results") }>{ p.T("public.nav.results") }</a>
 		</p>
 		<p><small>{ d.ResultsPositioningLabel }</small></p>
-		if d.Draft {
+		if d.Draft && p.CanOrganize {
 			<form action={ templ.URL("/meets/" + d.ID + "/publish") } method="post" class="inline-form">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 				<input type="hidden" name="version" value={ intToStr(d.Version) }/>
 				<button type="submit">{ p.T("meet.publish") }</button>
 			</form>
 		}
-		if !d.Archived {
+		if !d.Archived && p.CanOrganize {
 			// OQ-074 (TASK-034): archive is destructive-enough (no unarchive
 			// action exists) to warrant a confirm step, but reversible-in-
 			// severity compared to erasure/purge, so a plain GET confirm
@@ -299,7 +314,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 				</tbody>
 			</table>
 		}
-		if !d.Archived {
+		if !d.Archived && p.CanOrganize {
 			<h3>{ p.T("programme.add.title") }</h3>
 			<form action={ templ.URL("/meets/" + d.ID + "/events") } method="post">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -357,7 +372,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 						<th scope="col">{ p.T("timetable.round") }</th>
 						<th scope="col">{ p.T("timetable.scheduled_at") }</th>
 						<th scope="col">{ p.T("timetable.location") }</th>
-						if !d.Archived {
+						if !d.Archived && p.CanOrganize {
 							<th scope="col">{ p.T("timetable.schedule") }</th>
 						}
 					</tr>
@@ -370,7 +385,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 							<td>{ u.Round }</td>
 							<td>{ u.When }</td>
 							<td>{ u.Location }</td>
-							if !d.Archived {
+							if !d.Archived && p.CanOrganize {
 								<td>
 									<form action={ templ.URL("/meets/" + d.ID + "/units/" + u.UnitID + "/schedule") } method="post" class="inline-form">
 										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -385,7 +400,7 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 					}
 				</tbody>
 			</table>
-			if !d.Archived {
+			if !d.Archived && p.CanOrganize {
 				<form action={ templ.URL("/meets/" + d.ID + "/timetable/publish") } method="post">
 					<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 					<button type="submit">{ p.T("timetable.publish") }</button>

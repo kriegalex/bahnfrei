@@ -74,12 +74,28 @@ func (s *Server) routes() http.Handler {
 	organize := func(h http.HandlerFunc) http.HandlerFunc {
 		return requireRole(app.RoleMeetOrganizer, s.cats, h)
 	}
+	// office is declared here — ahead of the roster/standings routes it
+	// originally guarded — so the meet-detail hub route just below can use
+	// it too (TASK-043).
+	office := func(h http.HandlerFunc) http.HandlerFunc {
+		return requireRole(app.RoleCompetitionOffice, s.cats, h)
+	}
 	mux.HandleFunc("GET /meets", organize(s.handleMeetsList))
 	mux.HandleFunc("GET /meets/new", organize(s.handleMeetNewForm))
 	mux.HandleFunc("POST /meets", organize(s.handleMeetCreate))
 	mux.HandleFunc("GET /meets/from-template", organize(s.handleTemplateMeetForm))
 	mux.HandleFunc("POST /meets/from-template", organize(s.handleTemplateMeetCreate))
-	mux.HandleFunc("GET /meets/{id}", organize(s.handleMeetDetail))
+	// The meet-detail hub (TASK-043, OQ-111, SYS-090/091/114) is opened to
+	// competition-office sessions: it is the only link target the
+	// roster/entries/reconciliation pages' back-to-meet link offers, and
+	// the only route reaching check-in, seeding, timing exchange, entries
+	// import/eligibility and privacy. meetDetailPage/meetDetailView
+	// (meets.templ/meets.go) filter the rendered action list on
+	// p.CanOrganize so organizer-only actions (edit, archive, publish,
+	// sanctioning, bib/fee/exception management, programme/timetable
+	// mutation) stay hidden for an office session; their POST/GET routes
+	// below remain organize()-gated, unweakened.
+	mux.HandleFunc("GET /meets/{id}", office(s.handleMeetDetail))
 	mux.HandleFunc("GET /meets/{id}/edit", organize(s.handleMeetEditForm))
 	mux.HandleFunc("POST /meets/{id}/edit", organize(s.handleMeetEditSubmit))
 	// OQ-074: plain GET confirm sub-page (a status change, not data
@@ -116,10 +132,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /meets/{id}/fees/export", organize(s.handleFeeExport))
 
 	// Roster & standings (UC-033): competition-office level and above —
-	// day-of-competition surfaces (SYS-090).
-	office := func(h http.HandlerFunc) http.HandlerFunc {
-		return requireRole(app.RoleCompetitionOffice, s.cats, h)
-	}
+	// day-of-competition surfaces (SYS-090). office is declared above,
+	// alongside organize.
 	mux.HandleFunc("GET /meets/{id}/roster", office(s.handleRoster))
 	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))

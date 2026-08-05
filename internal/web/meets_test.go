@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -472,5 +473,183 @@ func TestSanctioningSummaryUC001_5Web(t *testing.T) {
 	_ = bodyString(t, resp)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("sanctioning for unknown meet = %d, want 404", resp.StatusCode)
+	}
+}
+
+// hrefRE pulls every anchor target out of rendered HTML, for the TASK-043
+// link-walk test below.
+var hrefRE = regexp.MustCompile(`href="([^"]*)"`)
+
+// hasLink reports whether body renders an <a>/<form> pointing at exactly
+// path (as opposed to a same-prefix path, e.g. "/meets/X/entries" vs.
+// "/meets/X/entries/exceptions" — a plain strings.Contains on the bare path
+// would false-positive on the longer one).
+func hasLink(body, path string) bool {
+	return strings.Contains(body, `href="`+path+`"`) || strings.Contains(body, `action="`+path+`"`)
+}
+
+// TestMeetDetailHubOfficeAccessTASK043 covers OQ-111/TASK-043 (SYS-090/091,
+// SYS-114): the meet-detail hub — previously organizer()-only, so a
+// competition-office session 403ed out of its own highest-frequency
+// surfaces (check-in, seeding, timing exchange, entries import/eligibility,
+// privacy) — now opens to office sessions with a capability-filtered
+// action list. Organizer-only actions (edit, archive, publish, sanctioning,
+// bib/fee/exception management, programme/timetable mutation) stay hidden
+// for office and their underlying routes stay organizer-gated (proved by
+// TestMeetEditConflictAndArchive/TestMeetsRequireOrganizerRole, unmodified
+// by this task). Field-official and entry-submitter sessions keep today's
+// behavior (403), unaffected by the office-level widening.
+func TestMeetDetailHubOfficeAccessTASK043(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base) // bootstrap admin, meet-organizer-capable
+	meetID := createUCMeet(t, client, base)
+	meetPage := base + "/meets/" + meetID
+
+	// A programme entry with a final round populates the checkin/seeding
+	// (office-permitted) row and the timetable's unit-scheduling
+	// (organizer-only) row, so both are exercised below.
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"100m"}, "categories": {"U16 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+
+	d, err := deps.meets.Meet(context.Background(), meetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Programme) != 1 || len(d.Programme[0].Rounds) != 1 {
+		t.Fatalf("fixture programme = %+v, want one event with one round", d.Programme)
+	}
+	eventID := d.Programme[0].ID
+	roundID := d.Programme[0].Rounds[0].ID
+	if len(d.Units) != 1 {
+		t.Fatalf("fixture units = %+v, want one unit", d.Units)
+	}
+	unitID := d.Units[0].UnitID
+
+	organizerOnlyLinks := []string{
+		meetIDPath(meetID, "/edit"),
+		meetIDPath(meetID, "/archive/confirm"),
+		meetIDPath(meetID, "/entries/exceptions"),
+		meetIDPath(meetID, "/bibs"),
+		meetIDPath(meetID, "/fees"),
+		meetIDPath(meetID, "/sanctioning"),
+		meetIDPath(meetID, "/events"),
+		meetIDPath(meetID, "/units/"+unitID+"/schedule"),
+		meetIDPath(meetID, "/timetable/publish"),
+	}
+	officePermittedLinks := []string{
+		meetIDPath(meetID, "/roster"),
+		meetIDPath(meetID, "/standings"),
+		meetIDPath(meetID, "/officials"),
+		meetIDPath(meetID, "/privacy"),
+		meetIDPath(meetID, "/timing"),
+		meetIDPath(meetID, "/entries"),
+		meetIDPath(meetID, "/entries/import"),
+		meetIDPath(meetID, "/entries/eligibility"),
+		meetIDPath(meetID, "/events/"+eventID+"/checkin"),
+		meetIDPath(meetID, "/events/"+eventID+"/rounds/"+roundID+"/seeding"),
+	}
+
+	// --- Organizer view: unchanged — every action present. ---
+	organizerBody := bodyString(t, mustGet(t, client, meetPage))
+	for _, path := range append(append([]string{}, organizerOnlyLinks...), officePermittedLinks...) {
+		if !hasLink(organizerBody, path) {
+			t.Errorf("organizer hub missing %q (TASK-043 must leave the organizer view unchanged)", path)
+		}
+	}
+
+	// --- Provision office/field-official/entry-submitter accounts. ---
+	createAccountWeb(t, client, base, "office1", "competition_office")
+	createAccountWeb(t, client, base, "fo1", "field_official")
+	createAccountWeb(t, client, base, "sub1", "entry_submitter")
+
+	// Field-official and entry-submitter sessions keep today's behavior:
+	// still below the office floor the hub now requires, still 403.
+	for _, cred := range []string{"fo1", "sub1"} {
+		logout(t, client, base)
+		login(t, client, base, cred, "s3cret-passphrase")
+		resp := mustGet(t, client, meetPage)
+		_ = bodyString(t, resp)
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s GET /meets/%s = %d, want 403 (unchanged floor)", cred, meetID, resp.StatusCode)
+		}
+	}
+
+	// --- Office session: hub opens, capability-filtered. ---
+	logout(t, client, base)
+	login(t, client, base, "office1", "s3cret-passphrase")
+
+	resp = mustGet(t, client, meetPage)
+	officeBody := bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("office GET /meets/%s = %d, want 200 (TASK-043, OQ-111)", meetID, resp.StatusCode)
+	}
+
+	for _, path := range organizerOnlyLinks {
+		if hasLink(officeBody, path) {
+			t.Errorf("office hub renders organizer-only action %q — authz weakened (TASK-043)", path)
+		}
+	}
+	for _, path := range officePermittedLinks {
+		if !hasLink(officeBody, path) {
+			t.Errorf("office hub missing office-permitted action %q", path)
+		}
+	}
+
+	// --- Link-walk: every href the office hub renders must resolve
+	// non-403 for the office session (the row's stated acceptance
+	// criterion — not just the hub's own 200). ---
+	walked := 0
+	for _, m := range hrefRE.FindAllStringSubmatch(officeBody, -1) {
+		href := m[1]
+		if !strings.HasPrefix(href, "/meets/") && !strings.HasPrefix(href, "/m/") {
+			continue
+		}
+		walked++
+		resp := mustGet(t, client, base+href)
+		_ = bodyString(t, resp)
+		if resp.StatusCode == http.StatusForbidden {
+			t.Errorf("office session: rendered link %q resolves 403", href)
+		}
+	}
+	if walked == 0 {
+		t.Fatal("link-walk found no /meets or /m links to check — test fixture broken")
+	}
+}
+
+// meetIDPath builds a /meets/{id}{suffix} path, matching how meetDetailPage
+// (meets.templ) builds its hrefs.
+func meetIDPath(meetID, suffix string) string {
+	return "/meets/" + meetID + suffix
+}
+
+// TestRosterBackToMeetOfficeSessionTASK043 is the exact TASK-042/OQ-111
+// repro: an office session lands on the roster page (its office-dashboard
+// entry point), follows the page's "back to meet" link, and must land on
+// the meet-detail hub rather than a 403 — the link (roster.back_to_meet)
+// has always pointed at /meets/{id}; the bug was that route being
+// organizer()-only.
+func TestRosterBackToMeetOfficeSessionTASK043(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+
+	createAccountWeb(t, client, base, "office2", "competition_office")
+	logout(t, client, base)
+	login(t, client, base, "office2", "s3cret-passphrase")
+
+	rosterBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/roster"))
+	backLink := "/meets/" + meetID
+	if !hasLink(rosterBody, backLink) {
+		t.Fatalf("roster page missing roster.back_to_meet link to %q", backLink)
+	}
+
+	resp := mustGet(t, client, base+backLink)
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("office session following roster.back_to_meet = %d, want 200 (TASK-042/OQ-111 repro)", resp.StatusCode)
 	}
 }
