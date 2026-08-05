@@ -357,6 +357,7 @@ templ bibsPage(p PageData, v bibsView) {
 			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a> ·
 			<a href={ templ.URL("/meets/" + v.MeetID + "/bibs.pdf") }>{ p.T("bibs.printable") }</a>
 		</p>
+		@searchForm(p, "/meets/"+v.MeetID+"/bibs", v.Query, "bibs.search.label", "bibs.search.submit", "bibs.search.clear")
 		if len(v.Clubs) > 0 {
 			<h2>{ p.T("bibs.bulk.title") }</h2>
 			<form action={ templ.URL("/meets/" + v.MeetID + "/bibs/bulk") } method="post">
@@ -374,7 +375,11 @@ templ bibsPage(p PageData, v bibsView) {
 			</form>
 		}
 		if len(v.Rows) == 0 {
-			<p>{ p.T("bibs.empty") }</p>
+			if v.Query != "" {
+				<p>{ p.T("bibs.search.no_results", "q", v.Query) }</p>
+			} else {
+				<p>{ p.T("bibs.empty") }</p>
+			}
 		} else {
 			<div class="table-scroll">
 				<table>

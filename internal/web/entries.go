@@ -122,6 +122,11 @@ type bibsView struct {
 	MeetName string
 	Rows     []bibRowView
 	Clubs    []clubOptionView
+	// Query is the DEC-021/TASK-038 search box's current value (the "q"
+	// query-param) — filters Rows only; Clubs always lists every club in
+	// the meet regardless of search, since the bulk-assign dropdown needs
+	// the full set.
+	Query string
 }
 
 type clubFeeRowView struct {
@@ -538,7 +543,8 @@ func (s *Server) bibsView(r *http.Request, meetID string) (bibsView, error) {
 	if err != nil {
 		return bibsView{}, err
 	}
-	v := bibsView{MeetID: detail.ID, MeetName: detail.Name}
+	q := searchQuery(r)
+	v := bibsView{MeetID: detail.ID, MeetName: detail.Name, Query: q}
 	seen := map[string]bool{}
 	for _, p := range participants {
 		club := ""
@@ -549,6 +555,9 @@ func (s *Server) bibsView(r *http.Request, meetID string) (bibsView, error) {
 				seen[id] = true
 				v.Clubs = append(v.Clubs, clubOptionView{ID: id, Name: club})
 			}
+		}
+		if !app.MatchesParticipantSearch(q, p.Athlete.FirstName, p.Athlete.LastName, p.Bib, club) {
+			continue
 		}
 		v.Rows = append(v.Rows, bibRowView{
 			ParticipantID: p.ID, Version: intToStr(p.Version), Bib: p.Bib,

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kriegalex/bahnfrei/internal/app"
+	"github.com/kriegalex/bahnfrei/internal/domain"
 )
 
 // publishMeetWeb drives the publish action on a freshly created meet — its
@@ -561,6 +562,68 @@ func TestBibsPDFDownloadSYS018UC006_1Web(t *testing.T) {
 	_ = anon.Body.Close()
 	if anon.StatusCode != http.StatusForbidden {
 		t.Errorf("anonymous bibs.pdf GET = %d, want 403 (SYS-090)", anon.StatusCode)
+	}
+}
+
+// TestBibsSearchFilterDEC021SYS120SYS114 covers TASK-038/DEC-021's search
+// box on the bib-assignment list (the second "operator roster and entries
+// list" DEC-021 names): a name/bib/club query filters Rows server-side,
+// while the bulk-assign club dropdown keeps listing every club regardless
+// of the search — narrowing the assignment worklist must never hide a club
+// from the bulk-assign control.
+func TestBibsSearchFilterDEC021SYS120SYS114(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	ctx := context.Background()
+
+	resp := postForm(t, client, base+"/meets/from-template", base+"/meets/from-template", url.Values{
+		"template": {"ubs-kids-cup"}, "date": {"2026-08-15"}, "venue": {"Le Mouret"},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	meetID := strings.TrimPrefix(loc, "/meets/")
+
+	officeActor := app.Session{AccountID: "01TEST", Username: "office", Role: app.RoleCompetitionOffice}
+	for _, in := range []app.ParticipantInput{
+		{FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Club: "LC Fribourg", Bib: "101"},
+		{FirstName: "Beat", LastName: "Meier", BirthYear: 2013, Sex: domain.SexMale, Club: "STV Bern", Bib: "202"},
+	} {
+		if _, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, in); err != nil {
+			t.Fatalf("RegisterParticipant %s: %v", in.LastName, err)
+		}
+	}
+	bibsURL := base + loc + "/bibs"
+
+	// Unfiltered by default.
+	body := bodyString(t, mustGet(t, client, bibsURL))
+	for _, want := range []string{"Anna Muster", "Beat Meier", "LC Fribourg", "STV Bern"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("unfiltered bibs page misses %q: %s", want, body)
+		}
+	}
+
+	// A club-name search (case-insensitive) narrows Rows to the one match,
+	// but the bulk-assign club dropdown still offers both clubs.
+	body = bodyString(t, mustGet(t, client, bibsURL+"?q=bern"))
+	if !strings.Contains(body, "Beat Meier") || strings.Contains(body, "Anna Muster") {
+		t.Errorf("bibs club search = %s, want only Beat Meier", body)
+	}
+	if !strings.Contains(body, "LC Fribourg") {
+		t.Errorf("bibs club search narrowed the bulk-assign club dropdown, want LC Fribourg still offered: %s", body)
+	}
+
+	// A query matching nobody renders the search's own "no results" state.
+	resp = mustGet(t, client, bibsURL+"?q=nonexistent-query")
+	body = bodyString(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET bibs?q=nonexistent-query = %d, want 200", resp.StatusCode)
+	}
+	if strings.Contains(body, "Anna Muster") || strings.Contains(body, "Beat Meier") {
+		t.Errorf("no-match bibs search leaked a row: %s", body)
+	}
+	if !strings.Contains(body, "nonexistent-query") {
+		t.Errorf("no-match bibs search does not name the query back to the operator: %s", body)
 	}
 }
 
