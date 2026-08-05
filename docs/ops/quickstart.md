@@ -26,15 +26,22 @@ sha256sum -c checksums.txt --ignore-missing        # Linux/macOS (macOS: shasum 
 Make it executable (Linux/macOS) and run it — see step 2. There is nothing to install: the binary
 is the whole application (ADR-002/ADR-003 — embedded assets, pure-Go SQLite, no runtime to set up).
 
-**Option B — container image.** Requires Docker (or Podman):
+**Option B — container image.** Requires Docker (or Podman). Images publish to GHCR
+(`docs/ops/release-process.md` §5), signed keyless with cosign in CI — verify the image against
+the release tag before running it (exact command and the Gatekeeper/SmartScreen equivalent for
+unsigned binaries are in `docs/ops/release-process.md` §4):
 
 ```
-docker pull ghcr.io/kriegalex/bahnfrei:<version>   # publication target: OQ-086 (undecided for 0.1)
+cosign verify ghcr.io/kriegalex/bahnfrei:<version> \
+  --certificate-identity "https://github.com/kriegalex/bahnfrei/.github/workflows/release.yml@refs/tags/v<version>" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+docker pull ghcr.io/kriegalex/bahnfrei:<version>
 docker run -d --name bahnfrei -p 8443:8443 -v bahnfrei-data:/data ghcr.io/kriegalex/bahnfrei:<version>
 ```
 
-Until OQ-086 (which registry, if any) is resolved, build the image locally instead:
-`docker build -t bahnfrei .` then `docker run -d --name bahnfrei -p 8443:8443 -v bahnfrei-data:/data bahnfrei`.
+Building the image locally instead (`docker build -t bahnfrei .` then `docker run -d --name
+bahnfrei -p 8443:8443 -v bahnfrei-data:/data bahnfrei`) remains a valid alternative to pulling from
+GHCR.
 
 **Option C — build from source.** Requires Go ≥ 1.26:
 
