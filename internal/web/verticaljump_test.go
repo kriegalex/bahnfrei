@@ -345,6 +345,111 @@ func TestVerticalCaptureTrialCorrectionRequiredWeb(t *testing.T) {
 	}
 }
 
+// TestVerticalCaptureCorrectionFlowSYS046SYS047UC015Web mirrors
+// TestCaptureFieldCorrectionFlowSYS046SYS047UC015Web for the
+// height-progression grid (TASK-040/DEC-024): before announcement no
+// protest banner/correction notice render; once announced, the protest
+// banner and correction notice appear, per-trial cells turn read-only, plain
+// trial capture is rejected, and the row's settled-level correction form
+// (reason required) lands a corrected height.
+func TestVerticalCaptureCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "capture.protest.announce") && !strings.Contains(body, "Resultate publizieren") {
+		t.Error("office session must see the announce action before the unit is announced")
+	}
+	if strings.Contains(body, "capture-correction-notice") {
+		t.Error("an unannounced vertical unit must not show the correction notice")
+	}
+
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60", "1.65"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("configure heights = %d, want 303", resp.StatusCode)
+	}
+
+	body = bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {athletes["1"]}, "height": {"0"}, "seq": {"1"}, "value": {"o"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("save trial = %d, want 303", resp.StatusCode)
+	}
+
+	resp = postForm(t, client, unitURL, unitURL+"/announce", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("announce = %d, want 303", resp.StatusCode)
+	}
+
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "Provisorisch") {
+		t.Error("page must show the provisional protest-clock banner after announcing (UC-015 #1)")
+	}
+	if !strings.Contains(body, "capture-correction-notice") {
+		t.Error("an announced vertical unit must show the correction notice")
+	}
+	if strings.Contains(body, `action="`+unitURL+`/vertical-trial"`) {
+		t.Error("per-trial vertical forms must not render once the unit is announced")
+	}
+	if !strings.Contains(body, ">NM<") {
+		t.Error("the vertical correction status select must offer NM (no cleared height)")
+	}
+
+	// Plain trial capture is rejected once announced (UC-015 #2 boundary).
+	resp = postForm(t, client, unitURL, unitURL+"/vertical-trial", url.Values{
+		"athlete": {athletes["2"]}, "height": {"0"}, "seq": {"1"}, "value": {"o"}, "version": {"0"},
+	})
+	blocked := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("post-announcement /vertical-trial = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(blocked, "bereits publiziert") {
+		t.Error("blocked vertical capture must explain a correction is required")
+	}
+
+	// A correction without a reason is rejected, the row's just-typed height
+	// preserved.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["1"]}, "time": {"1.65"},
+	})
+	noReason := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("vertical correction without reason = %d, want 422", resp.StatusCode)
+	}
+	reasonFieldID := "reason-" + athletes["1"]
+	for _, want := range []string{
+		`aria-invalid="true"`,
+		`id="` + reasonFieldID + `-error"`,
+		`value="1.65"`,
+	} {
+		if !strings.Contains(noReason, want) {
+			t.Errorf("vertical correction-without-reason re-render missing %q: %s", want, noReason)
+		}
+	}
+
+	// A reasoned correction succeeds and the corrected height shows.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["1"]}, "time": {"1.65"}, "reason": {"bar was mis-set on the recorded clearance"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("reasoned vertical correction = %d, want 303", resp.StatusCode)
+	}
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "1.65") {
+		t.Errorf("corrected vertical mark not shown on the page: %q missing", "1.65")
+	}
+}
+
 // TestVerticalCaptureSheetPDFWeb covers handleVerticalCaptureSheetPDF (0%
 // baseline coverage): its own height-column PDF, distinct from
 // captureSheetDocument's trial-column shape for horizontal/track units.

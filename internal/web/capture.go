@@ -94,6 +94,17 @@ func rowFieldKey(field, athleteID string) string {
 	return field + "-" + athleteID
 }
 
+// fieldCorrectionStatuses is the settled-level correction status options
+// shared by the horizontal grid (fieldGrid) and the vertical grid
+// (verticaljump.templ's verticalGrid) once a unit is announced
+// (TASK-040/DEC-024): the CR 25 capture vocabulary (domain.captureStatuses)
+// minus nothing — unlike TrackStatuses, field/vertical corrections also
+// offer NM ("no mark"/no cleared height, every attempt fouled or passed),
+// the one capture status that never applies to a timed race.
+func fieldCorrectionStatuses() []string {
+	return []string{string(domain.StatusDNS), string(domain.StatusDNF), string(domain.StatusDQ), string(domain.StatusNM)}
+}
+
 type standingRowView2 struct {
 	Rank   string // "" for unranked rows
 	Name   string
@@ -136,6 +147,11 @@ type captureView struct {
 	// Track form state (UC-010 subset).
 	TrackTimings  []string
 	TrackStatuses []string
+	// FieldStatuses is the correction-row status options for horizontal
+	// field units (TASK-040/DEC-024): DNS/DNF/DQ plus NM ("no mark" — every
+	// attempt fouled/passed), the one CR 25 capture status track units never
+	// offer (fieldCorrectionStatuses).
+	FieldStatuses []string
 	// CurrentWind is the unit's stored per-race wind reading (SYS-040,
 	// UC-010 #4), "" when unset; only meaningful when WindRelevant.
 	CurrentWind string
@@ -198,6 +214,7 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 		CutTo:           uc.Config.CutTo,
 		TrackTimings:    []string{string(domain.TimingManual), string(domain.TimingElectronic)},
 		TrackStatuses:   []string{string(domain.StatusDNS), string(domain.StatusDNF), string(domain.StatusDQ)},
+		FieldStatuses:   fieldCorrectionStatuses(),
 		TrackFormAction: trackAction,
 	}
 	if actor, ok := sessionFromContext(r.Context()); ok {
@@ -457,6 +474,12 @@ func (s *Server) handleCaptureAttempt(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, app.ErrUnitNotAssigned):
 			renderForbidden(w, r, s.cats)
+		case errors.Is(err, app.ErrCorrectionRequired):
+			// TASK-040/DEC-024: once the grid shows the correction UI, its
+			// "already published" flash must name the correction flow, same
+			// as the track form and the vertical grid — a plain "invalid"
+			// flash here would be misleading (the value was well-formed).
+			s.renderCaptureError(w, r, meetID, unitID, "capture.error.correction_required", "")
 		case errors.As(err, &conflict):
 			s.renderCaptureError(w, r, meetID, unitID, "capture.error.conflict", conflict.Current.Display())
 		default:
@@ -524,21 +547,49 @@ func (s *Server) handleCaptureCorrect(w http.ResponseWriter, r *http.Request) {
 		p := basePageData(r, s.cats)
 		switch {
 		case errors.Is(err, app.ErrCorrectionReasonRequired):
-			s.renderCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in,
+			s.renderCorrectionFieldError(w, r, p, meetID, unitID, athleteID, in,
 				FieldErrors{rowFieldKey("reason", athleteID): p.T("capture.field_error.reason.required")})
 		case errors.Is(err, app.ErrEscalationRequired):
-			s.renderCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in,
+			s.renderCorrectionFieldError(w, r, p, meetID, unitID, athleteID, in,
 				FieldErrors{rowFieldKey("escalation", athleteID): p.T("capture.field_error.escalation.required")})
 		default:
 			if _, forbidden := err.(app.ErrForbidden); forbidden {
 				renderForbidden(w, r, s.cats)
 				return
 			}
-			s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+			s.renderCaptureErrorForUnit(w, r, meetID, unitID, "capture.error.invalid", "")
 		}
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// renderCorrectionFieldError re-renders the correction target's page with
+// one athlete's just-submitted (and rejected) correction preserved on their
+// row, alongside its field-level error — dispatching to the
+// family-appropriate grid (track/horizontal's capturePage vs. the
+// vertical-jump page) since UC-015's correction flow now spans all three
+// families (TASK-040/DEC-024).
+func (s *Server) renderCorrectionFieldError(w http.ResponseWriter, r *http.Request, p PageData, meetID, unitID, athleteID string, in app.CorrectionInput, errs FieldErrors) {
+	if disc, err := s.results.UnitDiscipline(r.Context(), meetID, unitID); err == nil && disc.Family == domain.FamilyFieldVertical {
+		s.renderVerticalCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in, errs)
+		return
+	}
+	s.renderCaptureCorrectionError(w, r, p, meetID, unitID, athleteID, in, errs)
+}
+
+// renderCaptureErrorForUnit is renderCaptureError's family-aware dispatcher
+// (TASK-040): a correction rejected for a reason not attributable to one
+// field (e.g. an unparseable mark) must re-render the vertical-jump page's
+// own shape for a vertical unit, not the track/horizontal capturePage — the
+// two families since captureView/verticalCaptureView build materially
+// different views.
+func (s *Server) renderCaptureErrorForUnit(w http.ResponseWriter, r *http.Request, meetID, unitID, key, arg string) {
+	if disc, err := s.results.UnitDiscipline(r.Context(), meetID, unitID); err == nil && disc.Family == domain.FamilyFieldVertical {
+		s.renderVerticalCaptureError(w, r, meetID, unitID, key, arg)
+		return
+	}
+	s.renderCaptureError(w, r, meetID, unitID, key, arg)
 }
 
 // renderCaptureCorrectionError re-renders the capture grid with one

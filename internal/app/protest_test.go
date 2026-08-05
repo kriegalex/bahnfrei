@@ -328,6 +328,176 @@ func TestCorrectFieldResultSYS046UC015_2(t *testing.T) {
 	}
 }
 
+// TestCorrectVerticalResultSYS046UC015_2 proves corrections also work for
+// vertical field units at the settled-result granularity (TASK-040/DEC-024
+// widened OQ-036's original track+horizontal scope): a corrected height
+// applies, re-announces, and further trial capture stays blocked exactly
+// like TestCorrectFieldResultSYS046UC015_2's horizontal case.
+func TestCorrectVerticalResultSYS046UC015_2(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec, unitID := verticalMeet(t, meets)
+	anna := registerAthlete(t, results, rec.ID, "Anna", "Muster", domain.SexFemale, 1998)
+	if _, err := results.SetVerticalHeights(ctx, office, rec.ID, unitID, VerticalHeightsInput{
+		Heights: []string{"1.60", "1.65"},
+	}); err != nil {
+		t.Fatalf("SetVerticalHeights: %v", err)
+	}
+	vTrial(t, results, rec.ID, unitID, anna, 0, 1, domain.StatusO)
+
+	if _, err := results.AnnounceUnitResults(ctx, office, rec.ID, unitID); err != nil {
+		t.Fatalf("AnnounceUnitResults: %v", err)
+	}
+	// Further trial capture is blocked once announced (mirrors the
+	// horizontal-field/track boundary).
+	if _, err := results.SaveVerticalTrial(ctx, fieldOfficial, rec.ID, unitID, VerticalTrialInput{
+		AthleteID: anna, HeightIdx: 1, Seq: 1, Kind: domain.StatusO,
+	}); !errors.Is(err, ErrCorrectionRequired) {
+		t.Fatalf("post-announcement vertical capture = %v, want ErrCorrectionRequired", err)
+	}
+
+	corrected, err := results.CorrectResult(ctx, office, rec.ID, unitID, anna, CorrectionInput{
+		Mark: "1.65", Reason: "bar was mis-set on the recorded clearance",
+	})
+	if err != nil {
+		t.Fatalf("CorrectResult (vertical): %v", err)
+	}
+	if corrected.Mark != "1.65" {
+		t.Errorf("corrected vertical mark = %q, want 1.65", corrected.Mark)
+	}
+
+	// A correction without a reason is rejected, same as every other family.
+	if _, err := results.CorrectResult(ctx, office, rec.ID, unitID, anna, CorrectionInput{
+		Mark: "1.70",
+	}); !errors.Is(err, ErrCorrectionReasonRequired) {
+		t.Fatalf("vertical correction without reason = %v, want ErrCorrectionReasonRequired", err)
+	}
+}
+
+// TestFieldStandingsReflectCorrectionSYS046SYS047UC015_2 is the regression
+// this task's e2e run caught (TASK-040/DEC-024): the capture page's own
+// live unit standings (fieldStandings, distinct from the meet-wide
+// CurrentStandings which already reads `results` directly) used to rank
+// and display purely from the raw attempt series — a settled-level
+// correction (which deliberately does not rewrite that series, OQ-036)
+// never showed up there, so UC-015 #2's "placings ... reflect the change"
+// silently failed for horizontal field units even though the settled
+// `results` row itself, the grid's own result column, and audit all
+// updated correctly. Proves both the mark-override path (a corrected mark
+// changes the ranking, not just the display) and the status-override path
+// (a corrected DNS drops the athlete to unranked with the corrected
+// status, not whatever the raw attempts implied).
+func TestFieldStandingsReflectCorrectionSYS046SYS047UC015_2(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	unitID := unitOf(t, results, meets, rec.ID, "ZoneLJ")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	bea := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Bea", LastName: "Beispiel", BirthYear: 2014, Sex: domain.SexFemale, Bib: "102",
+	})
+	clara := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Clara", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "103",
+	})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: anna.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.42"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: bea.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.50"})
+	fieldAttempt(t, results, rec.ID, unitID, FieldAttemptInput{AthleteID: clara.AthleteID, Seq: 1, Kind: domain.AttemptValid, Mark: "3.20"})
+
+	// Bea leads before any correction.
+	before, err := results.UnitCapture(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitCapture (before): %v", err)
+	}
+	if len(before.Standings) == 0 || before.Standings[0].AthleteID != bea.AthleteID {
+		t.Fatalf("pre-correction standings = %+v, want Bea leading with 3.50", before.Standings)
+	}
+
+	if _, err := results.AnnounceUnitResults(ctx, office, rec.ID, unitID); err != nil {
+		t.Fatalf("AnnounceUnitResults: %v", err)
+	}
+
+	// Correcting Anna's mark past Bea's must move her to first — not just
+	// change the "Resultat" column, the standings/placings themselves.
+	if _, err := results.CorrectResult(ctx, office, rec.ID, unitID, anna.AthleteID, CorrectionInput{
+		Mark: "3.60", Reason: "remeasurement found a transcription error",
+	}); err != nil {
+		t.Fatalf("CorrectResult (mark): %v", err)
+	}
+	afterMark, err := results.UnitCapture(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitCapture (after mark correction): %v", err)
+	}
+	if len(afterMark.Standings) == 0 || afterMark.Standings[0].AthleteID != anna.AthleteID || afterMark.Standings[0].Mark != "3.60" {
+		t.Fatalf("post-correction standings = %+v, want Anna leading with 3.60", afterMark.Standings)
+	}
+
+	// Correcting Clara to DNS must drop her to unranked with that status —
+	// not keep ranking her by her raw (never-rewritten) 3.20 attempt.
+	if _, err := results.CorrectResult(ctx, office, rec.ID, unitID, clara.AthleteID, CorrectionInput{
+		Status: domain.StatusDNS, Reason: "withdrew after the round, discovered post-announcement",
+	}); err != nil {
+		t.Fatalf("CorrectResult (status): %v", err)
+	}
+	afterStatus, err := results.UnitCapture(ctx, rec.ID, unitID)
+	if err != nil {
+		t.Fatalf("UnitCapture (after status correction): %v", err)
+	}
+	var claraRow *UnitStandingRow
+	for i := range afterStatus.Standings {
+		if afterStatus.Standings[i].AthleteID == clara.AthleteID {
+			claraRow = &afterStatus.Standings[i]
+		}
+	}
+	if claraRow == nil {
+		t.Fatal("Clara missing from standings entirely")
+	}
+	if claraRow.Rank != 0 || claraRow.Status != domain.StatusDNS {
+		t.Errorf("Clara's corrected row = %+v, want unranked with DNS", claraRow)
+	}
+}
+
+// TestCorrectResultStatusOnlyOnScoredMeetSYS046UC015_2 is a second
+// regression this task's work surfaced: CorrectResult used to call
+// scorePoints/evaluateRecord unconditionally, so a status-only correction
+// (DNS/DNF/DQ/NM — no mark) on any meet with a scoring table always failed
+// with "empty mark" (domain.ParseCentiMark("") inside the scoring-table
+// lookup) — a correction with no mark was simply unreachable on a scored
+// meet, for every family, since no prior test exercised CorrectResult with
+// Status set. SaveTrackResult/SaveFieldAttempt already gate their own
+// scoring call the same way; CorrectResult now matches.
+func TestCorrectResultStatusOnlyOnScoredMeetSYS046UC015_2(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets) // scored via the UKC combined table
+	trackUnit := unitOf(t, results, meets, rec.ID, "60m")
+	anna := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "101",
+	})
+	if _, err := results.SaveTrackResult(ctx, fieldOfficial, rec.ID, trackUnit, TrackResultInput{
+		AthleteID: anna.AthleteID, Time: "9.32", Timing: domain.TimingManual,
+	}); err != nil {
+		t.Fatalf("SaveTrackResult: %v", err)
+	}
+	if _, err := results.AnnounceUnitResults(ctx, office, rec.ID, trackUnit); err != nil {
+		t.Fatalf("AnnounceUnitResults: %v", err)
+	}
+
+	corrected, err := results.CorrectResult(ctx, office, rec.ID, trackUnit, anna.AthleteID, CorrectionInput{
+		Status: domain.StatusDQ, StatusDetail: "TR16.8", Reason: "lane infringement confirmed on review",
+	})
+	if err != nil {
+		t.Fatalf("CorrectResult (track, status-only, scored meet): %v", err)
+	}
+	if corrected.Status != domain.StatusDQ || corrected.Mark != "" {
+		t.Errorf("corrected record = %+v, want DQ with no mark", corrected)
+	}
+	if corrected.Points != nil {
+		t.Errorf("a DQ correction must not carry points, got %v", corrected.Points)
+	}
+}
+
 // TestCorrectResultUnknownAthleteOrUnitSYS046 rounds out the validation
 // edge paths: an unregistered athlete and an unseen unit are both rejected.
 func TestCorrectResultUnknownAthleteOrUnitSYS046(t *testing.T) {

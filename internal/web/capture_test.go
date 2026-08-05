@@ -344,6 +344,104 @@ func TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
 	}
 }
 
+// TestCaptureFieldCorrectionFlowSYS046SYS047UC015Web mirrors
+// TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web for the
+// horizontal-attempt grid (TASK-040/DEC-024): before announcement the grid
+// offers no correction columns; once announced, plain attempt capture is
+// rejected, the per-trial cells turn read-only, and the row's settled-level
+// correction form (reason required, mirroring the track flow) lands a
+// corrected mark.
+func TestCaptureFieldCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+	if strings.Contains(body, "capture-correction-notice") {
+		t.Error("an unannounced field unit must not show the correction notice")
+	}
+
+	resp := postForm(t, client, unitURL, unitURL+"/attempt", url.Values{
+		"athlete": {athletes["101"]}, "seq": {"1"}, "value": {"3.42"}, "version": {"0"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("initial attempt = %d, want 303", resp.StatusCode)
+	}
+
+	resp = postForm(t, client, unitURL, unitURL+"/announce", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("announce = %d, want 303", resp.StatusCode)
+	}
+
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "Provisorisch") {
+		t.Error("page must show the provisional protest-clock banner after announcing (UC-015 #1)")
+	}
+	if !strings.Contains(body, "capture-correction-notice") {
+		t.Error("an announced field unit must show the correction notice")
+	}
+	if strings.Contains(body, `action="`+unitURL+`/attempt"`) {
+		t.Error("per-trial attempt forms must not render once the unit is announced")
+	}
+	if !strings.Contains(body, ">NM<") {
+		t.Error("the field correction status select must offer NM (no mark)")
+	}
+
+	// Plain attempt capture is rejected once announced (UC-015 #2 boundary),
+	// mirroring the track/vertical boundary.
+	resp = postForm(t, client, unitURL, unitURL+"/attempt", url.Values{
+		"athlete": {athletes["101"]}, "seq": {"2"}, "value": {"X"}, "version": {"0"},
+	})
+	blocked := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("post-announcement /attempt = %d, want 422", resp.StatusCode)
+	}
+	if !strings.Contains(blocked, "bereits publiziert") {
+		t.Error("blocked field capture must explain a correction is required")
+	}
+
+	// A correction without a reason is rejected, the row's just-typed mark
+	// preserved (OQ-075/UC-038 #4's pattern, extended to the field grid).
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["101"]}, "time": {"3.55"},
+	})
+	noReason := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("field correction without reason = %d, want 422", resp.StatusCode)
+	}
+	reasonFieldID := "reason-" + athletes["101"]
+	for _, want := range []string{
+		`aria-invalid="true"`,
+		`id="` + reasonFieldID + `-error"`,
+		`value="3.55"`,
+	} {
+		if !strings.Contains(noReason, want) {
+			t.Errorf("field correction-without-reason re-render missing %q: %s", want, noReason)
+		}
+	}
+
+	// A reasoned correction succeeds, re-announces, and the corrected mark
+	// shows on the page — standings/exports flow through the same
+	// CorrectResult path TestCorrectFieldResultSYS046UC015_2 already proves
+	// at the service level.
+	resp = postForm(t, client, unitURL, unitURL+"/correct", url.Values{
+		"athlete": {athletes["101"]}, "time": {"3.55"}, "reason": {"remeasurement found a transcription error"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("reasoned field correction = %d, want 303", resp.StatusCode)
+	}
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "3.55") {
+		t.Errorf("corrected field mark not shown on the page: %q missing", "3.55")
+	}
+}
+
 // TestCaptureAnnounceAndCorrectRequireOfficeRoleSYS090UC015Web: an
 // unauthenticated caller cannot announce or correct — office-only actions
 // (UC-015's actor line), same as every other capture-role floor.
