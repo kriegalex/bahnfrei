@@ -55,41 +55,73 @@ consistent with how every other document in this repository cites IDs.
    host-matching one by actually running `--version`, writes `dist/X.Y.Z/checksums.txt`
    (SHA-256), and builds the container image locally if Docker is available (never pushes it —
    see §4).
-6. Publish: attach the `dist/X.Y.Z/` artifacts (binaries + `checksums.txt`) to the tagged release;
-   push the container image to whatever registry is decided (currently undecided — OQ-086); push
-   the git tag.
+6. Push the git tag (`git push origin vX.Y.Z`). Pushing a `vX.Y.Z` tag triggers
+   `.github/workflows/release.yml`, which is the **sole publish path**: it rebuilds the binaries
+   and `checksums.txt` (`scripts/build-release.sh X.Y.Z --skip-image`, reproducing step 5 in CI),
+   builds and pushes the container image to GHCR, cosign-signs the image and `checksums.txt` (see
+   §4), and attaches every `dist/X.Y.Z/` artifact plus the cosign bundle to the GitHub release for
+   the tag (creating it if it doesn't exist). Nothing in `scripts/build-release.sh` itself runs
+   `docker push`, `cosign`, or `gh release` — every publish action is gated on this workflow, which
+   only runs on a human deliberately pushing a tag.
 7. Announce per `GOVERNANCE.md`'s existing communication channel.
-
-Nothing in `scripts/build-release.sh` or this process runs `git push`, `docker push`, or any other
-publishing action automatically — every publish step above is a deliberate, separate human (or
-CI-workflow-gated) action.
 
 ## 4. Checksum / signing stance
 
 Every release artifact ships a SHA-256 `checksums.txt` (produced by `scripts/build-release.sh`,
-verifiable with `sha256sum -c`). **Binaries and the container image are not cryptographically
-signed for 0.1** — no code-signing certificate for macOS notarization or Windows Authenticode, no
-GPG-signed checksums file, no cosign/sigstore signature on the container image. This is a real,
-open item: unsigned macOS/Windows binaries trigger OS Gatekeeper/SmartScreen warnings that add
-friction to the SYS-131 ≤30-minute quickstart for non-technical operators, and unsigned artifacts
-generally are a weaker supply-chain posture. Tracked as **OQ-087**; the checksum file is the whole
-integrity story until it's resolved.
+verifiable with `sha256sum -c`). The **container image and `checksums.txt` are signed keyless with
+[sigstore/cosign](https://docs.sigstore.dev/cosign/) in CI** (`.github/workflows/release.yml`),
+using GitHub Actions OIDC as the identity provider — no long-lived signing key to generate, store,
+or rotate. **Binaries themselves, and macOS notarization / Windows Authenticode certificates, are
+deliberately out of scope for 0.x** (no adopter demand yet to justify the cost of a code-signing
+certificate) — `checksums.txt`, itself cosign-signed, is their integrity story.
+
+Verify the container image against a specific release tag:
+
+```
+cosign verify ghcr.io/kriegalex/bahnfrei:X.Y.Z \
+  --certificate-identity "https://github.com/kriegalex/bahnfrei/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+Verify `checksums.txt` against the bundle attached to the same release (this also transitively
+verifies every binary, once `sha256sum -c` passes against the verified file):
+
+```
+cosign verify-blob checksums.txt \
+  --bundle checksums.txt.cosign.bundle \
+  --certificate-identity "https://github.com/kriegalex/bahnfrei/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+sha256sum -c checksums.txt --ignore-missing
+```
+
+Both commands fail closed: a tampered artifact, a bundle from a different tag/workflow, or a
+missing/altered signature all produce a non-zero exit and an explicit error, never a silent pass.
+
+**Unsigned macOS/Windows binaries trigger OS Gatekeeper/SmartScreen warnings** — expected, not a
+bug, given the deliberate scope above. Once `checksums.txt` has been verified (or, on a container
+install, the image signature above), work around the OS warning:
+
+- **macOS Gatekeeper:** either clear the quarantine attribute after checksum verification —
+  `xattr -d com.apple.quarantine ./bahnfrei-X.Y.Z-darwin-<arch>` — or right-click the binary in
+  Finder, choose **Open**, and confirm **Open** in the dialog (this path re-prompts once per
+  binary but does not require the terminal).
+- **Windows SmartScreen:** on the "Windows protected your PC" dialog, click **More info**, then
+  **Run anyway**.
 
 ## 5. Container publication
 
 The `Dockerfile` builds a working image (verified: `docker build .` succeeds, `docker run` starts
-the server, `--version` reports the ldflags-stamped `VERSION` build arg). **Where the built image
-gets published is undecided** — no registry account exists yet (GHCR, Docker Hub, or a
-self-hosted registry are the candidates). Tracked as **OQ-086**. Until resolved, `docker build -t
-bahnfrei .` from the tagged source is the documented path for anyone who wants the container
-image; a resolved registry target updates this section and `docs/ops/quickstart.md` §1 Option B in
-the same change.
+the server, `--version` reports the ldflags-stamped `VERSION` build arg). Images publish to
+**GHCR** (`ghcr.io/kriegalex/bahnfrei`), pushed by `.github/workflows/release.yml` on every
+`vX.Y.Z` tag push, tagged both with the release version and `latest` (see §6 for what `latest`
+means as a support commitment). `docker build -t bahnfrei .` from the tagged source remains a
+valid local alternative for anyone who wants to build the image themselves rather than pull it.
 
 ## 6. Support window
 
-**Interim policy, pending founder direction (OQ-088):** the **latest released MINOR version only**
-receives fixes, on a best-effort basis — there is no committed multi-version backport/LTS policy
-for 0.1. A Critical/High defect (`docs/ops/defect-policy.md`) found in the latest release gets a
-PATCH release; older MINOR lines are not backported. This is documented explicitly (rather than
-left implicit) so operators can plan upgrades accordingly: staying current is the only supported
-path for 0.1.
+The **latest released MINOR version only** receives fixes, on a best-effort basis — there is no
+multi-version backport/LTS policy for 0.x. A Critical/High defect (`docs/ops/defect-policy.md`)
+found in the latest release gets a PATCH release; older MINOR lines are not backported. This is
+documented explicitly (rather than left implicit) so operators can plan upgrades accordingly:
+staying current is the only supported path while the project is pre-1.0. The GHCR `latest` tag
+always points at this same supported line.
