@@ -611,6 +611,38 @@ func TestResultsAuthorizationAndValidation(t *testing.T) {
 	}
 }
 
+// TestMatchesParticipantSearchDEC021 covers the DEC-021/TASK-038 operator
+// roster/entries search predicate: case-insensitive substring match on
+// name, bib or club (SYS-120's "entry search", SYS-114's expert-use
+// filter), with an empty query always matching (the unfiltered-list
+// default).
+func TestMatchesParticipantSearchDEC021(t *testing.T) {
+	cases := []struct {
+		name                   string
+		query                  string
+		first, last, bib, club string
+		want                   bool
+	}{
+		{"empty query matches everything", "", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"first-name substring, case-insensitive", "anna", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"last-name substring", "Must", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"bib exact", "101", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"bib substring", "10", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"club substring, mixed case", "fribourg", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"no match", "Bern", "Anna", "Muster", "101", "LC Fribourg", false},
+		{"whitespace-only query matches everything", "   ", "Anna", "Muster", "101", "LC Fribourg", true},
+		{"query with leading/trailing space still matches", "  anna  ", "Anna", "Muster", "101", "LC Fribourg", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := MatchesParticipantSearch(c.query, c.first, c.last, c.bib, c.club); got != c.want {
+				t.Errorf("MatchesParticipantSearch(%q, %q, %q, %q, %q) = %v, want %v",
+					c.query, c.first, c.last, c.bib, c.club, got, c.want)
+			}
+		})
+	}
+}
+
 // findRow locates a division standings row by division code and bib.
 func findRow(t *testing.T, st MeetStandings, division, bib string) StandingRow {
 	t.Helper()

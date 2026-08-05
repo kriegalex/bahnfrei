@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
@@ -210,6 +211,25 @@ func (s *ResultsService) RegisterParticipant(ctx context.Context, actor Session,
 // this backs the public start-list page as well as operator rosters.
 func (s *ResultsService) Participants(ctx context.Context, meetID string) ([]store.ParticipantRow, error) {
 	return store.ListParticipants(ctx, s.readConn(), meetID)
+}
+
+// MatchesParticipantSearch reports whether a participant's name, bib or
+// club contains query, case-insensitively (DEC-021/OQ-067, TASK-038:
+// "server-side query-param filter on the operator roster and entries
+// lists — name/bib/club at minimum"). An empty query always matches, so
+// this doubles as the no-filter predicate the roster/bib-assignment
+// pages fall back to when no search has been entered. Exported so both
+// internal/web (the roster/bibs handlers) and the SYS-120 performance
+// suite (internal/app, perf-tagged) share one definition of "matches".
+func MatchesParticipantSearch(query, firstName, lastName, bib, club string) bool {
+	q := strings.TrimSpace(strings.ToLower(query))
+	if q == "" {
+		return true
+	}
+	name := strings.ToLower(firstName + " " + lastName)
+	return strings.Contains(name, q) ||
+		strings.Contains(strings.ToLower(bib), q) ||
+		strings.Contains(strings.ToLower(club), q)
 }
 
 // SetConsent updates an athlete's SYS-103 publication-consent flags
