@@ -1,13 +1,14 @@
 # TASK-027 — Performance & recovery: results and environment caveats
 
-**Date of record:** 2026-07-13 (TASK-027 baseline); SYS-122 re-measured 2026-08-03 (TASK-035)
+**Date of record:** 2026-07-13 (TASK-027 baseline); SYS-122 re-measured 2026-08-03 (TASK-035);
+SYS-120 entry-search sub-test added 2026-08-05 (TASK-038)
 **Scope:** SYS-120/121 benchmarks, SYS-130 recovery drill, SYS-105 egress-blocked
 public-asset check, SYS-122 2,000-concurrent-viewer load test (UC-017 #4).
 **Traceability:** rows SYS-105/120/121/122/130 in `docs/requirements/traceability-matrix.md`.
 **Open questions raised:** OQ-066 (SYS-122 unmeetable on the original read architecture;
 resolved by DEC-015/TASK-035 — see Deliverable 4), OQ-067 (no entry-search feature exists to
-benchmark), OQ-094 (TASK-035: the render cache's staleness ceiling for writes outside its
-invalidation hook).
+benchmark; resolved by DEC-021/TASK-038 — see Deliverable 1's addendum), OQ-094 (TASK-035: the
+render cache's staleness ceiling for writes outside its invalidation hook).
 
 ## How to run
 
@@ -71,7 +72,7 @@ Measured 2026-07-13 (post-merge with main @ `da245e3`, confined scope):
 | Operation (SYS-120 wording) | Test | p95 measured | Spec budget | Verdict |
 |---|---|---|---|---|
 | List load (meet detail: programme + rounds + units) | `TestSYS120ReferenceScaleOperatorBudgets/MeetDetailListLoad` | **7.9 ms** (n=30) | ≤2 s | PASS (≈250×) |
-| Entry search — proxied by full participant-roster load; no search feature exists, **OQ-067** | `…/ParticipantRosterSearch` | **10.5 ms** (n=20) | ≤2 s | PASS (≈190×) |
+| Entry search — proxied by full participant-roster load; no search feature exists, **OQ-067** *(superseded below)* | `…/ParticipantRosterSearch` | **10.5 ms** (n=20) | ≤2 s | PASS (≈190×) |
 | Result save (`SaveTrackResult`, the real capture path) | `…/ResultSave` | **12.5 ms** (n=30) | ≤2 s | PASS (≈160×) |
 | SYS-121: standings recompute after a `CorrectResult` | `…/StandingsRecomputeAfterCorrection` | **75.8 ms** (n=10) | ≤5 s | PASS (≈65×) |
 | SYS-121: seeding generation, 200-entry event, heats+lanes | `TestSYS121SeedingGenerationBudget` | **46 ms** (single gen) | ≤10 s | PASS (≈215×) |
@@ -80,6 +81,25 @@ Method notes: nearest-rank p95 over N wall-clock reps in one process — a
 regression guard, not a production SLO measurement. The seeding benchmark
 builds its 200 entries through the real entry/check-in service path (mirroring
 `internal/web`'s `seededMeetFixture`), then times one `GenerateHeats` call.
+
+### Addendum — real entry search lands (DEC-021/TASK-038, 2026-08-05)
+
+OQ-067 is resolved: a server-side `q` query-param filter (case-insensitive
+name/bib/club substring match) now ships on the roster and bib-assignment
+pages (`app.MatchesParticipantSearch`, shared by both `internal/web` handlers
+and this benchmark). `ParticipantRosterSearch` above stays as the unfiltered
+full-list-load budget (per its own original note: additive, not replaced);
+the reserved dedicated search budget is the new sub-test below, measured on
+the same reference-scale corpus (1,500 athletes/24 synthetic clubs),
+narrowed to one club (~62 matching athletes) — a realistic "find my club"
+query, not a degenerate match-everything/match-nothing case:
+
+| Operation (SYS-120 wording) | Test | p95 measured | Spec budget | Verdict |
+|---|---|---|---|---|
+| Entry search — real filter (`Participants`+`ClubNamesFor`+`MatchesParticipantSearch`, club-name query) | `…/ParticipantSearch` | **43.9 ms** (n=20) | ≤2 s | PASS (≈46×) |
+
+Measured 2026-08-05, same confined-scope method as the rest of this
+deliverable.
 
 ## Deliverable 2 — SYS-130 two-minute recovery drill
 
