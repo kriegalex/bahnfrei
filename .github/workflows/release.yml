@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Bahnfrei contributors
+#
+# TASK-037 release workflow (SYS-146, SYS-131; DEC-017/018/019, closes
+# OQ-086/087/088): on a pushed vX.Y.Z tag, builds the per-OS binaries and
+# checksums.txt via scripts/build-release.sh (that script is deliberately
+# publish-free — see docs/ops/release-process.md §3), builds and pushes the
+# container image to GHCR (DEC-017), signs the image and checksums.txt with
+# cosign keyless via GitHub OIDC (DEC-019 — macOS/Windows binary code-signing
+# stays deferred), and attaches every artifact plus the signature bundles to
+# the GitHub release. This workflow is the sole publish path: nothing in
+# scripts/build-release.sh runs docker push, cosign, or gh release — every
+# publish action here is gated on a human deliberately pushing a tag.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write # create the GitHub release and upload artifacts
+  packages: write # push the container image to GHCR
+  id-token: write # cosign keyless signing via GitHub OIDC
+
+env:
+  IMAGE: ghcr.io/kriegalex/bahnfrei
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Derive release version from tag
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Per-OS binaries + SHA-256 checksums.txt (release-process.md §3 step
+      # 5); --skip-image because the container image is built/pushed by
+      # docker/build-push-action below instead of the script's local-only
+      # Docker path.
+      - name: Build release binaries and checksums
+        run: ./scripts/build-release.sh "${{ steps.version.outputs.version }}" --skip-image
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # DEC-017: publish to GHCR, tagged with the release version and
+      # `latest` (DEC-018 — latest-only is the supported line).
+      - name: Build and push container image
+        id: build-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+
+      - uses: sigstore/cosign-installer@v3
+
+      # DEC-019: keyless signing over GitHub OIDC — no long-lived signing
+      # key to manage or rotate. Signs the pushed image by digest (not the
+      # mutable tag) and the checksums.txt release artifact.
+      - name: Sign container image (cosign keyless)
+        run: cosign sign --yes "${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}"
+
+      - name: Sign checksums.txt (cosign keyless)
+        run: |
+          cosign sign-blob --yes \
+            --bundle "dist/${{ steps.version.outputs.version }}/checksums.txt.cosign.bundle" \
+            "dist/${{ steps.version.outputs.version }}/checksums.txt"
+
+      # Publish: attach binaries + checksums.txt + the cosign bundle to the
+      # GitHub release for this tag (creating it if it doesn't exist yet).
+      # Binaries themselves stay unsigned (DEC-019) — checksums.txt is their
+      # integrity story, and the bundle above signs that file.
+      - name: Publish GitHub release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ steps.version.outputs.version }}/*
