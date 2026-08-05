@@ -225,6 +225,54 @@ func (s *ResultsService) CaptureUnits(ctx context.Context, actor Session, meetID
 	return out, nil
 }
 
+// AssignedMeet is one meet a field-official actor holds capture
+// assignments in, with only the units it is scoped to there (TASK-042,
+// DEC-025 "my assignments" dashboard).
+type AssignedMeet struct {
+	MeetID   string
+	MeetName string
+	Units    []CaptureUnit
+}
+
+// AssignedMeets lists the meets actor (a field official) holds a current
+// capture assignment in, each with only the units it is scoped to there
+// (TASK-042, DEC-025) — the field-official panel of the "my assignments"
+// dashboard, replacing the out-of-band link an organizer used to share
+// (OQ-089). Restricted to exactly RoleFieldOfficial: SYS-090 per-event
+// scoping applies only to that role, so any other authorized caller gets
+// an empty list here (it has its own dashboard panel instead — OQ-110).
+func (s *ResultsService) AssignedMeets(ctx context.Context, actor Session) ([]AssignedMeet, error) {
+	if err := Authorize(actor.Role, CapCaptureResults); err != nil {
+		return nil, err
+	}
+	if actor.Role != RoleFieldOfficial {
+		return nil, nil
+	}
+	meetIDs, err := store.AssignedMeetIDs(ctx, s.readConn(), actor.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AssignedMeet, 0, len(meetIDs))
+	for _, meetID := range meetIDs {
+		meet, err := store.GetMeet(ctx, s.readConn(), meetID)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		units, err := s.CaptureUnits(ctx, actor, meetID)
+		if err != nil {
+			return nil, err
+		}
+		if len(units) == 0 {
+			continue
+		}
+		out = append(out, AssignedMeet{MeetID: meet.ID, MeetName: meet.Name, Units: units})
+	}
+	return out, nil
+}
+
 // CaptureRow is one athlete's line in the capture grid: identity columns,
 // the attempt series (index i = trial i+1; nil = not captured) and the
 // settled result.

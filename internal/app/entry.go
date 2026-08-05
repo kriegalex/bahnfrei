@@ -697,6 +697,46 @@ func (s *ResultsService) MyEntries(ctx context.Context, actor Session, meetID st
 	return s.enrichEntries(ctx, recs)
 }
 
+// SubmitterMeetEntries is one meet actor has submitted entries to, with
+// just its own entries there (TASK-042, DEC-025 "my assignments"
+// dashboard).
+type SubmitterMeetEntries struct {
+	MeetID   string
+	MeetName string
+	Entries  []EntryDetail
+}
+
+// SubmitterMeets lists every meet actor has submitted at least one entry
+// to, each with actor's own entries there (TASK-042, DEC-025) — the
+// entry-submitter panel of the "my assignments" dashboard, replacing the
+// out-of-band link an organizer used to share (OQ-089). Mirrors MyEntries'
+// per-meet framing, across every meet submitted_by attributes to actor.
+func (s *ResultsService) SubmitterMeets(ctx context.Context, actor Session) ([]SubmitterMeetEntries, error) {
+	if err := Authorize(actor.Role, CapSubmitEntries); err != nil {
+		return nil, err
+	}
+	meetIDs, err := store.MeetIDsBySubmitter(ctx, s.readConn(), actor.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SubmitterMeetEntries, 0, len(meetIDs))
+	for _, meetID := range meetIDs {
+		meet, err := store.GetMeet(ctx, s.readConn(), meetID)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		entries, err := s.MyEntries(ctx, actor, meetID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SubmitterMeetEntries{MeetID: meet.ID, MeetName: meet.Name, Entries: entries})
+	}
+	return out, nil
+}
+
 // EntryExceptions lists the meet's entries flagged as failing their event's
 // entry standard (SYS-015 "reportable"; UC-003 #5's organizer exception
 // report).

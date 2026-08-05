@@ -98,6 +98,30 @@ func ListEntriesBySubmitter(ctx context.Context, db DBTX, meetID, submittedBy st
 		WHERE ev.meet_id = ? AND en.submitted_by = ? ORDER BY en.id`, meetID, submittedBy)
 }
 
+// MeetIDsBySubmitter returns the distinct meet IDs where submittedBy has at
+// least one entry, most-recently-submitted meet first (TASK-042, DEC-025
+// "my assignments" dashboard): the entry-submitter panel needs to know
+// which meets to list without scanning every meet in the instance.
+func MeetIDsBySubmitter(ctx context.Context, db DBTX, submittedBy string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT ev.meet_id
+		FROM entries en JOIN events ev ON ev.id = en.event_id
+		WHERE en.submitted_by = ? GROUP BY ev.meet_id ORDER BY max(en.created_at) DESC`, submittedBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var meetID string
+		if err := rows.Scan(&meetID); err != nil {
+			return nil, err
+		}
+		out = append(out, meetID)
+	}
+	return out, rows.Err()
+}
+
 // CountActiveEntriesForEvent counts an event's non-scratched entries (SYS-015
 // entry-limit enforcement, UC-003).
 func CountActiveEntriesForEvent(ctx context.Context, db DBTX, eventID string) (int, error) {

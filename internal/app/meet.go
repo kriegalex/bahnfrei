@@ -335,6 +335,19 @@ func (s *MeetService) ListMeets(ctx context.Context) ([]MeetRecord, error) {
 	return store.ListMeets(ctx, s.db)
 }
 
+// OfficeMeets lists every meet a competition-office actor may operate on,
+// for the "my assignments" dashboard (TASK-042, DEC-025). SYS-090 gives
+// competition office no per-meet scoping — unlike field/event officials,
+// it is not "assigned" to specific meets — so its panel is every meet in
+// the instance, the same set /meets shows an organizer, just reached from
+// a session with no organizer capability of its own (see OQ-110).
+func (s *MeetService) OfficeMeets(ctx context.Context, actor Session) ([]MeetRecord, error) {
+	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
+		return nil, err
+	}
+	return store.ListMeets(ctx, s.readConn())
+}
+
 // SetFeeSchedule sets the SYS-017 configurable fee schedule (a flat
 // per-individual-entry fee and a flat per-relay-team-entry fee, in
 // Rappen/cents) an organizer configures per meet (TASK-016, UC-006 #3).

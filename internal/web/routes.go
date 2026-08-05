@@ -277,6 +277,20 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	p := basePageData(r, s.cats)
 	p.Title = p.T("home.welcome")
+	// A logged-in session below the meet-organizer floor gets its "my
+	// assignments" dashboard instead of the generic hub content (TASK-042,
+	// DEC-025 — closes OQ-089): competition office, field official and
+	// entry submitter each have a meet-scoped panel; organizer+ (CanOrganize)
+	// keeps the unchanged /meets-pointing flow below.
+	if actor, ok := sessionFromContext(r.Context()); ok && !p.CanOrganize {
+		v, err := s.buildAssignmentsDashboard(r.Context(), p, actor)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		_ = assignmentsDashboardPage(p, v).Render(r.Context(), w)
+		return
+	}
 	_ = homePage(p).Render(r.Context(), w)
 }
 

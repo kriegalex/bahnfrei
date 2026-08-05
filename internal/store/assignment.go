@@ -82,3 +82,27 @@ func ListFieldOfficialAssignments(ctx context.Context, db DBTX, meetID string) (
 	}
 	return out, rows.Err()
 }
+
+// AssignedMeetIDs returns the distinct meet IDs accountID holds at least
+// one current capture assignment in, most-recently-assigned meet first
+// (TASK-042, DEC-025 "my assignments" dashboard): the field-official panel
+// needs to know which meets to list without scanning every meet in the
+// instance.
+func AssignedMeetIDs(ctx context.Context, db DBTX, accountID string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT meet_id FROM field_official_units
+		WHERE account_id = ? GROUP BY meet_id ORDER BY max(created_at) DESC`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var meetID string
+		if err := rows.Scan(&meetID); err != nil {
+			return nil, err
+		}
+		out = append(out, meetID)
+	}
+	return out, rows.Err()
+}

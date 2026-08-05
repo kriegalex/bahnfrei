@@ -5,25 +5,85 @@ package web
 
 // homePage is the hub landing page (TASK-028, replacing the TASK-005
 // scaffolding placeholder now that meet setup, entries, capture and public
-// results all exist). Content is role-appropriate rather than one static
-// blurb: an anonymous visitor is pointed at login (no global public-meet
-// directory exists — public results are reached via the per-meet URL the
-// organizer shares, ADR-002), an organizer-capable session is pointed at
-// their meets workspace, and any other authenticated session (office,
-// field-official, entry-submitter accounts) is told to use the meet-scoped
-// link its organizer shared, since those roles have no instance-wide
-// landing surface of their own (see OQ-089).
+// results all exist). handleHome only ever renders this for an anonymous
+// visitor (pointed at login — no global public-meet directory exists,
+// public results are reached via the per-meet URL the organizer shares,
+// ADR-002) or an organizer-capable session (pointed at its meets
+// workspace). Every other authenticated session (competition office,
+// field official, entry submitter) instead gets its own "my assignments"
+// dashboard (assignmentsDashboardPage, TASK-042/DEC-025 — closes OQ-089),
+// since those roles have no /meets-style instance-wide workspace to point
+// at from here.
 templ homePage(p PageData) {
 	@layout(p) {
 		<h1>{ p.T("home.welcome") }</h1>
 		if !p.LoggedIn {
 			<p>{ p.T("home.intro_anonymous") }</p>
 			<p><a href="/login">{ p.T("nav.login") }</a></p>
-		} else if p.CanOrganize {
+		} else {
 			<p>{ p.T("home.intro_operator") }</p>
 			<p><a href="/meets">{ p.T("nav.meets") }</a></p>
-		} else {
-			<p>{ p.T("home.intro_loggedin") }</p>
+		}
+	}
+}
+
+// assignmentsDashboardPage is the "my assignments" landing page for a
+// logged-in session below the meet-organizer floor (TASK-042, DEC-025 —
+// closes OQ-089): competition office sees every meet it may operate on
+// (SYS-090 gives it no per-meet scoping, unlike field officials — see
+// OQ-110), a field official sees the meets/units TASK-013 scoped it to
+// with direct links into capture, and an entry submitter sees the meets
+// it has entries at with its own entries listed inline. Exactly one panel
+// renders per v.Panel, matching the session's exact role; an empty list
+// still renders its section with honest "nothing yet" copy rather than a
+// blank page.
+templ assignmentsDashboardPage(p PageData, v assignmentsDashboardView) {
+	@layout(p) {
+		<h1>{ p.T("home.welcome") }</h1>
+		if v.Panel == "office" {
+			<h2>{ p.T("dashboard.office.heading") }</h2>
+			if len(v.OfficeMeets) == 0 {
+				<p>{ p.T("dashboard.office.empty") }</p>
+			} else {
+				<ul>
+					for _, m := range v.OfficeMeets {
+						<li>
+							{ m.Name } ({ m.Dates }, { m.Status }) —
+							<a href={ templ.URL("/meets/" + m.ID + "/roster") }>{ p.T("roster.title") }</a>
+							·
+							<a href={ templ.URL("/meets/" + m.ID + "/standings") }>{ p.T("standings.title") }</a>
+						</li>
+					}
+				</ul>
+			}
+		} else if v.Panel == "field" {
+			<h2>{ p.T("dashboard.field.heading") }</h2>
+			if len(v.FieldMeets) == 0 {
+				<p>{ p.T("dashboard.field.empty") }</p>
+			} else {
+				for _, fm := range v.FieldMeets {
+					<h3>{ fm.MeetName }</h3>
+					<ul>
+						for _, u := range fm.Units {
+							<li><a href={ templ.URL("/meets/" + fm.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a></li>
+						}
+					</ul>
+				}
+			}
+		} else if v.Panel == "submitter" {
+			<h2>{ p.T("dashboard.submitter.heading") }</h2>
+			if len(v.SubmitterMeets) == 0 {
+				<p>{ p.T("dashboard.submitter.empty") }</p>
+			} else {
+				for _, sm := range v.SubmitterMeets {
+					<h3><a href={ templ.URL("/meets/" + sm.MeetID + "/entries") }>{ sm.MeetName }</a></h3>
+					<ul>
+						for _, e := range sm.Entries {
+							<li>{ e.EventLabel } — { e.Who } — { e.Status }</li>
+						}
+					</ul>
+				}
+			}
 		}
 	}
 }
