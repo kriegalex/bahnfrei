@@ -13,7 +13,7 @@
 // (helpers/keyboard.ts's tabUntilFocused) rather than jumping to it with
 // .focus(), which would prove nothing about tab order or keyboard traps.
 import { assertTabAdvancesFocus, arrowSelect, tabUntilFocused } from "../helpers/keyboard";
-import { seedTrackMeet, setupAndLogin } from "../helpers/seed";
+import { seedTrackMeet, seedUkcMeet, setupAndLogin } from "../helpers/seed";
 import { expect, test } from "../helpers/server";
 
 test.describe("SYS-114 UC-007: check-in is keyboard-only, incl. bulk DNS-close and reinstate", () => {
@@ -165,5 +165,49 @@ test.describe("SYS-114 UC-010: track result entry is keyboard-only (times, statu
     await tabUntilFocused(page, aliceSave);
     await page.keyboard.press("Enter");
     await expect(page.locator("#capture-standings")).toContainText("11.2 h");
+  });
+});
+
+test.describe("SYS-114 UC-011/UC-015: the field-event correction row is keyboard-only (TASK-040)", () => {
+  test("keyboard attempt entry, then a keyboard-reached correction with a reason", async ({
+    app,
+    context,
+    page,
+  }) => {
+    await setupAndLogin(context.request, app.baseURL);
+    const fx = await seedUkcMeet(context.request, app.baseURL);
+
+    await page.goto(fx.unitURL);
+    await assertTabAdvancesFocus(page);
+
+    // --- Anna's first trial, keyboard-typed into the V1 cell, keyboard-saved. ---
+    const annaRow = 'tr:has-text("Anna Muster")';
+    const annaFirstValue = page.locator(`${annaRow} form[data-seq="1"] input[name="value"]`);
+    const annaFirstSave = page.locator(`${annaRow} form[data-seq="1"] button[type="submit"]`);
+    await tabUntilFocused(page, annaFirstValue);
+    await page.keyboard.type("3.42");
+    await tabUntilFocused(page, annaFirstSave);
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#capture-standings")).toContainText("3.42");
+
+    // --- Announce via keyboard: the grid's per-trial cell forms disappear
+    // and the row grows the settled-level correction form (mark/status/
+    // reason/escalation), all still reachable by Tab. ---
+    const announce = page.locator('form[action*="/announce"] button[type="submit"]');
+    await tabUntilFocused(page, announce);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".capture-correction-notice")).toBeVisible();
+    await expect(page.locator(`${annaRow} form[data-seq="1"]`)).toHaveCount(0);
+
+    const annaMark = page.locator(`${annaRow} input[name="time"]`);
+    const annaReason = page.locator(`${annaRow} input[name="reason"]`);
+    const annaCorrectSave = page.locator(`${annaRow} button[type="submit"]`);
+    await tabUntilFocused(page, annaMark);
+    await page.keyboard.type("3.55");
+    await tabUntilFocused(page, annaReason);
+    await page.keyboard.type("remeasurement found a transcription error");
+    await tabUntilFocused(page, annaCorrectSave);
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#capture-standings")).toContainText("3.55");
   });
 });

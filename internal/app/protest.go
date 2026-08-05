@@ -193,9 +193,11 @@ type CorrectionInput struct {
 // window has elapsed (SYS-047), audits actor/timestamp/before/after/reason
 // (immutable, SYS-046), and re-announces the unit — opening a fresh appeal
 // window (UC-015 #2's "the amended list gets a new announcement
-// timestamp"). Track and horizontal-field units are both supported at the
-// settled-result granularity; a field correction does not retroactively
-// rewrite the attempt series it was derived from (OQ-036).
+// timestamp"). Track, horizontal-field and vertical-field units are all
+// supported at the settled-result granularity (DEC-024/TASK-040 widened the
+// original track+horizontal scope to vertical); a field correction does not
+// retroactively rewrite the attempt/trial series it was derived from
+// (OQ-036).
 func (s *ResultsService) CorrectResult(ctx context.Context, actor Session, meetID, unitID, athleteID string, in CorrectionInput) (store.ResultRecord, error) {
 	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
 		return store.ResultRecord{}, err
@@ -208,7 +210,7 @@ func (s *ResultsService) CorrectResult(ctx context.Context, actor Session, meetI
 	if err != nil {
 		return store.ResultRecord{}, err
 	}
-	if uc.disc.Family != domain.FamilyTrack && uc.disc.Family != domain.FamilyFieldHorizontal {
+	if uc.disc.Family != domain.FamilyTrack && uc.disc.Family != domain.FamilyFieldHorizontal && uc.disc.Family != domain.FamilyFieldVertical {
 		return store.ResultRecord{}, fmt.Errorf("result correction is not defined for discipline family %q", uc.disc.Family)
 	}
 	p, err := s.participant(ctx, meetID, athleteID)
@@ -269,19 +271,30 @@ func (s *ResultsService) CorrectResult(ctx context.Context, actor Session, meetI
 		}
 		result.Mark = domain.FormatCentiMark(centi, 2)
 	}
-	if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
-		return store.ResultRecord{}, err
+	// Scoring and record/best re-evaluation only apply to a mark-bearing
+	// correction (in.Status == StatusNone): a DNS/DNF/DQ/NM correction has
+	// no mark to score or compare against a record list — calling either
+	// unconditionally here (as this function did before) fails outright
+	// (domain.ParseCentiMark("") on the empty mark) the moment a status-only
+	// correction is attempted, which no test exercised until TASK-040 added
+	// a reachable status field to the field/vertical correction UI and
+	// caught it; SaveTrackResult/SaveFieldAttempt already gate the
+	// equivalent capture-time scoring call the same way (SYS-041/042).
+	if in.Status == domain.StatusNone {
+		if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
+			return store.ResultRecord{}, err
+		}
+		// Record/best flagging (SYS-049/050) must be re-evaluated against the
+		// corrected mark, not silently dropped: domain.Result{} above starts
+		// with nil RecordFlags, and store.SaveResult persists exactly what it
+		// is given — a correction that skipped this would erase a prior "MR"/
+		// "PB" flag even when the corrected mark still earns it.
+		eval, err := s.evaluateRecord(ctx, s.db, uc.meet, uc.disc, p.Athlete, result.Mark, timing, result.Wind, unitID)
+		if err != nil {
+			return store.ResultRecord{}, err
+		}
+		result.RecordFlags = eval.Flags()
 	}
-	// Record/best flagging (SYS-049/050) must be re-evaluated against the
-	// corrected mark, not silently dropped: domain.Result{} above starts
-	// with nil RecordFlags, and store.SaveResult persists exactly what it
-	// is given — a correction that skipped this would erase a prior "MR"/
-	// "PB" flag even when the corrected mark still earns it.
-	eval, err := s.evaluateRecord(ctx, s.db, uc.meet, uc.disc, p.Athlete, result.Mark, timing, result.Wind, unitID)
-	if err != nil {
-		return store.ResultRecord{}, err
-	}
-	result.RecordFlags = eval.Flags()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

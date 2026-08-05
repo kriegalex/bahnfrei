@@ -6,7 +6,10 @@ package web
 // verticalCapturePage is the vertical-jump capture surface (TASK-021,
 // UC-012, SYS-043): the height-progression grid plus the countback
 // standings that refresh over SSE, and the office's height-configuration
-// form.
+// form. The protest banner and settled-level correction UI (TASK-040/
+// DEC-024) mirror the track/horizontal capture page's UC-015 flow — the
+// announce action was already reachable via the shared "/announce" route
+// even before this page showed it.
 templ verticalCapturePage(p PageData, v verticalCaptureView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { v.Discipline }</h1>
@@ -15,6 +18,7 @@ templ verticalCapturePage(p PageData, v verticalCaptureView) {
 			{ " · " }
 			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
 		</p>
+		@protestBanner(p, v.MeetID, v.UnitID, v.Protest, v.CanOffice)
 		if v.CanOffice {
 			@verticalHeightsForm(p, v)
 		}
@@ -24,6 +28,9 @@ templ verticalCapturePage(p PageData, v verticalCaptureView) {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else {
 			<p>{ p.T("capture.vertical.trial_help") }</p>
+			if v.Protest.CorrectionMode {
+				<p class="capture-correction-notice">{ p.T("capture.correct.notice") }</p>
+			}
 			@verticalGrid(p, v)
 		}
 		<section
@@ -71,8 +78,29 @@ templ verticalHeightsForm(p PageData, v verticalCaptureView) {
 }
 
 // verticalGrid renders the height-progression grid: one input per trial,
-// taking the D5.2 symbols (o clear, x foul, – pass, r retirement).
+// taking the D5.2 symbols (o clear, x foul, – pass, r retirement). Once the
+// unit is announced (UC-015 #2), the per-trial cell forms turn read-only —
+// SaveVerticalTrial rejects them anyway (ErrCorrectionRequired) — and each
+// row grows the settled-level correction form (height/status/reason/
+// escalation) TASK-040/DEC-024 added, matching the track/horizontal
+// correction columns.
 templ verticalGrid(p PageData, v verticalCaptureView) {
+	if v.Protest.CorrectionMode {
+		// One correction form per athlete outside the table, mirroring
+		// fieldGrid/trackForm's shape: a `<form>` may not be a `<tr>`'s
+		// descendant, so the row's correction inputs associate via the HTML
+		// form attribute.
+		for _, row := range v.Rows {
+			<form
+				id={ "vertical-correct-" + row.AthleteID }
+				action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/correct") }
+				method="post"
+			>
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<input type="hidden" name="athlete" value={ row.AthleteID }/>
+			</form>
+		}
+	}
 	<table class="capture-grid">
 		<thead>
 			<tr>
@@ -80,6 +108,14 @@ templ verticalGrid(p PageData, v verticalCaptureView) {
 				<th rowspan="2">{ p.T("roster.name") }</th>
 				for _, h := range v.Heights {
 					<th colspan="3">{ h }</th>
+				}
+				if v.Protest.CorrectionMode {
+					<th rowspan="2">{ p.T("capture.correct.mark") }</th>
+					<th rowspan="2">{ p.T("capture.status") }</th>
+					<th rowspan="2">{ p.T("capture.dq_rule") }</th>
+					<th rowspan="2">{ p.T("capture.correct.reason") }</th>
+					<th rowspan="2">{ p.T("capture.correct.escalation") }</th>
+					<th rowspan="2"></th>
 				}
 				<th rowspan="2">{ p.T("capture.result") }</th>
 				<th rowspan="2">{ p.T("standings.points_abbr") }</th>
@@ -100,27 +136,83 @@ templ verticalGrid(p PageData, v verticalCaptureView) {
 					for hi, height := range row.Cells {
 						for si, cell := range height {
 							<td>
-								<form
-									action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/vertical-trial") }
-									method="post"
-									class="cell-form"
-								>
-									<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-									<input type="hidden" name="athlete" value={ row.AthleteID }/>
-									<input type="hidden" name="height" value={ intToStr(int64(hi)) }/>
-									<input type="hidden" name="seq" value={ intToStr(int64(si + 1)) }/>
-									<input type="hidden" name="version" value={ cell.Version }/>
-									<input
-										type="text"
-										name="value"
-										value={ cell.Value }
-										size="2"
-										aria-label={ v.Heights[hi] + " " + p.T("capture.trial_abbr") + intToStr(int64(si+1)) + " " + row.Name }
-									/>
-									<button type="submit">{ p.T("capture.save") }</button>
-								</form>
+								if v.Protest.CorrectionMode {
+									{ cell.Value }
+								} else {
+									<form
+										action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/vertical-trial") }
+										method="post"
+										class="cell-form"
+									>
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<input type="hidden" name="athlete" value={ row.AthleteID }/>
+										<input type="hidden" name="height" value={ intToStr(int64(hi)) }/>
+										<input type="hidden" name="seq" value={ intToStr(int64(si + 1)) }/>
+										<input type="hidden" name="version" value={ cell.Version }/>
+										<input
+											type="text"
+											name="value"
+											value={ cell.Value }
+											size="2"
+											aria-label={ v.Heights[hi] + " " + p.T("capture.trial_abbr") + intToStr(int64(si+1)) + " " + row.Name }
+										/>
+										<button type="submit">{ p.T("capture.save") }</button>
+									</form>
+								}
 							</td>
 						}
+					}
+					if v.Protest.CorrectionMode {
+						<td>
+							<input
+								type="text"
+								name="time"
+								size="6"
+								value={ row.Time }
+								form={ "vertical-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.mark") + " " + row.Name }
+							/>
+						</td>
+						<td>
+							<select name="status" form={ "vertical-correct-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
+								<option value="" selected?={ row.Status == "" }>{ p.T("capture.status.none_mark") }</option>
+								for _, st := range v.FieldStatuses {
+									<option value={ st } selected?={ st == row.Status }>{ st }</option>
+								}
+							</select>
+						</td>
+						<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "vertical-correct-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+						<td>
+							<input
+								type="text"
+								name="reason"
+								size="14"
+								value={ row.Reason }
+								form={ "vertical-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.reason") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("reason", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("reason", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("reason", row.AthleteID), row.Errors)
+						</td>
+						<td>
+							<input
+								type="text"
+								name="escalation"
+								size="12"
+								value={ row.Escalation }
+								form={ "vertical-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.escalation") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("escalation", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("escalation", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("escalation", row.AthleteID), row.Errors)
+						</td>
+						<td><button type="submit" form={ "vertical-correct-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
 					}
 					<td>{ row.Result }</td>
 					<td>{ row.Points }</td>

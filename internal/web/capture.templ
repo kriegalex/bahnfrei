@@ -43,7 +43,7 @@ templ capturePage(p PageData, v captureView) {
 			{ " · " }
 			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
 		</p>
-		@protestBanner(p, v)
+		@protestBanner(p, v.MeetID, v.UnitID, v.Protest, v.CanOffice)
 		if len(v.Rows) == 0 {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else if v.IsField {
@@ -67,21 +67,26 @@ templ capturePage(p PageData, v captureView) {
 	}
 }
 
-// protestBanner renders the unit's SYS-047 protest-clock state (UC-015
+// protestBanner renders a unit's SYS-047 protest-clock state (UC-015
 // #1/#4): not-yet-announced units offer the office an "announce" action;
-// announced units show provisional (with the countdown) or official.
-templ protestBanner(p PageData, v captureView) {
-	if v.Protest.Announced {
+// announced units show provisional (with the countdown) or official. Shared
+// by the track/horizontal capture page and the vertical-jump page
+// (verticaljump.templ) — plain parameters rather than captureView so
+// neither family-specific view type has to stand in for the other
+// (TASK-040/DEC-024 gave vertical the same protest banner track/horizontal
+// already had).
+templ protestBanner(p PageData, meetID, unitID string, protest protestView, canOffice bool) {
+	if protest.Announced {
 		<p class="protest-banner" role="status">
-			if v.Protest.Official {
+			if protest.Official {
 				{ p.T("capture.protest.official") }
 			} else {
-				{ p.T("capture.protest.provisional", "n", v.Protest.RemainingMin) }
+				{ p.T("capture.protest.provisional", "n", protest.RemainingMin) }
 			}
 		</p>
-	} else if v.CanOffice {
+	} else if canOffice {
 		<form
-			action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/announce") }
+			action={ templ.URL("/meets/" + meetID + "/capture/" + unitID + "/announce") }
 			method="post"
 		>
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
@@ -122,9 +127,30 @@ templ offlineCaptureControls(p PageData, v captureView) {
 
 // fieldGrid renders the horizontal-attempt grid: one input per trial that
 // takes a mark in metres or the D5.2 symbols (X foul, – pass, r
-// retirement), with per-attempt wind where relevant (SYS-042, UC-011).
+// retirement), with per-attempt wind where relevant (SYS-042, UC-011). Once
+// the unit is announced (UC-015 #2), the per-trial cell forms turn
+// read-only — SaveFieldAttempt rejects them anyway (ErrCorrectionRequired,
+// OQ-036) — and each row grows the settled-level correction form
+// (mark/status/reason/escalation) TASK-040/DEC-024 added, matching the
+// track form's CorrectionMode columns.
 templ fieldGrid(p PageData, v captureView) {
 	<p>{ p.T("capture.value_help") }</p>
+	if v.Protest.CorrectionMode {
+		<p class="capture-correction-notice">{ p.T("capture.correct.notice") }</p>
+		// One correction form per athlete outside the table, mirroring
+		// trackForm's shape: a `<form>` may not be a `<tr>`'s descendant, so
+		// the row's correction inputs associate via the HTML form attribute.
+		for _, row := range v.Rows {
+			<form
+				id={ "field-correct-" + row.AthleteID }
+				action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/correct") }
+				method="post"
+			>
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<input type="hidden" name="athlete" value={ row.AthleteID }/>
+			</form>
+		}
+	}
 	<table class="capture-grid">
 		<thead>
 			<tr>
@@ -132,6 +158,14 @@ templ fieldGrid(p PageData, v captureView) {
 				<th>{ p.T("roster.name") }</th>
 				for i := 1; i <= v.Attempts; i++ {
 					<th>{ p.T("capture.trial_abbr") + intToStr(int64(i)) }</th>
+				}
+				if v.Protest.CorrectionMode {
+					<th>{ p.T("capture.correct.mark") }</th>
+					<th>{ p.T("capture.status") }</th>
+					<th>{ p.T("capture.dq_rule") }</th>
+					<th>{ p.T("capture.correct.reason") }</th>
+					<th>{ p.T("capture.correct.escalation") }</th>
+					<th></th>
 				}
 				<th>{ p.T("capture.result") }</th>
 				<th>{ p.T("standings.points_abbr") }</th>
@@ -144,37 +178,93 @@ templ fieldGrid(p PageData, v captureView) {
 					<td>{ row.Name }</td>
 					for _, cell := range row.Cells {
 						<td>
-							<form
-								action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/attempt") }
-								method="post"
-								class="cell-form"
-								data-athlete={ row.AthleteID }
-								data-seq={ cell.Seq }
-							>
-								<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-								<input type="hidden" name="athlete" value={ row.AthleteID }/>
-								<input type="hidden" name="seq" value={ cell.Seq }/>
-								<input type="hidden" name="version" value={ cell.Version }/>
-								<input
-									type="text"
-									name="value"
-									value={ cell.Value }
-									size="6"
-									aria-label={ p.T("capture.trial_abbr") + cell.Seq + " " + row.Name }
-								/>
-								if v.WindRelevant {
+							if v.Protest.CorrectionMode {
+								{ cell.Display }
+							} else {
+								<form
+									action={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/attempt") }
+									method="post"
+									class="cell-form"
+									data-athlete={ row.AthleteID }
+									data-seq={ cell.Seq }
+								>
+									<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+									<input type="hidden" name="athlete" value={ row.AthleteID }/>
+									<input type="hidden" name="seq" value={ cell.Seq }/>
+									<input type="hidden" name="version" value={ cell.Version }/>
 									<input
 										type="text"
-										name="wind"
-										value={ cell.Wind }
-										size="4"
-										placeholder={ p.T("capture.wind") }
-										aria-label={ p.T("capture.wind") + " " + row.Name }
+										name="value"
+										value={ cell.Value }
+										size="6"
+										aria-label={ p.T("capture.trial_abbr") + cell.Seq + " " + row.Name }
 									/>
-								}
-								<button type="submit">{ p.T("capture.save") }</button>
-							</form>
+									if v.WindRelevant {
+										<input
+											type="text"
+											name="wind"
+											value={ cell.Wind }
+											size="4"
+											placeholder={ p.T("capture.wind") }
+											aria-label={ p.T("capture.wind") + " " + row.Name }
+										/>
+									}
+									<button type="submit">{ p.T("capture.save") }</button>
+								</form>
+							}
 						</td>
+					}
+					if v.Protest.CorrectionMode {
+						<td>
+							<input
+								type="text"
+								name="time"
+								size="6"
+								value={ row.Time }
+								form={ "field-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.mark") + " " + row.Name }
+							/>
+						</td>
+						<td>
+							<select name="status" form={ "field-correct-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
+								<option value="" selected?={ row.Status == "" }>{ p.T("capture.status.none_mark") }</option>
+								for _, st := range v.FieldStatuses {
+									<option value={ st } selected?={ st == row.Status }>{ st }</option>
+								}
+							</select>
+						</td>
+						<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "field-correct-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+						<td>
+							<input
+								type="text"
+								name="reason"
+								size="14"
+								value={ row.Reason }
+								form={ "field-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.reason") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("reason", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("reason", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("reason", row.AthleteID), row.Errors)
+						</td>
+						<td>
+							<input
+								type="text"
+								name="escalation"
+								size="12"
+								value={ row.Escalation }
+								form={ "field-correct-" + row.AthleteID }
+								aria-label={ p.T("capture.correct.escalation") + " " + row.Name }
+								if row.Errors.Has(rowFieldKey("escalation", row.AthleteID)) {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID(rowFieldKey("escalation", row.AthleteID)) }
+								}
+							/>
+							@fieldError(rowFieldKey("escalation", row.AthleteID), row.Errors)
+						</td>
+						<td><button type="submit" form={ "field-correct-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
 					}
 					<td>{ row.Result }</td>
 					<td>{ row.Points }</td>

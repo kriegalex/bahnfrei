@@ -459,8 +459,26 @@ func (s *ResultsService) laneByAthlete(ctx context.Context, unitID string) (map[
 // fieldStandings ranks the field by best mark with next-best tie-breaking
 // (SYS-042) and, once every athlete on the start list has taken the
 // pre-cut trials, the continuation order for the remaining rounds.
+//
+// Ranking and continuation both start from the raw attempt series, but only
+// continuation stays on it: a settled-level correction (UC-015 #2,
+// TASK-040/DEC-024) amends the `results` row directly without rewriting the
+// attempt series it was derived from (OQ-036), so ranking off attempts
+// alone would keep showing the pre-correction mark/status forever. The
+// ranking basis (rankSeries) is reconciled with the settled result whenever
+// it has moved past what the raw attempts alone would produce — a mark
+// correction becomes the athlete's sole ranking input, a status correction
+// (DNS/DNF/DQ/NM) drops them to unranked with the corrected status — so
+// UC-015 #2's "placings ... reflect the change" holds for the field grid's
+// own live standings, not just the meet-wide CurrentStandings (which
+// already reads `results` directly and needs no such reconciliation). The
+// cut/continuation computation deliberately keeps reading the untouched raw
+// series: SYS-042's cut is a mid-competition, pre-announcement concept, and
+// OQ-036 already scopes corrections to already-announced (capture-closed)
+// units.
 func fieldStandings(rows []CaptureRow, results map[string]*store.ResultRecord, cfg CaptureConfig) ([]UnitStandingRow, []string) {
-	var series []domain.FieldSeries
+	var series, rankSeries []domain.FieldSeries
+	overrideStatus := map[string]domain.QualificationStatus{}
 	cutRoundComplete := cfg.CutAfter > 0 && len(rows) > 0
 	for _, row := range rows {
 		fs := domain.FieldSeries{AthleteID: row.AthleteID}
@@ -476,15 +494,33 @@ func fieldStandings(rows []CaptureRow, results map[string]*store.ResultRecord, c
 			cutRoundComplete = false
 		}
 		series = append(series, fs)
+
+		rfs := fs
+		if r := results[row.AthleteID]; r != nil {
+			switch {
+			case r.Status != domain.StatusNone && r.Status != fs.Status():
+				rfs.Attempts = nil
+				overrideStatus[row.AthleteID] = r.Status
+			case r.Mark != "":
+				if best, ok := fs.Best(); !ok || best != r.Mark {
+					rfs.Attempts = []domain.Attempt{{Seq: 1, Kind: domain.AttemptValid, Mark: r.Mark}}
+				}
+			}
+		}
+		rankSeries = append(rankSeries, rfs)
 	}
 
 	var out []UnitStandingRow
-	for _, st := range domain.RankFieldSeries(series) {
+	for _, st := range domain.RankFieldSeries(rankSeries) {
+		status := st.Status
+		if s, ok := overrideStatus[st.AthleteID]; ok {
+			status = s
+		}
 		row := UnitStandingRow{
 			Rank:      st.Rank,
 			AthleteID: st.AthleteID,
 			Mark:      st.Best,
-			Status:    st.Status,
+			Status:    status,
 		}
 		if r := results[st.AthleteID]; r != nil {
 			row.Points = r.Points

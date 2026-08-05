@@ -40,6 +40,17 @@ type verticalRowView struct {
 	Cells  [][3]verticalCellView
 	Result string
 	Points string
+	// Correction-form preserved input (TASK-040/DEC-024, mirroring
+	// captureRowView's identically-named fields): zero value on a normal
+	// render; after a failed correction submit,
+	// renderVerticalCaptureCorrectionError overlays the submitted values
+	// onto the one row that failed so the office's just-typed correction
+	// survives the re-render instead of reverting to blank fields.
+	Time, Status, StatusDetail, Reason, Escalation string
+	// Errors carries this row's field-level validation errors, keyed
+	// "<field>-<athleteID>" (rowFieldKey), same convention as the track/
+	// horizontal grids.
+	Errors FieldErrors
 }
 
 type verticalStandingRowView struct {
@@ -63,6 +74,14 @@ type verticalCaptureView struct {
 	Rows           []verticalRowView
 	Standings      []verticalStandingRowView
 	CanOffice      bool
+	// Protest is the unit's SYS-047 protest-clock state (UC-015 #1/#4) —
+	// vertical units share the same announce/correction flow as track and
+	// horizontal field units (TASK-040/DEC-024 gave vertical the correction
+	// UI; the announce action itself was already reachable, just not shown
+	// on this page before).
+	Protest protestView
+	// FieldStatuses is the correction-row status options (fieldCorrectionStatuses).
+	FieldStatuses []string
 }
 
 func (s *Server) verticalCaptureView(r *http.Request, meetID, unitID string) (verticalCaptureView, error) {
@@ -70,13 +89,19 @@ func (s *Server) verticalCaptureView(r *http.Request, meetID, unitID string) (ve
 	if err != nil {
 		return verticalCaptureView{}, err
 	}
+	protestState, err := s.results.UnitProtestState(r.Context(), meetID, unitID)
+	if err != nil {
+		return verticalCaptureView{}, err
+	}
 	p := basePageData(r, s.cats)
 	v := verticalCaptureView{
-		MeetID:     uc.Meet.ID,
-		MeetName:   uc.Meet.Name,
-		UnitID:     unitID,
-		Discipline: s.localizedDisciplineName(p, uc.DisciplineCode),
-		Heights:    uc.Heights,
+		MeetID:        uc.Meet.ID,
+		MeetName:      uc.Meet.Name,
+		Protest:       buildProtestView(protestState),
+		UnitID:        unitID,
+		Discipline:    s.localizedDisciplineName(p, uc.DisciplineCode),
+		Heights:       uc.Heights,
+		FieldStatuses: fieldCorrectionStatuses(),
 	}
 	if actor, ok := sessionFromContext(r.Context()); ok {
 		v.CanOffice = actor.Role.AtLeast(app.RoleCompetitionOffice)
@@ -312,6 +337,36 @@ func (s *Server) renderVerticalCaptureError(w http.ResponseWriter, r *http.Reque
 	} else {
 		p.FlashError = p.T(key)
 	}
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = verticalCapturePage(p, v).Render(r.Context(), w)
+}
+
+// renderVerticalCaptureCorrectionError is renderCaptureCorrectionError's
+// vertical-jump counterpart (TASK-040/DEC-024): re-renders the height-
+// progression grid with one athlete's just-submitted (and rejected)
+// correction preserved on their row, alongside its field-level error —
+// called by capture.go's handleCaptureCorrect (the shared "/correct" route)
+// once it resolves the unit's discipline family to vertical.
+func (s *Server) renderVerticalCaptureCorrectionError(w http.ResponseWriter, r *http.Request, p PageData, meetID, unitID, athleteID string, in app.CorrectionInput, errs FieldErrors) {
+	v, err := s.verticalCaptureView(r, meetID, unitID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	for i := range v.Rows {
+		if v.Rows[i].AthleteID != athleteID {
+			continue
+		}
+		v.Rows[i].Time = in.Mark
+		v.Rows[i].Status = string(in.Status)
+		v.Rows[i].StatusDetail = in.StatusDetail
+		v.Rows[i].Reason = in.Reason
+		v.Rows[i].Escalation = in.Escalation
+		v.Rows[i].Errors = errs
+		break
+	}
+	p.Title = v.MeetName + " — " + v.Discipline
+	p.FlashError = p.T("capture.error.correction_invalid")
 	w.WriteHeader(http.StatusUnprocessableEntity)
 	_ = verticalCapturePage(p, v).Render(r.Context(), w)
 }
