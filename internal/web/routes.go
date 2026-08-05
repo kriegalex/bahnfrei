@@ -213,6 +213,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/announce", office(s.handleCaptureAnnounce))
 	mux.HandleFunc("POST /meets/{id}/capture/{unit}/correct", office(s.handleCaptureCorrect))
 
+	// Bulk "mark remaining as DNS" (TASK-041, DEC-025/OQ-070, SYS-114/
+	// SYS-046): office-only, scoped to still-open track units — the TASK-034
+	// confirm sub-page pattern (GET confirm fronting the POST) rather than a
+	// bare button.
+	mux.HandleFunc("GET /meets/{id}/capture/{unit}/bulk-dns/confirm", office(s.handleCaptureBulkDNSConfirm))
+	mux.HandleFunc("POST /meets/{id}/capture/{unit}/bulk-dns", office(s.handleCaptureBulkDNS))
+
 	// Offline capture queue (TASK-009, UC-034 / SYS-085/086): the checkout
 	// and replay endpoints are this app's one JSON API (see internal/sync
 	// doc.go and internal/web/sync.go for why). Field-official level and above.

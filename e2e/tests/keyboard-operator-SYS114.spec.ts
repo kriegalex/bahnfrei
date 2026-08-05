@@ -166,6 +166,63 @@ test.describe("SYS-114 UC-010: track result entry is keyboard-only (times, statu
     await page.keyboard.press("Enter");
     await expect(page.locator("#capture-standings")).toContainText("11.2 h");
   });
+
+  // TASK-041 (DEC-025, OQ-070): the second real SYS-114 bulk operation, a
+  // "mark remaining as DNS" action on a still-open track unit, going
+  // through the TASK-034 confirm sub-page rather than a bare POST.
+  test("keyboard bulk 'mark remaining as DNS' through the confirm page", async ({
+    app,
+    context,
+    page,
+  }) => {
+    await setupAndLogin(context.request, app.baseURL);
+    const fx = await seedTrackMeet(context.request, app.baseURL, [
+      "Alice",
+      "Bella",
+      "Clara",
+    ]);
+
+    await page.goto(fx.unitURL);
+    await assertTabAdvancesFocus(page);
+
+    // Alice gets a real time first — the bulk action must leave her alone;
+    // Bella and Clara stay uncaptured.
+    const aliceTime = page.locator('tr:has-text("Alice Test") input[name="time"]');
+    const aliceSave = page.locator('tr:has-text("Alice Test") button[type="submit"]');
+    await tabUntilFocused(page, aliceTime);
+    await page.keyboard.type("11.32");
+    await tabUntilFocused(page, aliceSave);
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#capture-standings")).toContainText("11.4 h");
+
+    // Keyboard-reach the "mark remaining as DNS" link and activate it with
+    // Enter (a plain GET navigation, not a form submit — the TASK-034
+    // confirm sub-page pattern).
+    const bulkDNSLink = page.locator('a[href*="/bulk-dns/confirm"]');
+    await expect(bulkDNSLink).toBeVisible();
+    await tabUntilFocused(page, bulkDNSLink);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/bulk-dns\/confirm$/);
+
+    // The confirm sub-page's own submit button, keyboard-reached and
+    // activated — proving it is not a keyboard trap either.
+    await assertTabAdvancesFocus(page);
+    const confirmButton = page.locator('form[action*="/bulk-dns"] button[type="submit"]');
+    await tabUntilFocused(page, confirmButton);
+    await page.keyboard.press("Enter");
+
+    // Back on the unit page: Bella and Clara are now DNS, Alice's captured
+    // time survived untouched, and the link disappears (nothing left to mark).
+    await expect(page).toHaveURL(fx.unitURL);
+    await expect(page.locator("#capture-standings")).toContainText("11.4 h");
+    await expect(
+      page.locator('#capture-standings tr:has-text("Bella Test")'),
+    ).toContainText("DNS");
+    await expect(
+      page.locator('#capture-standings tr:has-text("Clara Test")'),
+    ).toContainText("DNS");
+    await expect(page.locator('a[href*="/bulk-dns/confirm"]')).toHaveCount(0);
+  });
 });
 
 test.describe("SYS-114 UC-011/UC-015: the field-event correction row is keyboard-only (TASK-040)", () => {

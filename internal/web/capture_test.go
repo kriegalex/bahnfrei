@@ -193,6 +193,82 @@ func TestUC010_TrackCaptureFlow(t *testing.T) {
 	}
 }
 
+// TestCaptureBulkDNSConfirmFlowSYS114SYS046Web drives the TASK-041 bulk
+// "mark remaining as DNS" action end to end from the browser: the confirm
+// sub-page (TASK-034 pattern) previews the candidate count, a plain
+// navigation away (Cancel) applies nothing, and only its own POST marks the
+// still-unresulted entrant DNS while leaving an already-captured result
+// untouched.
+func TestCaptureBulkDNSConfirmFlowSYS114SYS046Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitPath := "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitURL := base + unitPath
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+
+	// Anna (101) gets a real hand time; Bea (102) is left uncaptured.
+	resp := postForm(t, client, unitURL, unitURL+"/track", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.32"}, "timing": {"manual"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("manual time = %d, want 303", resp.StatusCode)
+	}
+
+	// The capture page offers the bulk-DNS confirm link while one entrant
+	// remains unresulted.
+	confirmURL := unitURL + "/bulk-dns/confirm"
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, `href="`+unitPath+`/bulk-dns/confirm"`) {
+		t.Fatal("capture page misses the bulk-DNS confirm link (TASK-041)")
+	}
+
+	// The confirm sub-page previews the exact candidate count (just Bea)
+	// and posts to the bulk-dns route.
+	confirmBody := bodyString(t, mustGet(t, client, confirmURL))
+	if !strings.Contains(confirmBody, "1 Teilnehmende ohne erfasstes Resultat") {
+		t.Errorf("confirm page must preview the candidate count: %s", confirmBody)
+	}
+	if !strings.Contains(confirmBody, `action="`+unitPath+`/bulk-dns"`) {
+		t.Errorf("confirm page must post to the bulk-dns route: %s", confirmBody)
+	}
+	if !strings.Contains(confirmBody, `href="`+unitPath+`"`) {
+		t.Errorf("confirm page must offer a Cancel link back to the unit: %s", confirmBody)
+	}
+
+	// Cancel: merely visiting (and navigating away from) the confirm page
+	// applies nothing — Bea still has no settled result.
+	standings := bodyString(t, mustGet(t, client, unitURL+"/standings"))
+	if strings.Contains(standings, "Bea Beispiel") {
+		t.Fatal("visiting the confirm page must not itself apply the bulk DNS")
+	}
+
+	// Confirm: POST applies — Bea becomes DNS, Anna's hand time survives.
+	resp = postForm(t, client, confirmURL, unitURL+"/bulk-dns", url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("bulk-dns POST = %d, want 303", resp.StatusCode)
+	}
+	standings = bodyString(t, mustGet(t, client, unitURL+"/standings"))
+	if !strings.Contains(standings, "9.4 h") {
+		t.Error("Anna's captured time must survive the bulk action")
+	}
+	beaPos := strings.Index(standings, "Bea Beispiel")
+	if beaPos == -1 || !strings.Contains(standings[beaPos:], "DNS") {
+		t.Errorf("Bea must now show DNS: %s", standings)
+	}
+
+	// Nothing is left to mark: the link disappears from the capture page.
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if strings.Contains(body, unitPath+"/bulk-dns/confirm") {
+		t.Error("bulk-DNS link should not render once every entrant is resulted")
+	}
+}
+
 // TestCaptureWindAppliesUniformlySYS040UC010_4Web drives the per-race wind
 // form: the reading applies to the whole race, not per athlete, and the
 // input re-renders pre-filled with the stored value.
