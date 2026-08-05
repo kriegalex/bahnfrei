@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -175,6 +176,217 @@ func TestSubmitIndividualEntryValidatesAthleteInputSYS010(t *testing.T) {
 			t.Error("expected an error for an invalid sex value")
 		}
 	})
+}
+
+// TestOnlineEntryLicenceSetsHasLicenceSYS014DEC023TASK039 covers DEC-023/
+// OQ-033's core promise: an online individual entry that supplies a valid
+// licence number is stored as the athlete's domain.NamespaceSwissAthleticsLicence
+// external id and immediately evaluates HasLicence=true (SYS-014) — a
+// licence-required tier (B-Meeting) no longer blocks the entry, closing the
+// operator round-trip OQ-033 described.
+func TestOnlineEntryLicenceSetsHasLicenceSYS014DEC023TASK039(t *testing.T) {
+	f := newTieredEntryFixture(t, "B-Meeting", "100m", "Women")
+	ctx := context.Background()
+
+	detail, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: f.eventID, FirstName: "Lena", LastName: "Keller", BirthYear: 1998,
+		Sex: domain.SexFemale, SeedPerformance: "12.40", LicenceNo: "SA-1234",
+	})
+	if err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+	if detail.Eligibility.EffectiveOutcome() != domain.EligibilityEligible {
+		t.Fatalf("EffectiveOutcome = %q, want eligible (flags %+v)", detail.Eligibility.EffectiveOutcome(), detail.Eligibility.Flags)
+	}
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), detail.AthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if id, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-1234" {
+		t.Fatalf("licence external id = (%q, %v), want (\"SA-1234\", true)", id, ok)
+	}
+}
+
+// TestOnlineEntryEmptyLicenceUnchangedBehaviourDEC023TASK039 proves the
+// optional field's empty case is a true no-op: an online entry with no
+// licence number behaves exactly as before TASK-039 (blocked at a
+// licence-required tier, no external id recorded).
+func TestOnlineEntryEmptyLicenceUnchangedBehaviourDEC023TASK039(t *testing.T) {
+	f := newTieredEntryFixture(t, "B-Meeting", "100m", "Women")
+	ctx := context.Background()
+
+	detail, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: f.eventID, FirstName: "Nina", LastName: "Frei", BirthYear: 1998,
+		Sex: domain.SexFemale, SeedPerformance: "12.40",
+	})
+	if err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+	if detail.Eligibility.EffectiveOutcome() != domain.EligibilityBlocked {
+		t.Fatalf("EffectiveOutcome = %q, want blocked (no licence given)", detail.Eligibility.EffectiveOutcome())
+	}
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), detail.AthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if _, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); ok {
+		t.Fatal("athlete unexpectedly carries a licence external id when none was submitted")
+	}
+}
+
+// TestOnlineEntryMalformedLicenceRejectedDEC023TASK039 covers both the
+// individual and bulk paths: a licence value that fails
+// domain.ValidLicenceNo (here, an embedded newline) is rejected with
+// ErrInvalidLicenceNo rather than silently stored as a join key that could
+// never match a real licence.
+func TestOnlineEntryMalformedLicenceRejectedDEC023TASK039(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	t.Run("individual", func(t *testing.T) {
+		_, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+			EventID: f.eventID, FirstName: "Rea", LastName: "Nyman", BirthYear: 2000,
+			Sex: domain.SexFemale, SeedPerformance: "13.00", LicenceNo: "bad\nlicence",
+		})
+		if !errors.Is(err, ErrInvalidLicenceNo) {
+			t.Fatalf("SubmitIndividualEntry with a malformed licence = %v, want ErrInvalidLicenceNo", err)
+		}
+	})
+	t.Run("bulk", func(t *testing.T) {
+		in := BulkEntryInput{Club: "LC Bulk", Lines: []BulkEntryLine{
+			{FirstName: "Rea", LastName: "Nyman", BirthYear: 2000, Sex: domain.SexFemale,
+				EventID: f.eventID, SeedPerformance: "13.00", LicenceNo: strings.Repeat("x", 41)},
+		}}
+		if _, err := f.results.SubmitClubBulkEntries(ctx, entrySubmitter, f.meetID, in); !errors.Is(err, ErrInvalidLicenceNo) {
+			t.Fatalf("SubmitClubBulkEntries with a malformed licence = %v, want ErrInvalidLicenceNo", err)
+		}
+	})
+}
+
+// TestClubBulkEntryLicenceSYS014DEC023TASK039 covers the bulk-entry form's
+// licence field (UC-003 #2): a valid per-line licence number is stored and
+// feeds HasLicence exactly like the individual path.
+func TestClubBulkEntryLicenceSYS014DEC023TASK039(t *testing.T) {
+	f := newTieredEntryFixture(t, "B-Meeting", "100m", "Women")
+	ctx := context.Background()
+
+	in := BulkEntryInput{Club: "LC Bulk", Lines: []BulkEntryLine{
+		{FirstName: "Timo", LastName: "Aeby", BirthYear: 1999, Sex: domain.SexFemale,
+			EventID: f.eventID, SeedPerformance: "12.60", LicenceNo: "SA-7788"},
+	}}
+	details, err := f.results.SubmitClubBulkEntries(ctx, entrySubmitter, f.meetID, in)
+	if err != nil {
+		t.Fatalf("SubmitClubBulkEntries: %v", err)
+	}
+	if len(details) != 1 {
+		t.Fatalf("created %d entries, want 1", len(details))
+	}
+	if details[0].Eligibility.EffectiveOutcome() != domain.EligibilityEligible {
+		t.Fatalf("EffectiveOutcome = %q, want eligible", details[0].Eligibility.EffectiveOutcome())
+	}
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), details[0].AthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if id, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-7788" {
+		t.Fatalf("licence external id = (%q, %v), want (\"SA-7788\", true)", id, ok)
+	}
+}
+
+// TestOnlineEntryLicenceJoinKeyParityWithNaturalKeyMatchDEC023TASK039 proves
+// the online path's licence resolution mirrors the CSV import path's
+// resolveImportAthlete (internal/app/import.go) — same join-key semantics,
+// same enrichment behaviour (see TestCSVImportAddsLicenceToExistingNaturalKeyMatch
+// for the CSV-side counterpart this test parallels): a first online entry
+// with no licence creates an athlete; a second online entry for the same
+// person (same natural key) that DOES supply a licence enriches that SAME
+// athlete record via store.SetAthleteExternalID rather than creating a
+// duplicate.
+func TestOnlineEntryLicenceJoinKeyParityWithNaturalKeyMatchDEC023TASK039(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	otherEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "200m", CategoryCodes: []string{"U16 W"}})
+
+	first, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: f.eventID, FirstName: "Sina", LastName: "Roth", BirthYear: 2011,
+		Sex: domain.SexFemale, SeedPerformance: "13.50",
+	})
+	if err != nil {
+		t.Fatalf("first SubmitIndividualEntry: %v", err)
+	}
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), first.AthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if _, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); ok {
+		t.Fatal("athlete unexpectedly already carries a licence number")
+	}
+
+	second, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: otherEventID, FirstName: "Sina", LastName: "Roth", BirthYear: 2011,
+		Sex: domain.SexFemale, SeedPerformance: "27.50", LicenceNo: "SA-4242",
+	})
+	if err != nil {
+		t.Fatalf("second SubmitIndividualEntry: %v", err)
+	}
+	if second.AthleteID != first.AthleteID {
+		t.Fatalf("second entry resolved athlete %q, want the same athlete %q as the first (natural-key enrichment, no duplicate)", second.AthleteID, first.AthleteID)
+	}
+	athlete, err = store.GetAthlete(ctx, f.st.DB(), first.AthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete after second entry: %v", err)
+	}
+	if id, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-4242" {
+		t.Fatalf("licence external id = (%q, %v), want (\"SA-4242\", true) backfilled onto the matched athlete", id, ok)
+	}
+}
+
+// TestOnlineEntryLicenceJoinKeyParityWithCSVImportDEC023TASK039 is the
+// stronger cross-path parity proof TASK-039 calls for: an athlete first
+// created via the CSV import path carrying a licence number, then entered
+// online by a submitter who supplies the SAME licence number (different
+// submitted name/data possible in practice, but proven here with the exact
+// same natural key too) — both paths resolve to the identical stored
+// athlete, because both use the same domain.NamespaceSwissAthleticsLicence
+// join key with identical (trim-only) normalization.
+func TestOnlineEntryLicenceJoinKeyParityWithCSVImportDEC023TASK039(t *testing.T) {
+	f := newImportFixture(t) // C-Meeting/Women/100m, office-role CSV import
+	ctx := context.Background()
+
+	csv := strings.Join([]string{
+		systemNativeCSVHeader,
+		systemNativeCSVRow("Elin", "Baumann", "1997", "W", "LC Import", "SA-5150", "100m/Women", "", "12.70"),
+	}, "\n")
+	report, err := f.results.CommitCSVImport(ctx, office, f.meetID, domain.ImportProfileSystemNative, strings.NewReader(csv))
+	if err != nil {
+		t.Fatalf("CommitCSVImport: %v", err)
+	}
+	if report.Accepted != 1 {
+		t.Fatalf("import report = %+v, want 1 accepted", report)
+	}
+	importedAthleteID := report.Rows[0].AthleteID
+
+	otherEventID := f.addEvent(t, AddEventRequest{DisciplineCode: "200m", CategoryCodes: []string{"Women"}})
+	onlineDetail, err := f.results.SubmitIndividualEntry(ctx, entrySubmitter, f.meetID, IndividualEntryInput{
+		EventID: otherEventID, FirstName: "Elin", LastName: "Baumann", BirthYear: 1997,
+		Sex: domain.SexFemale, SeedPerformance: "26.50", LicenceNo: "SA-5150",
+	})
+	if err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+	if onlineDetail.AthleteID != importedAthleteID {
+		t.Fatalf("online entry resolved athlete %q, want the CSV-imported athlete %q (same licence join key)", onlineDetail.AthleteID, importedAthleteID)
+	}
+	// Same stored state: the athlete record carries exactly one external id
+	// for the namespace, unchanged by the online entry (already matched, so
+	// resolveEntryAthlete's licence-first branch never re-writes it).
+	athlete, err := store.GetAthlete(ctx, f.st.DB(), importedAthleteID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if id, ok := athlete.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-5150" {
+		t.Fatalf("licence external id = (%q, %v), want (\"SA-5150\", true)", id, ok)
+	}
 }
 
 // TestSubmitIndividualEntryUnknownMeet covers the not-found path: a meetID

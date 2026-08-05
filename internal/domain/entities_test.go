@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,6 +36,38 @@ func TestExternalIDs_SetOnNilMap(t *testing.T) {
 	a.ExternalIDs.Set(NamespaceSwissAthleticsLicence, "SA-1")
 	if v, ok := a.ExternalIDs.Get(NamespaceSwissAthleticsLicence); !ok || v != "SA-1" {
 		t.Fatalf("Set on a nil ExternalIDs map must initialize it: got (%q, %v)", v, ok)
+	}
+}
+
+// TestValidLicenceNo covers the DEC-023/TASK-039 online-entry licence-number
+// field's well-formedness check: deliberately permissive (letters, digits,
+// space, dot, hyphen, slash; 1-40 chars) since no specific national licence
+// format is verified (OQ-030) — it only catches obviously malformed input
+// (control characters/newlines, empty, absurd length).
+func TestValidLicenceNo(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"plain digits", "123456", true},
+		{"letters and digits with hyphen", "SA-1234", true},
+		{"with dot and slash", "CH.2026/001", true},
+		{"single char", "A", true},
+		{"unicode letters", "Müller-42", true},
+		{"exactly 40 chars", strings.Repeat("x", 40), true},
+		{"empty", "", false},
+		{"too long (41 chars)", strings.Repeat("x", 41), false},
+		{"embedded newline", "SA-1\n234", false},
+		{"embedded tab", "SA-1\t234", false},
+		{"control character", "SA-1\x00234", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ValidLicenceNo(tc.in); got != tc.want {
+				t.Errorf("ValidLicenceNo(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

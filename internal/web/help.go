@@ -61,6 +61,7 @@ type helpEntry struct {
 var helpRegistry = []helpEntry{
 	{Screen: "capture-track", Route: "/meets/{id}/capture/{unit}", Input: "wind", Key: "capture.wind"},
 	{Screen: "entries", Route: "/meets/{id}/entries", Input: "seed", Key: "entries.seed"},
+	{Screen: "entries", Route: "/meets/{id}/entries", Input: "licence", Key: "entries.licence"},
 	{Screen: "entries", Route: "/meets/{id}/entries", Input: "publication_withdrawn", Key: "publication_withdrawn"},
 	{Screen: "meet-detail", Route: "/meets/{id}", Input: "entry_deadline", Key: "programme.entry_deadline"},
 	{Screen: "meet-detail", Route: "/meets/{id}", Input: "entry_standard", Key: "programme.entry_standard"},

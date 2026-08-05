@@ -39,9 +39,11 @@ func newTieredEntryFixture(t *testing.T, tier, disciplineCode, categoryCode stri
 }
 
 // TestOnlineEntryEligibilityLicenceMissingBlockedSYS014UC005_1 covers UC-005
-// #1: an entry submitted online (which collects no licence number) at a
-// licence-required tier (Swiss B-Meeting) is flagged licence-missing/blocked
-// before start-list generation.
+// #1: an entry submitted online with no licence number (the field is
+// optional, DEC-023/TASK-039) at a licence-required tier (Swiss B-Meeting)
+// is flagged licence-missing/blocked before start-list generation. See
+// TestOnlineEntryLicenceSetsHasLicenceSYS014DEC023TASK039 (entry_test.go)
+// for the counterpart where a licence number IS supplied.
 func TestOnlineEntryEligibilityLicenceMissingBlockedSYS014UC005_1(t *testing.T) {
 	f := newTieredEntryFixture(t, "B-Meeting", "100m", "Women")
 	ctx := context.Background()

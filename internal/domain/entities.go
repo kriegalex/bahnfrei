@@ -6,6 +6,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -58,6 +59,29 @@ const (
 	// NamespaceSwissAthleticsClubCode is a club's Swiss Athletics club code.
 	NamespaceSwissAthleticsClubCode = "swiss-athletics:club-code"
 )
+
+// licenceNoPattern is a deliberately permissive well-formedness check for a
+// federation licence number entered by hand (DEC-023, OQ-033/OQ-104,
+// TASK-039): Unicode letters/digits, spaces, dots, hyphens and slashes,
+// 1–40 characters. The CSV/Alabus import path (internal/app/import.go's
+// resolveImportAthlete) imposes NO format at all — there, a licence number
+// is just an opaque external-ID join key (ADR-005 §6) trusted as given by
+// the import file, because the real Swiss Athletics/Alabus licence-number
+// format is unverified (OQ-030). ValidLicenceNo exists only to catch
+// obviously mistyped/pasted input on the online-entry form (stray
+// newlines/control characters, absurd length) before it becomes a stored
+// join key that could never match a real licence — it does not invent or
+// enforce a specific national licence-number scheme.
+var licenceNoPattern = regexp.MustCompile(`^[\p{L}\p{N} ./-]{1,40}$`)
+
+// ValidLicenceNo reports whether s (already trimmed) is well-formed enough
+// to accept as a licence-number join key. An empty string is NOT valid by
+// this function's contract — the field is optional, so callers check
+// emptiness themselves before calling this (mirrors domain.EvaluateEntryStandard's
+// division of labour with ErrSeedPerformanceRequired).
+func ValidLicenceNo(s string) bool {
+	return licenceNoPattern.MatchString(s)
+}
 
 // Athlete is the SyRS §2 Athlete entity: person data, birth date/year, sex,
 // nationality, club affiliation(s), licence number(s) (as ExternalIDs), para

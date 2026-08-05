@@ -210,6 +210,151 @@ func TestOnlineEntryIndividualFieldErrorsOQ075UC038_4(t *testing.T) {
 	}
 }
 
+// TestOnlineEntryIndividualLicenceFlowDEC023TASK039Web drives DEC-023/
+// TASK-039 over real HTTP: an individual online entry that supplies a
+// licence number no longer shows the unlicensed-entry warning on the
+// submitter's own entries page (entryFlowFixture's default meet is
+// C-Meeting, where a missing licence is a non-blocking warning per
+// TestOnlineEntryEligibilityLicenceMissingWarningAtCMeetingSYS014UC005).
+// Birth year 2012 against the fixture's 2027 meet start date lands the
+// athlete in U16 W (age 14-15) — the event's own category — so the only
+// eligibility concern in play is the licence, not a category mismatch.
+func TestOnlineEntryIndividualLicenceFlowDEC023TASK039Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, base+"/meets/"+meetID+"/entries/individual", url.Values{
+		"event": {eventID}, "first_name": {"Anna"}, "last_name": {"Muster"},
+		"birth_year": {"2012"}, "sex": {"W"}, "club": {"LC Test"}, "seed": {"13.50"},
+		"licence": {"SA-2026-01"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("submit individual entry with licence = %d, want 303", resp.StatusCode)
+	}
+
+	body := bodyString(t, mustGet(t, client, page))
+	if !strings.Contains(body, "Zugelassen") {
+		t.Errorf("entries page does not show the entry as eligible after a licence number was supplied: %s", body)
+	}
+	if strings.Contains(body, "Lizenz fehlt (nicht ranglistenrelevant)") {
+		t.Errorf("entries page still shows the unlicensed-entry warning flag after a licence number was supplied: %s", body)
+	}
+}
+
+// TestOnlineEntryIndividualLicenceFieldErrorDEC023TASK039Web covers the
+// malformed-licence path (an embedded newline fails domain.ValidLicenceNo):
+// the form re-renders (never a redirect) with an inline field error on
+// "licence", mirroring OQ-075/UC-038 #4's established pattern for "seed".
+func TestOnlineEntryIndividualLicenceFieldErrorDEC023TASK039Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, base+"/meets/"+meetID+"/entries/individual", url.Values{
+		"event": {eventID}, "first_name": {"Anna"}, "last_name": {"Muster"},
+		"birth_year": {"2011"}, "sex": {"W"}, "club": {"LC Test"}, "seed": {"13.50"},
+		"licence": {"bad\nlicence"},
+	})
+	body := bodyString(t, resp)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("individual entry with a malformed licence = %d, want 422: %s", resp.StatusCode, body)
+	}
+	for _, want := range []string{
+		`id="licence-error"`,
+		// the rest of the submitted values must survive the re-render.
+		`value="Anna"`,
+		`value="LC Test"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("re-rendered individual-entry form missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "Anna Muster") {
+		t.Error("no entry should have been created while the form re-renders with a field error")
+	}
+}
+
+// TestOnlineEntryBulkLicenceFlowDEC023TASK039Web covers the bulk-entry
+// form's per-line licence field (UC-003 #2): a valid licence number on one
+// row feeds SYS-014 exactly like the individual form.
+func TestOnlineEntryBulkLicenceFlowDEC023TASK039Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, page+"/bulk", url.Values{
+		"club":              {"LC Bulk"},
+		"bulk_first_name_0": {"Rita"}, "bulk_last_name_0": {"Suter"}, "bulk_birth_year_0": {"2012"},
+		"bulk_sex_0": {"W"}, "bulk_event_0": {eventID}, "bulk_seed_0": {"13.50"},
+		"bulk_licence_0": {"SA-9900"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("submit bulk entry with licence = %d, want 303", resp.StatusCode)
+	}
+
+	body := bodyString(t, mustGet(t, client, page))
+	if !strings.Contains(body, "Rita Suter") {
+		t.Fatalf("entries page missing bulk-submitted athlete: %s", body)
+	}
+	if !strings.Contains(body, "Zugelassen") {
+		t.Errorf("entries page does not show the bulk entry as eligible after a licence number was supplied: %s", body)
+	}
+	if strings.Contains(body, "Lizenz fehlt (nicht ranglistenrelevant)") {
+		t.Errorf("entries page shows the unlicensed-entry warning flag after a bulk licence number was supplied: %s", body)
+	}
+}
+
+// TestOnlineEntryBulkMalformedLicenceFlashDEC023TASK039Web covers the bulk
+// form's malformed-licence rejection end-to-end: the bulk form has no
+// per-row FieldErrors wiring (unlike the individual form), so a malformed
+// value redirects with the "licence_invalid" page-level flash, matching
+// every other bulk-line business error (deadline/limit/duplicate/etc.).
+func TestOnlineEntryBulkMalformedLicenceFlashDEC023TASK039Web(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, _ := entryFlowFixture(t, deps, client, base)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	logout(t, client, base)
+	login(t, client, base, "sub1", "s3cret-passphrase")
+	page := base + "/meets/" + meetID + "/entries"
+	resp := postForm(t, client, page, page+"/bulk", url.Values{
+		"club":              {"LC Bulk"},
+		"bulk_first_name_0": {"Uri"}, "bulk_last_name_0": {"Meier"}, "bulk_birth_year_0": {"2012"},
+		"bulk_sex_0": {"W"}, "bulk_event_0": {eventID}, "bulk_seed_0": {"13.50"},
+		"bulk_licence_0": {"bad\nlicence"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("submit bulk entry with a malformed licence = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "err=licence_invalid") {
+		t.Errorf("redirect location = %q, want an err=licence_invalid flash", resp.Header.Get("Location"))
+	}
+
+	body := bodyString(t, mustGet(t, client, page))
+	if strings.Contains(body, "Uri Meier") {
+		t.Error("no entry should have been created for a malformed bulk licence number")
+	}
+}
+
 // TestBibAssignmentFlowSYS018UC006_1_2Web drives UC-006 #1/#2 over real
 // HTTP: bulk bib assignment by club produces unique bibs, and a manual
 // duplicate assignment is rejected.
@@ -679,6 +824,7 @@ func TestEntryFlashKeyMapsKnownErrors(t *testing.T) {
 		{app.ErrDuplicateEntry, "duplicate"},
 		{app.ErrEntriesClosed, "closed"},
 		{app.ErrNotRelayEntry, "not_relay"},
+		{app.ErrInvalidLicenceNo, "licence_invalid"},
 		{app.ErrConflict, "conflict"},
 		{errors.New("some other failure"), "invalid"},
 	} {

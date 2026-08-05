@@ -47,6 +47,11 @@ var (
 	// ErrNotRelayEntry means a relay-composition edit targeted an entry that
 	// is not a relay entry.
 	ErrNotRelayEntry = errors.New("entry is not a relay entry")
+	// ErrInvalidLicenceNo means a submitted licence number failed
+	// domain.ValidLicenceNo's well-formedness check (DEC-023, TASK-039).
+	// Validated server-side regardless of what the form itself checked
+	// (SYS-011's "including by direct request forgery" precedent).
+	ErrInvalidLicenceNo = errors.New("licence number is not well-formed")
 )
 
 // EntryDetail is one entry enriched with its athlete/relay-team, event and
@@ -92,6 +97,14 @@ type EntryEventOption struct {
 // true suppresses the athlete's identity on public surfaces from the
 // start (see internal/domain/privacy.go for the opt-out rationale and
 // enforcement).
+// LicenceNo is the athlete's optional federation licence number (DEC-023,
+// OQ-033, TASK-039): when given, it feeds the SYS-014 HasLicence evaluation
+// and is stored as the athlete's domain.NamespaceSwissAthleticsLicence
+// external ID — the same join-key namespace and (lack of) normalization
+// the CSV/Alabus import path uses (internal/app/import.go), so a licence
+// entered online and one carried by a later re-import resolve to the same
+// athlete record instead of silently diverging. Empty is valid and common
+// (most tiers do not require a licence, SYS-014).
 type IndividualEntryInput struct {
 	EventID              string
 	FirstName            string
@@ -101,11 +114,13 @@ type IndividualEntryInput struct {
 	Club                 string
 	SeedPerformance      string
 	PublicationWithdrawn bool
+	LicenceNo            string
 }
 
 // BulkEntryLine is one line of a club submitter's bulk entry operation
 // (UC-003 #2). PublicationWithdrawn is per line — consent is per person
-// (SYS-103), never per submission batch.
+// (SYS-103), never per submission batch. LicenceNo is per line for the same
+// reason (DEC-023, TASK-039) — see IndividualEntryInput.LicenceNo.
 type BulkEntryLine struct {
 	FirstName            string
 	LastName             string
@@ -114,6 +129,7 @@ type BulkEntryLine struct {
 	EventID              string
 	SeedPerformance      string
 	PublicationWithdrawn bool
+	LicenceNo            string
 }
 
 // BulkEntryInput is a club submitter's bulk entry operation: every line
@@ -240,7 +256,12 @@ func ensureClub(ctx context.Context, db store.DBTX, clubName string) (store.Club
 // affiliated with clubID if given, with their SYS-103 publication-consent
 // state as collected by the submitting flow (TASK-023, UC-023 — every
 // athlete-creating entry path records consent explicitly, never silently).
-func createAthlete(ctx context.Context, db store.DBTX, clubID, firstName, lastName string, birthYear int, sex domain.Sex, consent domain.PublicationConsent) (store.AthleteRecord, error) {
+// licenceNo, if non-empty, is stored as the new athlete's
+// domain.NamespaceSwissAthleticsLicence external ID (DEC-023, TASK-039) —
+// the caller is responsible for well-formedness (domain.ValidLicenceNo) and
+// trimming; this function stores it as given, exactly like the CSV import
+// path's resolveImportAthlete (internal/app/import.go).
+func createAthlete(ctx context.Context, db store.DBTX, clubID, licenceNo, firstName, lastName string, birthYear int, sex domain.Sex, consent domain.PublicationConsent) (store.AthleteRecord, error) {
 	if strings.TrimSpace(firstName) == "" || strings.TrimSpace(lastName) == "" {
 		return store.AthleteRecord{}, errors.New("entry: athlete first and last name are required")
 	}
@@ -254,10 +275,51 @@ func createAthlete(ctx context.Context, db store.DBTX, clubID, firstName, lastNa
 	if clubID != "" {
 		clubIDs = []string{clubID}
 	}
-	return store.CreateAthlete(ctx, db, domain.Athlete{
+	a := domain.Athlete{
 		FirstName: firstName, LastName: lastName, BirthYear: birthYear, Sex: sex, ClubIDs: clubIDs,
 		Consent: consent,
-	})
+	}
+	if licenceNo != "" {
+		a.ExternalIDs = domain.ExternalIDs{domain.NamespaceSwissAthleticsLicence: licenceNo}
+	}
+	return store.CreateAthlete(ctx, db, a)
+}
+
+// resolveEntryAthlete resolves the athlete an online individual/bulk entry
+// targets (DEC-023, OQ-033, TASK-039). When licenceNo is empty this is
+// exactly createAthlete — an online submission with no licence number keeps
+// the pre-TASK-039 behaviour of always creating a new athlete record
+// unchanged. When licenceNo is non-empty it applies the SAME join-key
+// resolution the CSV import path's resolveImportAthlete uses (internal/app/
+// import.go): a licence-number match on an existing athlete wins first;
+// failing that, a natural-key match (first/last name, birth year, sex) is
+// enriched with the licence via store.SetAthleteExternalID (mirroring
+// import's re-import enrichment case, closing the OQ-033 operator
+// round-trip); only when neither matches is a new athlete created, carrying
+// the licence from the start. The natural-key fallback only activates when
+// a licence number was actually supplied — a bare online submission with no
+// licence never risks silently merging into an unrelated existing athlete.
+func resolveEntryAthlete(ctx context.Context, db store.DBTX, clubID, licenceNo, firstName, lastName string, birthYear int, sex domain.Sex, consent domain.PublicationConsent) (store.AthleteRecord, error) {
+	if licenceNo == "" {
+		return createAthlete(ctx, db, clubID, "", firstName, lastName, birthYear, sex, consent)
+	}
+	if a, err := store.FindAthleteByExternalID(ctx, db, domain.NamespaceSwissAthleticsLicence, licenceNo); err == nil {
+		return a, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return store.AthleteRecord{}, err
+	}
+	if a, err := store.FindAthleteByNaturalKey(ctx, db, firstName, lastName, birthYear, sex); err == nil {
+		if _, ok := a.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok {
+			if newVersion, err := store.SetAthleteExternalID(ctx, db, a.ID, a.Version, domain.NamespaceSwissAthleticsLicence, licenceNo); err == nil {
+				a.ExternalIDs.Set(domain.NamespaceSwissAthleticsLicence, licenceNo)
+				a.Version = newVersion
+			}
+		}
+		return a, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return store.AthleteRecord{}, err
+	}
+	return createAthlete(ctx, db, clubID, licenceNo, firstName, lastName, birthYear, sex, consent)
 }
 
 // entryConsent builds the PublicationConsent an entry flow records for a
@@ -313,6 +375,10 @@ func (s *ResultsService) SubmitIndividualEntry(ctx context.Context, actor Sessio
 	if err := checkEntryLimit(ctx, tx, event); err != nil {
 		return EntryDetail{}, err
 	}
+	licenceNo := strings.TrimSpace(in.LicenceNo)
+	if licenceNo != "" && !domain.ValidLicenceNo(licenceNo) {
+		return EntryDetail{}, ErrInvalidLicenceNo
+	}
 
 	var club store.ClubRecord
 	if strings.TrimSpace(in.Club) != "" {
@@ -320,7 +386,7 @@ func (s *ResultsService) SubmitIndividualEntry(ctx context.Context, actor Sessio
 			return EntryDetail{}, err
 		}
 	}
-	athlete, err := createAthlete(ctx, tx, club.ID, in.FirstName, in.LastName, in.BirthYear, in.Sex,
+	athlete, err := resolveEntryAthlete(ctx, tx, club.ID, licenceNo, in.FirstName, in.LastName, in.BirthYear, in.Sex,
 		s.entryConsent(actor, in.PublicationWithdrawn))
 	if err != nil {
 		return EntryDetail{}, err
@@ -399,7 +465,11 @@ func (s *ResultsService) SubmitClubBulkEntries(ctx context.Context, actor Sessio
 		if err := checkEntryLimit(ctx, tx, event); err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		athlete, err := createAthlete(ctx, tx, club.ID, line.FirstName, line.LastName, line.BirthYear, line.Sex,
+		licenceNo := strings.TrimSpace(line.LicenceNo)
+		if licenceNo != "" && !domain.ValidLicenceNo(licenceNo) {
+			return nil, fmt.Errorf("line %d: %w", i+1, ErrInvalidLicenceNo)
+		}
+		athlete, err := resolveEntryAthlete(ctx, tx, club.ID, licenceNo, line.FirstName, line.LastName, line.BirthYear, line.Sex,
 			s.entryConsent(actor, line.PublicationWithdrawn))
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
@@ -446,7 +516,7 @@ func (s *ResultsService) legAthletes(ctx context.Context, tx store.DBTX, actor S
 	ids := make([]string, 0, len(legs))
 	names := make([]string, 0, len(legs))
 	for i, leg := range legs {
-		athlete, err := createAthlete(ctx, tx, clubID, leg.FirstName, leg.LastName, leg.BirthYear, leg.Sex,
+		athlete, err := createAthlete(ctx, tx, clubID, "", leg.FirstName, leg.LastName, leg.BirthYear, leg.Sex,
 			s.entryConsent(actor, leg.PublicationWithdrawn))
 		if err != nil {
 			return nil, nil, fmt.Errorf("leg %d: %w", i+1, err)

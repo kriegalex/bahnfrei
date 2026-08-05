@@ -110,6 +110,9 @@ test.describe("UC-038 #4: inline field-level validation errors (OQ-075)", () => 
     await individualForm.locator('input[name="birth_year"]').fill("9999");
     await individualForm.locator('input[name="club"]').fill("LC Test");
     await individualForm.locator('input[name="seed"]').fill("13.50");
+    // DEC-023/TASK-039: the optional licence field must survive the
+    // re-render exactly like every other valid field on this form.
+    await individualForm.locator('input[name="licence"]').fill("SA-2026-01");
     await individualForm.getByRole("button", { name: "Melden" }).click();
 
     // No redirect on a field-error re-render: the browser stays on the
@@ -126,6 +129,7 @@ test.describe("UC-038 #4: inline field-level validation errors (OQ-075)", () => 
     await expect(reRenderedForm.locator('input[name="last_name"]')).toHaveValue("Muster");
     await expect(reRenderedForm.locator('input[name="club"]')).toHaveValue("LC Test");
     await expect(reRenderedForm.locator('input[name="seed"]')).toHaveValue("13.50");
+    await expect(reRenderedForm.locator('input[name="licence"]')).toHaveValue("SA-2026-01");
     await expect(page.getByText("Anna Muster")).toHaveCount(0); // not submitted
   });
 });
