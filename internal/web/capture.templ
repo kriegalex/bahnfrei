@@ -44,6 +44,9 @@ templ capturePage(p PageData, v captureView) {
 			<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + v.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
 		</p>
 		@protestBanner(p, v.MeetID, v.UnitID, v.Protest, v.CanOffice)
+		if !v.IsField && v.CanOffice && !v.Protest.Announced && v.HasUnresulted {
+			@bulkDNSAction(p, v.MeetID, v.UnitID)
+		}
 		if len(v.Rows) == 0 {
 			<p>{ p.T("capture.no_participants") }</p>
 		} else if v.IsField {
@@ -93,6 +96,19 @@ templ protestBanner(p PageData, meetID, unitID string, protest protestView, canO
 			<button type="submit">{ p.T("capture.protest.announce") }</button>
 		</form>
 	}
+}
+
+// bulkDNSAction renders the TASK-041 bulk "mark remaining as DNS" link
+// (DEC-025, OQ-070, SYS-114/SYS-046): the second real SYS-114 bulk
+// operation, after check-in's close-check-in — a GET navigation to the
+// TASK-034 confirm sub-page (confirm.go/confirm.templ), matching the
+// "<a class=button>" pattern the other confirm-fronted destructive/bulk
+// actions use (meet archive, account disable, athlete erasure), not a bare
+// POST button.
+templ bulkDNSAction(p PageData, meetID, unitID string) {
+	<p>
+		<a href={ templ.URL("/meets/" + meetID + "/capture/" + unitID + "/bulk-dns/confirm") } class="button">{ p.T("capture.bulk_dns.action") }</a>
+	</p>
 }
 
 // offlineCaptureControls renders the offline-capture island's status

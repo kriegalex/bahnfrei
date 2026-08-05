@@ -165,6 +165,11 @@ type captureView struct {
 	// capture) before announcement, "correct" (reason/escalation required,
 	// office-only) once the unit's results are announced (UC-015 #2).
 	TrackFormAction string
+	// HasUnresulted is true when at least one row has no captured result yet
+	// (Result == "" and no status) — gates whether the TASK-041 "mark
+	// remaining as DNS" bulk action link renders at all: a track unit with
+	// every entrant already resulted has nothing left for it to do.
+	HasUnresulted bool
 }
 
 // protestView is the capture page's SYS-047 protest-clock display: whether
@@ -261,6 +266,8 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 			if res.Points != nil {
 				rv.Points = strconv.Itoa(*res.Points)
 			}
+		} else {
+			v.HasUnresulted = true
 		}
 		v.Rows = append(v.Rows, rv)
 	}
@@ -632,6 +639,64 @@ func (s *Server) handleCaptureAnnounce(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)
+}
+
+// renderBulkDNSError reports a bulk-DNS failure via the same capture-page
+// flash every other capture error uses — shared by both the confirm
+// sub-page's GET (a stale precondition, e.g. the unit was announced after
+// the "mark remaining as DNS" link was rendered) and the POST that applies
+// it.
+func (s *Server) renderBulkDNSError(w http.ResponseWriter, r *http.Request, meetID, unitID string, err error) {
+	switch {
+	case errors.Is(err, app.ErrCorrectionRequired):
+		s.renderCaptureError(w, r, meetID, unitID, "capture.error.correction_required", "")
+	case errors.Is(err, app.ErrBulkDNSTrackOnly):
+		s.renderCaptureError(w, r, meetID, unitID, "capture.error.invalid", "")
+	default:
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		s.renderMeetError(w, r, err)
+	}
+}
+
+// handleCaptureBulkDNSConfirm serves the TASK-034-style GET confirm
+// sub-page for the TASK-041 bulk "mark remaining as DNS" action (DEC-025,
+// OQ-070, SYS-114/SYS-046): a plain Confirm/Cancel step, no typed-token
+// friction — unlike athlete erasure/retention purge, this is recoverable
+// via the correction flow (UC-015 #2), matching account-disable/meet-archive
+// friction level (confirm.go's package doc).
+func (s *Server) handleCaptureBulkDNSConfirm(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	n, err := s.results.BulkDNSCandidateCount(r.Context(), actor, meetID, unitID)
+	if err != nil {
+		s.renderBulkDNSError(w, r, meetID, unitID, err)
+		return
+	}
+	p := basePageData(r, s.cats)
+	v := confirmView{
+		Title:        p.T("capture.bulk_dns.confirm.title"),
+		Description:  p.T("capture.bulk_dns.confirm.description", "n", intToStr(int64(n))),
+		FormAction:   "/meets/" + meetID + "/capture/" + unitID + "/bulk-dns",
+		CancelHref:   "/meets/" + meetID + "/capture/" + unitID,
+		ConfirmLabel: p.T("capture.bulk_dns.action"),
+	}
+	s.renderConfirm(w, r, p, v, http.StatusOK)
+}
+
+// handleCaptureBulkDNS applies the TASK-041 bulk "mark remaining as DNS"
+// action (DEC-025, OQ-070, SYS-114/SYS-046): the confirm sub-page's POST
+// target.
+func (s *Server) handleCaptureBulkDNS(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
+	if _, err := s.results.BulkMarkRemainingDNS(r.Context(), actor, meetID, unitID); err != nil {
+		s.renderBulkDNSError(w, r, meetID, unitID, err)
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/capture/"+unitID, http.StatusSeeOther)

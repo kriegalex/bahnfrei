@@ -857,6 +857,166 @@ func (s *ResultsService) SaveTrackResult(ctx context.Context, actor Session, mee
 	return rec, nil
 }
 
+// --- Bulk "mark remaining as DNS" (TASK-041, DEC-025/OQ-070): the second
+// real SYS-114 bulk operation, after check-in's close-check-in (checkin.go).
+// Scoped to still-open TRACK units (UC-010's trackForm — the gap OQ-070
+// named): every entrant with no captured result yet becomes DNS in one
+// audited action, office-gated like AnnounceUnitResults, going through the
+// TASK-034 confirm sub-page (internal/web/confirm.go) rather than a bare
+// POST. Deliberately NOT wired into the TASK-009 offline capture queue
+// (internal/sync/doc.go): that protocol only ever carries attempt-level ops
+// for horizontal/vertical field units (capture-offline.js is only loaded
+// for v.IsField in capture.templ) — track results are always a synchronous,
+// online, server-rendered save, so a bulk server-side result write here has
+// no capture-island optimistic-version state to race with. ---
+
+// ErrBulkDNSTrackOnly means the bulk "mark remaining as DNS" action was
+// invoked on a non-track unit: it is scoped to UC-010 track result entry
+// (OQ-070) — horizontal/vertical field events are per-attempt series, not a
+// single per-athlete status, so "no captured result yet" has no equivalent
+// bulk-safe meaning there.
+var ErrBulkDNSTrackOnly = errors.New("bulk 'mark remaining as DNS' is scoped to track units (SYS-114, UC-010)")
+
+// requireTrackUnit is the family guard BulkDNSCandidateCount and
+// BulkMarkRemainingDNS share.
+func requireTrackUnit(uc unitContext) error {
+	if uc.disc.Family != domain.FamilyTrack {
+		return ErrBulkDNSTrackOnly
+	}
+	return nil
+}
+
+// unresultedTrackEntries resolves the athlete IDs of a track unit's
+// entrants (the same population UnitCapture's Rows renders — every meet
+// participant, TASK-008's PoC-scale roster model) that have no settled
+// result yet, in roster order, alongside their drawn lanes (SYS-026/027)
+// for the result rows BulkMarkRemainingDNS writes.
+func (s *ResultsService) unresultedTrackEntries(ctx context.Context, meetID, unitID string) ([]string, map[string]int, error) {
+	participants, err := store.ListParticipants(ctx, s.db, meetID)
+	if err != nil {
+		return nil, nil, err
+	}
+	results, err := store.ListUnitResults(ctx, s.db, unitID)
+	if err != nil {
+		return nil, nil, err
+	}
+	resulted := make(map[string]bool, len(results))
+	for _, r := range results {
+		resulted[r.AthleteID] = true
+	}
+	lanes, err := s.laneByAthlete(ctx, unitID)
+	if err != nil {
+		return nil, nil, err
+	}
+	var ids []string
+	for _, p := range participants {
+		if !resulted[p.AthleteID] {
+			ids = append(ids, p.AthleteID)
+		}
+	}
+	return ids, lanes, nil
+}
+
+// BulkDNSCandidateCount reports how many of a still-open track unit's
+// entrants have no captured result yet — the TASK-034 confirm sub-page's
+// preview count, read-only (no write, no audit).
+func (s *ResultsService) BulkDNSCandidateCount(ctx context.Context, actor Session, meetID, unitID string) (int, error) {
+	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
+		return 0, err
+	}
+	uc, err := s.unitContext(ctx, meetID, unitID)
+	if err != nil {
+		return 0, err
+	}
+	if err := requireTrackUnit(uc); err != nil {
+		return 0, err
+	}
+	if err := s.requireNotAnnounced(ctx, unitID); err != nil {
+		return 0, err
+	}
+	ids, _, err := s.unresultedTrackEntries(ctx, meetID, unitID)
+	if err != nil {
+		return 0, err
+	}
+	return len(ids), nil
+}
+
+// BulkMarkRemainingDNS marks every entrant of a still-open track unit that
+// has no captured result yet as DNS, in one audited office action
+// (TASK-041, DEC-025/OQ-070, SYS-114/SYS-046): the second real SYS-114 bulk
+// operation, mirroring CloseCheckIn's per-entry audit shape. Entries that
+// already carry a result (any status, not just a valid mark) are left
+// untouched. Returns the number of entries marked DNS.
+func (s *ResultsService) BulkMarkRemainingDNS(ctx context.Context, actor Session, meetID, unitID string) (int, error) {
+	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
+		return 0, err
+	}
+	uc, err := s.unitContext(ctx, meetID, unitID)
+	if err != nil {
+		return 0, err
+	}
+	if err := requireTrackUnit(uc); err != nil {
+		return 0, err
+	}
+	if err := s.requireNotAnnounced(ctx, unitID); err != nil {
+		return 0, err
+	}
+	ids, lanes, err := s.unresultedTrackEntries(ctx, meetID, unitID)
+	if err != nil {
+		return 0, err
+	}
+
+	n := 0
+	for _, athleteID := range ids {
+		applied, err := s.bulkDNSOne(ctx, actor, unitID, athleteID, lanes[athleteID])
+		if err != nil {
+			return n, err
+		}
+		if applied {
+			n++
+		}
+	}
+	if n > 0 {
+		s.notifyChanged(meetID)
+	}
+	return n, nil
+}
+
+// bulkDNSOne inserts one DNS result for an entrant with no result yet.
+// Insert-only (SaveResultOptimistic's expectedVersion 0): a result captured
+// concurrently between BulkMarkRemainingDNS's snapshot and this write —
+// another operator saving that same athlete's real time/status at the same
+// moment — wins the race; this write reports applied=false (not an error)
+// and the entry is correctly left with its real result, matching "entries
+// with results untouched" rather than clobbering a concurrent capture.
+func (s *ResultsService) bulkDNSOne(ctx context.Context, actor Session, unitID, athleteID string, lane int) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("capture.bulk_dns: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result := domain.Result{UnitID: unitID, AthleteID: athleteID, Status: domain.StatusDNS, Lane: lane}
+	rec, err := store.SaveResultOptimistic(ctx, tx, result, domain.TimingNone, "manual", 0)
+	if err != nil {
+		if errors.Is(err, store.ErrVersionConflict) {
+			return false, nil
+		}
+		return false, err
+	}
+	after, _ := json.Marshal(map[string]string{"status": string(domain.StatusDNS)})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "capture.bulk_dns",
+		EntityType: "result", EntityID: rec.ID, After: string(after),
+	}); err != nil {
+		return false, fmt.Errorf("audit capture.bulk_dns: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("capture.bulk_dns: %w", err)
+	}
+	return true, nil
+}
+
 // scorePoints scores a mark against the meet's scoring table, if it has
 // one (UC-033 #2); nil means the meet does not score points. A meet
 // configured with a WA combined-events formula table (SYS-044, TASK-021:
