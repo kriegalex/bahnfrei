@@ -138,6 +138,37 @@ func TestVerticalCaptureRequiresHeightsThenGridWebSYS043UC012(t *testing.T) {
 	}
 }
 
+// TestVerticalCaptureStandingsEmptyCollapsesSYS152UC041 covers F8 for
+// vertical jump: domain.RankVertical ranks every entrant regardless of
+// whether they have attempted a height yet, so once heights are configured
+// but before any trial is saved, the standings fragment must collapse to
+// one concise empty message rather than a full-header table of blank rows.
+func TestVerticalCaptureStandingsEmptyCollapsesSYS152UC041(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60", "1.65", "1.70"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("configure heights = %d, want 303", resp.StatusCode)
+	}
+
+	standings := bodyString(t, mustGet(t, client, unitURL+"/standings"))
+	if strings.Contains(standings, "<table") {
+		t.Errorf("empty vertical standings must not render a table: %s", standings)
+	}
+	if strings.Contains(standings, "Anna Muster") || strings.Contains(standings, "Bea Beispiel") {
+		t.Errorf("empty vertical standings must not leak blank participant rows: %s", standings)
+	}
+	if !strings.Contains(standings, "Noch keine Resultate erfasst.") {
+		t.Errorf("empty vertical standings must show the concise empty message: %s", standings)
+	}
+}
+
 // TestVerticalHeightsConfigureIsOfficeOnlyWebSYS043 checks the office-only
 // gate on the height-configuration route at the HTTP layer.
 func TestVerticalHeightsConfigureIsOfficeOnlyWebSYS043(t *testing.T) {

@@ -6,17 +6,26 @@ package web
 // checkInPage is the office check-in/call-room workspace (TASK-018, UC-007,
 // SYS-025): confirm entries or close check-in in one action, marking every
 // still-unconfirmed entry DNS; a DNS entry can be reinstated (referee
-// override).
+// override). TASK-047/SYS-152/UC-041 #4-5: the close action is only offered
+// (as a link to its TASK-034-style confirm sub-page, stating the affected
+// count) while CloseCount > 0 — nothing still "entered" means nothing for
+// it to do, so it is replaced by an explanatory hint rather than a live
+// control with no effect. An empty roster explains why (OQ-117: honest for
+// both a not-yet-submitted entry list and a roster-managed template meet)
+// and links to the capture page, where a roster-seeded meet's participants
+// are visible instead.
 templ checkInPage(p PageData, v checkInView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { v.EventLabel } — { p.T("checkin.title") }</h1>
 		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
-		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/checkin/close") } method="post">
-			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<button type="submit">{ p.T("checkin.close") }</button>
-		</form>
+		if v.CloseCount > 0 {
+			<p><a href={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/checkin/close/confirm") } class="button">{ p.T("checkin.close") }</a></p>
+		} else if len(v.Rows) > 0 {
+			<p class="hint">{ p.T("checkin.close.inapplicable") }</p>
+		}
 		if len(v.Rows) == 0 {
 			<p>{ p.T("checkin.empty") }</p>
+			<p><a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("checkin.empty.capture_link") }</a></p>
 		} else {
 			<div class="table-scroll" tabindex="0">
 				<table>

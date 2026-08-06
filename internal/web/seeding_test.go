@@ -151,6 +151,129 @@ func TestCheckInFlowHTTPSYS025UC007(t *testing.T) {
 	}
 }
 
+// TestCheckinEmptyStateSYS152UC041_4 covers F7/SYS-152/UC-041 #4: an event
+// with zero online entries states why it is empty (OQ-117's honest
+// both-readings copy — roster-managed template meets and not-yet-submitted
+// online entries) and links to the capture page, where a roster-seeded
+// meet's participants would show instead; it never offers the destructive
+// "Check-in schliessen" action when there is nothing to close.
+func TestCheckinEmptyStateSYS152UC041_4(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"100m"}, "categories": {"U18 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+	publishMeetWeb(t, client, base, meetID)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	checkinPage := base + "/meets/" + meetID + "/events/" + eventID + "/checkin"
+	body := bodyString(t, mustGet(t, client, checkinPage))
+	if !strings.Contains(body, "Roster verwaltet") {
+		t.Errorf("empty check-in must explain why (OQ-117): %s", body)
+	}
+	if !strings.Contains(body, `href="/meets/`+meetID+`/capture"`) {
+		t.Errorf("empty check-in must link to the capture page as the next step: %s", body)
+	}
+	if strings.Contains(body, "checkin/close/confirm") {
+		t.Error("empty check-in must not offer the close action — nothing to close")
+	}
+	if strings.Contains(body, `action="/meets/`+meetID+`/events/`+eventID+`/checkin/close"`) {
+		t.Error("empty check-in must not render a live close form")
+	}
+}
+
+// TestCheckInCloseInapplicableWhenAllResolvedSYS152UC041_4 covers the other
+// half of F7/SYS-152/UC-041 #4: entries exist but every one is already
+// resolved (confirmed, here — seededMeetFixture confirms each entry it
+// creates), so there is nothing left for "close check-in" to do. The list
+// page hides the action behind an explanatory hint instead of a live
+// control, and navigating straight to the close-confirm URL (a stale link,
+// or a typed one) renders the same explanation rather than a live confirm
+// button.
+func TestCheckInCloseInapplicableWhenAllResolvedSYS152UC041_4(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, _ := seededMeetFixture(t, deps, client, base, 2)
+
+	checkinPage := base + "/meets/" + meetID + "/events/" + eventID + "/checkin"
+	body := bodyString(t, mustGet(t, client, checkinPage))
+	if strings.Contains(body, "checkin/close/confirm") {
+		t.Error("check-in with nothing left to close must not offer the close action")
+	}
+	if !strings.Contains(body, "Nichts zu schliessen") {
+		t.Errorf("check-in with nothing left to close must state why: %s", body)
+	}
+
+	confirmBody := bodyString(t, mustGet(t, client, checkinPage+"/close/confirm"))
+	if strings.Contains(confirmBody, `action="/meets/`+meetID+`/events/`+eventID+`/checkin/close"`) {
+		t.Errorf("close-confirm with nothing applicable must not render a live form: %s", confirmBody)
+	}
+	if !strings.Contains(confirmBody, "Nichts zu schliessen") {
+		t.Errorf("close-confirm with nothing applicable must render the explanation: %s", confirmBody)
+	}
+}
+
+// TestCheckInCloseConfirmShowsCountAndClosesSYS152UC041_5 covers UC-041 #5:
+// the close-confirm sub-page states the number of entries it will affect
+// before its confirm button, and only its own POST applies the close.
+func TestCheckInCloseConfirmShowsCountAndClosesSYS152UC041_5(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"100m"}, "categories": {"U18 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+	publishMeetWeb(t, client, base, meetID)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if _, err := deps.results.SubmitIndividualEntry(ctx, webSubmitter, meetID, app.IndividualEntryInput{
+			EventID: eventID, FirstName: "Athlete", LastName: strings.Repeat("C", i+1),
+			BirthYear: 2009, Sex: domain.SexFemale, SeedPerformance: "13.50",
+		}); err != nil {
+			t.Fatalf("SubmitIndividualEntry: %v", err)
+		}
+	}
+
+	checkinPage := base + "/meets/" + meetID + "/events/" + eventID + "/checkin"
+	confirmHref := "/meets/" + meetID + "/events/" + eventID + "/checkin/close/confirm"
+	body := bodyString(t, mustGet(t, client, checkinPage))
+	if !strings.Contains(body, `href="`+confirmHref+`"`) {
+		t.Fatalf("check-in with unresolved entries must link to the close-confirm page: %s", body)
+	}
+
+	confirmBody := bodyString(t, mustGet(t, client, base+confirmHref))
+	if !strings.Contains(confirmBody, "2 nicht bestätigte") {
+		t.Errorf("close-confirm must state the affected count (UC-041 #5): %s", confirmBody)
+	}
+	closeAction := "/meets/" + meetID + "/events/" + eventID + "/checkin/close"
+	if !strings.Contains(confirmBody, `action="`+closeAction+`"`) {
+		t.Errorf("close-confirm must post to the close route: %s", confirmBody)
+	}
+
+	resp = postForm(t, client, base+confirmHref, base+closeAction, url.Values{})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("confirmed close = %d, want 303", resp.StatusCode)
+	}
+
+	roster, err := deps.results.CheckInRoster(ctx, webOffice, meetID, eventID)
+	if err != nil {
+		t.Fatalf("CheckInRoster: %v", err)
+	}
+	for _, row := range roster {
+		if row.Status != domain.EntryDNS {
+			t.Errorf("entry %s should be DNS after the confirmed close, got %s", row.ID, row.Status)
+		}
+	}
+}
+
 // TestSeedingGenerateAndOverrideHTTPSYS026UC008 drives heat generation and a
 // manual override over real HTTP.
 func TestSeedingGenerateAndOverrideHTTPSYS026UC008(t *testing.T) {

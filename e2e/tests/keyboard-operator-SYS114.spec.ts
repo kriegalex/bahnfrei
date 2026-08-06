@@ -56,13 +56,21 @@ test.describe("SYS-114 UC-007: check-in is keyboard-only, incl. bulk DNS-close a
     await page.keyboard.press("Enter");
     await expect(aliceConfirm).toHaveCount(0); // she is no longer "entered"
 
-    // Bulk operation (UC-007 #1): one keyboard action on the "close
-    // check-in" button marks every STILL-unconfirmed entry (Bella, Clara —
-    // two athletes at once) DNS, without touching Alice's confirmation.
-    const closeButton = page.locator(
+    // Bulk operation (UC-007 #1): the "close check-in" action is now a
+    // TASK-047/SYS-152 confirm-sub-page link (states the affected count,
+    // UC-041 #5) rather than a direct submit button — one keyboard
+    // activation opens it, then a second confirms, marking every STILL-
+    // unconfirmed entry (Bella, Clara — two athletes at once) DNS, without
+    // touching Alice's confirmation.
+    const closeLink = page.locator('a[href$="/checkin/close/confirm"]');
+    await tabUntilFocused(page, closeLink);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/checkin\/close\/confirm$/);
+
+    const confirmCloseButton = page.locator(
       'form[action*="/checkin/close"] button[type="submit"]',
     );
-    await tabUntilFocused(page, closeButton);
+    await tabUntilFocused(page, confirmCloseButton);
     await page.keyboard.press("Enter");
 
     const bellaReinstate = page.locator(

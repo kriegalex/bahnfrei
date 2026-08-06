@@ -627,6 +627,81 @@ func TestPurgeExpiredSYS102UC024_3(t *testing.T) {
 	})
 }
 
+// TestRetentionPurgePreviewCountSYS152UC041_5 covers the TASK-047/SYS-152/
+// UC-041 #5 confirm-page scope preview: it reports how many athletes and
+// meets are out of retention right now without applying the purge (a
+// repeat call finds the same counts), is gated the same as the purge
+// itself (deny for office), and reflects only the out-of-retention meet,
+// never the still-current one.
+func TestRetentionPurgePreviewCountSYS152UC041_5(t *testing.T) {
+	meets, results, st := newTestResults(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	privacy := NewPrivacyService(st.DB()).WithClock(func() time.Time { return now })
+
+	oldMeet, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Alter Wettkampf", Venue: "V", HomologationRef: "H",
+		StartDate: now.AddDate(0, 0, -200), EndDate: now.AddDate(0, 0, -200),
+		Tier: "C-Meeting", CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet (old): %v", err)
+	}
+	recentMeet, err := meets.CreateMeet(ctx, organizer, MeetRequest{
+		Name: "Neuer Wettkampf", Venue: "V", HomologationRef: "H",
+		StartDate: now.AddDate(0, 0, -10), EndDate: now.AddDate(0, 0, -10),
+		Tier: "C-Meeting", CategorySchemeID: domain.SchemeSwissAthletics,
+	})
+	if err != nil {
+		t.Fatalf("CreateMeet (recent): %v", err)
+	}
+	if _, err := results.RegisterParticipant(ctx, office, oldMeet.ID, ParticipantInput{
+		FirstName: "Old", LastName: "Athlete", BirthYear: 2010, Sex: domain.SexFemale, Bib: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := results.RegisterParticipant(ctx, office, recentMeet.ID, ParticipantInput{
+		FirstName: "Recent", LastName: "Athlete", BirthYear: 2010, Sex: domain.SexFemale, Bib: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("deny: office cannot preview the instance-wide purge scope", func(t *testing.T) {
+		if _, _, err := privacy.RetentionPurgePreviewCount(ctx, office, DefaultRetentionDays); err == nil {
+			t.Fatal("expected ErrForbidden")
+		}
+	})
+
+	t.Run("allow: preview counts the out-of-retention meet/athlete only, applies nothing", func(t *testing.T) {
+		athletes, meetsN, err := privacy.RetentionPurgePreviewCount(ctx, admin, DefaultRetentionDays)
+		if err != nil {
+			t.Fatalf("RetentionPurgePreviewCount: %v", err)
+		}
+		if athletes != 1 || meetsN != 1 {
+			t.Errorf("RetentionPurgePreviewCount = (%d, %d), want (1, 1)", athletes, meetsN)
+		}
+
+		// A repeat preview finds the same counts (read-only, no state
+		// change) — and the real purge afterwards still has real work to
+		// do, proving the preview did not itself consume anything.
+		athletes2, meetsN2, err := privacy.RetentionPurgePreviewCount(ctx, admin, DefaultRetentionDays)
+		if err != nil {
+			t.Fatalf("RetentionPurgePreviewCount (repeat): %v", err)
+		}
+		if athletes2 != athletes || meetsN2 != meetsN {
+			t.Errorf("RetentionPurgePreviewCount is not idempotent: first (%d,%d), second (%d,%d)", athletes, meetsN, athletes2, meetsN2)
+		}
+
+		report, err := privacy.PurgeExpired(ctx, admin, DefaultRetentionDays)
+		if err != nil {
+			t.Fatalf("PurgeExpired: %v", err)
+		}
+		if report.AthletesPurged != athletes {
+			t.Errorf("PurgeExpired.AthletesPurged = %d, want the previewed count %d", report.AthletesPurged, athletes)
+		}
+	})
+}
+
 // TestPurgeExpiredRedactsEntryAuditRowsSYS102UC024_3 covers TASK-029
 // privacy-review finding #2: the retention purge's audit-redaction sweep
 // previously covered only entity_type "participant"/"result"/"athlete" —

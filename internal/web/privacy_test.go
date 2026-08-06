@@ -221,7 +221,9 @@ func TestPrivacyEraseOverHTTPSYS101UC024_2(t *testing.T) {
 // retention-purge trigger: an instance-admin can run it and sees the
 // run's summary; a repeat run against a fresh instance (nothing yet out
 // of retention) reports zero, proving the trigger is safe to click
-// speculatively.
+// speculatively. TASK-047/SYS-152/UC-041 #5: the confirm sub-page itself
+// states the affected scope (athletes/meets out of retention) before the
+// confirm button — a fresh instance has none, so it reads "0".
 func TestRetentionPurgeOverHTTPSYS102UC024_3(t *testing.T) {
 	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
 	client, base := newTestClient(t, deps)
@@ -230,6 +232,11 @@ func TestRetentionPurgeOverHTTPSYS102UC024_3(t *testing.T) {
 	form := bodyString(t, mustGet(t, client, base+"/admin/privacy"))
 	if !strings.Contains(form, "90") {
 		t.Errorf("retention-purge form should surface the configured retention period: %s", form)
+	}
+
+	confirmBody := bodyString(t, mustGet(t, client, base+"/admin/privacy/purge/confirm"))
+	if !strings.Contains(confirmBody, "0 Athlet") || !strings.Contains(confirmBody, "0 Wettkämpfe") {
+		t.Errorf("purge confirm page must state the affected scope (UC-041 #5): %s", confirmBody)
 	}
 
 	// OQ-074 (TASK-034): the purge requires the confirm sub-page's fixed

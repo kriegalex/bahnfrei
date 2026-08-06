@@ -283,6 +283,31 @@ func (p *PrivacyService) PurgeExpired(ctx context.Context, actor Session, retent
 	return p.purge(ctx, actor.AccountID, retentionDays)
 }
 
+// RetentionPurgePreviewCount reports how many athletes and expired meets a
+// SYS-102 retention purge would affect right now, without applying it
+// (TASK-047/SYS-152/UC-041 #5): the confirm sub-page's scope-count preview,
+// reusing the same two read-only queries purge() itself runs first — a
+// cheap row-count lookup, no write, so it is safe to call on every GET of
+// the confirm page.
+func (p *PrivacyService) RetentionPurgePreviewCount(ctx context.Context, actor Session, retentionDays int) (athletes, meets int, err error) {
+	if err := Authorize(actor.Role, CapManageRetention); err != nil {
+		return 0, 0, err
+	}
+	if retentionDays <= 0 {
+		retentionDays = DefaultRetentionDays
+	}
+	cutoff := p.now().AddDate(0, 0, -retentionDays)
+	athleteIDs, err := store.FindAthletesOutsideRetention(ctx, p.db, cutoff)
+	if err != nil {
+		return 0, 0, fmt.Errorf("retention purge preview: %w", err)
+	}
+	meetIDs, err := store.FindExpiredMeetIDs(ctx, p.db, cutoff)
+	if err != nil {
+		return 0, 0, fmt.Errorf("retention purge preview: %w", err)
+	}
+	return len(athleteIDs), len(meetIDs), nil
+}
+
 // PurgeExpiredAtStartup runs the same SYS-102 sweep with no authenticated
 // actor (cmd/bahnfrei wires this once per process start, SYS-102: "SHALL
 // be automatically purgeable" — a purely manual trigger would not satisfy

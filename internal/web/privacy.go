@@ -190,7 +190,7 @@ func (s *Server) handleRetentionPurge(w http.ResponseWriter, r *http.Request) {
 	}
 	p := basePageData(r, s.cats)
 	if r.FormValue("confirm_text") != retentionPurgeConfirmToken {
-		v := s.retentionPurgeConfirmView(p, p.T("privacy.retention.confirm.mismatch"))
+		v := s.retentionPurgeConfirmView(r, actor, p, p.T("privacy.retention.confirm.mismatch"))
 		s.renderConfirm(w, r, p, v, http.StatusUnprocessableEntity)
 		return
 	}

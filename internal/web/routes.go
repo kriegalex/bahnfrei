@@ -168,6 +168,7 @@ func (s *Server) routes() http.Handler {
 	// Check-in / call-room and DNS handling (TASK-018, UC-007, SYS-025):
 	// office level, matching UC-007's "operator (check-in/call room)" actor.
 	mux.HandleFunc("GET /meets/{id}/events/{event}/checkin", office(s.handleCheckIn))
+	mux.HandleFunc("GET /meets/{id}/events/{event}/checkin/close/confirm", office(s.handleCheckInCloseConfirm))
 	mux.HandleFunc("POST /meets/{id}/events/{event}/checkin/close", office(s.handleCheckInClose))
 	mux.HandleFunc("POST /meets/{id}/entries/{entry}/confirm", office(s.handleCheckInConfirm))
 	mux.HandleFunc("POST /meets/{id}/entries/{entry}/reinstate", office(s.handleCheckInReinstate))

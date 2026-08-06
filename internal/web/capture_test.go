@@ -267,6 +267,46 @@ func TestCaptureBulkDNSConfirmFlowSYS114SYS046Web(t *testing.T) {
 	if strings.Contains(body, unitPath+"/bulk-dns/confirm") {
 		t.Error("bulk-DNS link should not render once every entrant is resulted")
 	}
+
+	// TASK-047/SYS-152/UC-041 #4: navigating straight to the confirm URL
+	// once nothing applies (a stale link, or a typed one) must still render
+	// an explanatory state, not a live confirm button that would just
+	// apply a no-op.
+	staleConfirmBody := bodyString(t, mustGet(t, client, confirmURL))
+	if strings.Contains(staleConfirmBody, `action="`+unitPath+`/bulk-dns"`) {
+		t.Errorf("bulk-DNS confirm with nothing to mark must not render a live form: %s", staleConfirmBody)
+	}
+	if !strings.Contains(staleConfirmBody, "Nichts zu markieren") {
+		t.Errorf("bulk-DNS confirm with nothing to mark must state why: %s", staleConfirmBody)
+	}
+}
+
+// TestCaptureStandingsEmptyCollapsesToOneMessageSYS152UC041 covers F8: a
+// field unit's standings always rank every entrant, resulted or not
+// (RankFieldSeries), and a track unit with a category split could
+// otherwise repeat an empty message per category heading — before any
+// result is captured, both must collapse to one concise empty message
+// instead of a full-header table of blank rows (field) or a repeated
+// per-section empty paragraph.
+func TestCaptureStandingsEmptyCollapsesToOneMessageSYS152UC041(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+
+	for _, name := range []string{"Zone Long Jump (UKC)", "60 metres"} {
+		unitURL := base + "/meets/" + meetID + "/capture/" + units[name]
+		standings := bodyString(t, mustGet(t, client, unitURL+"/standings"))
+		if strings.Contains(standings, "<table") {
+			t.Errorf("%s: empty standings must not render a table: %s", name, standings)
+		}
+		if strings.Contains(standings, "Anna Muster") || strings.Contains(standings, "Bea Beispiel") {
+			t.Errorf("%s: empty standings must not leak blank participant rows: %s", name, standings)
+		}
+		if !strings.Contains(standings, "Noch keine Resultate erfasst.") {
+			t.Errorf("%s: empty standings must show the concise empty message: %s", name, standings)
+		}
+	}
 }
 
 // TestCaptureWindAppliesUniformlySYS040UC010_4Web drives the per-race wind

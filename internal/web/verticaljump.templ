@@ -227,7 +227,7 @@ templ verticalGrid(p PageData, v verticalCaptureView) {
 // failures, with a persisting first-place tie flagged for the office.
 templ verticalCaptureStandings(p PageData, v verticalCaptureView) {
 	<h2>{ p.T("capture.standings") }</h2>
-	if len(v.Standings) == 0 {
+	if v.StandingsEmpty {
 		<p>{ p.T("capture.standings_empty") }</p>
 	} else {
 		<table>
