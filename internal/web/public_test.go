@@ -461,3 +461,225 @@ func TestPublicResultsConsentSuppressionSYS103UC023_2(t *testing.T) {
 		}
 	}
 }
+
+// TestPublicResultsJumpNavSYS153UC042_2 covers UC-042 #2 on the public
+// results page: the per-category jump nav renders at the top (a link per
+// division, targeting that division's own heading id) and each division
+// heading carries a "back to top" link pointing at the #public-results
+// section — the same anchor the SSE live-refresh island swaps, so it
+// survives every live update.
+func TestPublicResultsJumpNavSYS153UC042_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	anon, _ := newTestClient(t, deps)
+	body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results"))
+
+	if !strings.Contains(body, `id="div-0"`) {
+		t.Errorf("results page missing the first division's jump-nav anchor id: %s", body)
+	}
+	if !strings.Contains(body, `href="#div-0"`) {
+		t.Errorf("results page missing the jump-nav link to the first division: %s", body)
+	}
+	if !strings.Contains(body, `href="#public-results"`) {
+		t.Errorf("results page missing a category heading's back-to-top link: %s", body)
+	}
+	if !strings.Contains(body, "Kategorien") {
+		t.Errorf("results page missing the localized jump-nav title: %s", body)
+	}
+}
+
+// TestPublicStartListsJumpNavSYS153UC042_2 covers UC-042 #2 on the public
+// start-list page: the heat-sheet section's existing discipline+category
+// grouping (TASK-018) is the "category" the jump nav targets — one link
+// per event, each event heading linking back to #public-startlists (this
+// page has no live-refresh section to preserve across).
+func TestPublicStartListsJumpNavSYS153UC042_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 2)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{"max_heat_size": {"8"}, "track_lanes": {"8"}})
+	_ = genResp.Body.Close()
+
+	anon, _ := newTestClient(t, deps)
+	body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/startlists"))
+
+	if !strings.Contains(body, `id="heat-event-0"`) {
+		t.Errorf("start-list page missing the first heat-sheet event's jump-nav anchor id: %s", body)
+	}
+	if !strings.Contains(body, `href="#heat-event-0"`) {
+		t.Errorf("start-list page missing the jump-nav link to the first heat-sheet event: %s", body)
+	}
+	if !strings.Contains(body, `href="#public-startlists"`) {
+		t.Errorf("start-list page missing a category heading's back-to-top link: %s", body)
+	}
+	if !strings.Contains(body, "Kategorien") {
+		t.Errorf("start-list page missing the localized jump-nav title: %s", body)
+	}
+}
+
+// TestPublicResultsQueryFilterSYS153UC042_1 covers UC-042 #1's no-JS
+// fallback on the public results page: a plain ?q= GET (the searchForm
+// submit with no JS running) narrows the rendered divisions to matching
+// rows only, redisplays the query in the search box, and updates the
+// "n results" count — the exact server-side counterpart to what
+// public-filter.ts does client-side for a JS-enabled visitor.
+func TestPublicResultsQueryFilterSYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	anon, _ := newTestClient(t, deps)
+	body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q=Anna"))
+
+	if !strings.Contains(body, "Anna Muster") {
+		t.Errorf("?q=Anna results page missing the matching athlete: %s", body)
+	}
+	if strings.Contains(body, "Bea Beispiel") {
+		t.Errorf("?q=Anna results page still shows the non-matching athlete: %s", body)
+	}
+	if !strings.Contains(body, `value="Anna"`) {
+		t.Errorf("?q=Anna results page does not redisplay the query in the search box: %s", body)
+	}
+	if !strings.Contains(body, "1 Ergebnisse") {
+		t.Errorf("?q=Anna results page missing the updated \"1 Ergebnisse\" count: %s", body)
+	}
+
+	// Also matches by bib and by club (DEC-021/TASK-038's
+	// app.MatchesParticipantSearch semantics, reused verbatim).
+	byBib := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q=101"))
+	if !strings.Contains(byBib, "Anna Muster") {
+		t.Errorf("?q=101 (bib) results page missing the matching athlete: %s", byBib)
+	}
+}
+
+// TestPublicResultsQueryFilterEmptyMatchesCachedSYS153UC042_1 covers the
+// "empty q behaves identically to no q" half of UC-042 #1's cache-safety
+// contract: an explicit but empty ?q= must render byte-identical to a
+// plain request and take the same cached path (ADR-004 §9) — it must
+// never be treated as "a filter is active" just because the parameter is
+// present on the URL.
+func TestPublicResultsQueryFilterEmptyMatchesCachedSYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	anon, _ := newTestClient(t, deps)
+	plain := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results"))
+	emptyQ := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q="))
+	if plain != emptyQ {
+		t.Errorf("GET /results and GET /results?q= (empty) rendered differently:\nplain: %s\nq=:    %s", plain, emptyQ)
+	}
+	if len(deps.server.publicResults.entries) != 1 {
+		t.Errorf("publicResults cache entries = %d, want 1 (both requests should share the cached, unfiltered entry)", len(deps.server.publicResults.entries))
+	}
+}
+
+// TestPublicResultsQueryFilterCacheSafetySYS153UC042_1 is the cache-safety
+// regression test TASK-048 requires: an unbounded set of distinct ?q=
+// values must never grow the ADR-004 §9 per-meet render cache — each one
+// takes the separate, uncached rendering path (filterPublicResultsView),
+// never s.publicResults.getOrBuild. Inspects the cache map size directly
+// (same package, publicResultsCache.entries) rather than through a
+// black-box proxy for cache size.
+func TestPublicResultsQueryFilterCacheSafetySYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	anon, _ := newTestClient(t, deps)
+	// Populate the cache with the one legitimate (unfiltered) entry first.
+	_ = bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results"))
+	if got := len(deps.server.publicResults.entries); got != 1 {
+		t.Fatalf("publicResults cache entries after the unfiltered request = %d, want 1", got)
+	}
+
+	for _, q := range []string{"Anna", "Bea", "zzz-no-match", "a", "b", "101", "102"} {
+		_ = bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q="+url.QueryEscape(q)))
+		if got := len(deps.server.publicResults.entries); got != 1 {
+			t.Errorf("publicResults cache entries after ?q=%s = %d, want 1 (a filtered request must never grow the cache)", q, got)
+		}
+	}
+}
+
+// TestPublicResultsQueryFilterNotFoundSYS153UC042_1 covers the "?q=
+// preserves the meet's normal not-found gating" half of UC-042 #1: a
+// filtered request against a meet ID that does not exist still 404s,
+// exactly like the unfiltered path (renderMeetError/app.ErrMeetNotFound)
+// — the filter's cache-bypass branch must not accidentally skip that
+// check.
+func TestPublicResultsQueryFilterNotFoundSYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	_, base := newTestClient(t, deps)
+
+	resp := mustGet(t, http.DefaultClient, base+"/m/does-not-exist/results?q=Anna")
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("?q= against an unknown meet = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestPublicResultsQueryFilterLocalizedSYS153UC042_1 covers UC-042 #1's
+// "all copy DE + FR" requirement across both launch languages: the
+// no-results message and the "n results" count line both render in the
+// visitor's own locale.
+func TestPublicResultsQueryFilterLocalizedSYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	cases := []struct {
+		loc        string
+		wantCount  string
+		wantNoHits string
+	}{
+		{"de", "1 Ergebnisse", "Keine Teilnehmenden gefunden"},
+		{"fr", "1 résultats", "Aucun·e participant·e trouvé·e"},
+	}
+	for _, tc := range cases {
+		anon, _ := newTestClient(t, deps)
+		_ = mustGet(t, anon, base+"/locale?lang="+tc.loc).Body.Close()
+
+		matched := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q=Anna"))
+		if !strings.Contains(matched, tc.wantCount) {
+			t.Errorf("[%s] ?q=Anna results page missing localized count %q: %s", tc.loc, tc.wantCount, matched)
+		}
+
+		noHits := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/results?q=zznomatch"))
+		if !strings.Contains(noHits, tc.wantNoHits) {
+			t.Errorf("[%s] ?q=zznomatch results page missing localized no-results message %q: %s", tc.loc, tc.wantNoHits, noHits)
+		}
+	}
+}
+
+// TestPublicStartListsQueryFilterSYS153UC042_1 covers UC-042 #1 on the
+// public start-list page: the flat roster is filtered server-side by
+// name/bib/club (unlike results, this page is never cached — ADR-004 §9
+// only covers the results fragment — so there is no cache-safety branch
+// to prove here, only the filtering itself).
+func TestPublicStartListsQueryFilterSYS153UC042_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	anon, _ := newTestClient(t, deps)
+	body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/startlists?q=Bea"))
+	if !strings.Contains(body, "Bea Beispiel") {
+		t.Errorf("?q=Bea start-list page missing the matching athlete: %s", body)
+	}
+	if strings.Contains(body, "Anna Muster") {
+		t.Errorf("?q=Bea start-list page still shows the non-matching athlete: %s", body)
+	}
+	if !strings.Contains(body, "1 Ergebnisse") {
+		t.Errorf("?q=Bea start-list page missing the updated \"1 Ergebnisse\" count: %s", body)
+	}
+}

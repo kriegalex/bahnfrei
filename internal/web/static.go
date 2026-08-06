@@ -27,8 +27,11 @@ import (
 // help.js is the contextual-help island (TASK-031, SYS-115): open/close
 // behavior for the help-icon component (help.templ) — a static asset
 // because the CSP forbids inline scripts.
+// public-filter.js is the public find-your-athlete filter island
+// (TASK-048, SYS-153/UC-042), compiled from islands/src/public-filter.ts —
+// loaded on both the public results and start-list pages.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.

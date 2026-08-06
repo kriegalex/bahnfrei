@@ -208,6 +208,11 @@ type standingRowView struct {
 type divisionView struct {
 	Code string
 	Rows []standingRowView
+	// AnchorID is the public results page's per-category jump-nav target
+	// (SYS-153/UC-042 #2, TASK-048) — set by buildPublicResultsView
+	// (public.go); the operator standings page (handleStandings) leaves it
+	// at its zero value, unused, since it has no jump nav.
+	AnchorID string
 }
 
 type standingsView struct {

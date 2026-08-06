@@ -168,11 +168,12 @@ inspection/analysis procedure.
 | SYS-150 *(P)* | UC-043 #1–#3 | T | Planned — TASK-049 (M4). Walkthrough F4: no participant identity correction path exists (only bib / out-of-competition mutations) |
 | SYS-151 *(P)* | UC-041 #1–#3 | T/I | Planned — TASK-046 (M4). Walkthrough F5; ratification would also answer OQ-113 |
 | SYS-152 *(P)* | UC-041 #4–#5 | T/I | Planned — TASK-047 (M4). Walkthrough F7/F8 |
-| SYS-153 *(P)* | UC-042 #1–#3 | T | Planned — TASK-048 (M4). Walkthrough F9 |
+| SYS-153 *(P)* | UC-042 #1–#3 | T | TASK-048. Walkthrough F9. Per-category jump nav (UC-042 #2): `internal/web/public.go` `buildPublicResultsView`/`handlePublicStartLists` assign each division/heat-sheet event a stable `AnchorID`; `public.templ` renders a jump-nav list plus a back-to-top link on every category heading, on both public results and start lists. Filter (UC-042 #1): `islands/src/public-filter.ts` (compiled `internal/web/static/public-filter.js`) hides non-matching `[data-filter-row]`/`[data-filter-section]` client-side over the already-rendered page (zero extra server load) and updates the "n results" count; the no-JS fallback is a plain `?q=` GET — `internal/web/public.go` `filterPublicResultsView`/`filterPublicStartListsView`, reusing `app.MatchesParticipantSearch` (DEC-021/TASK-038). ADR-004 §9 cache safety: `filterPublicResultsView` is reachable only from `handlePublicResults`' `q != ""` branch, which never calls `s.publicResults.getOrBuild` — the render cache stays keyed on (meetID, locale) alone. Live-update persistence (UC-042 #3): `public-filter.ts` watches `#public-results` for the SSE swap (`public-live.js`) and restores the query. `internal/web` `TestPublicResultsJumpNavSYS153UC042_2`, `TestPublicStartListsJumpNavSYS153UC042_2`, `TestPublicResultsQueryFilterSYS153UC042_1`, `TestPublicResultsQueryFilterEmptyMatchesCachedSYS153UC042_1`, `TestPublicResultsQueryFilterCacheSafetySYS153UC042_1` (proves an unbounded set of `?q=` values never grows `publicResultsCache.entries`), `TestPublicResultsQueryFilterNotFoundSYS153UC042_1`, `TestPublicResultsQueryFilterLocalizedSYS153UC042_1` (DE+FR), `TestPublicStartListsQueryFilterSYS153UC042_1`; e2e `e2e/tests/find-your-athlete-UC042.spec.ts` (phone viewport client-side filter, SSE-swap filter persistence, no-JS `javaScriptEnabled: false` GET fallback). Still pending founder ratification. |
 
 **Coverage check:** all baselined SYS verified; every UC traces to ≥1 SYS (see UC index).
 Zero orphans in either direction. SYS-147–153 are *(P)* proposed (2026-08-06 volunteer
-walkthrough), planned against TASK-044…049 — not yet verified, pending founder ratification.
+walkthrough), against TASK-044…049 — pending founder ratification; SYS-153 additionally has
+implementation evidence (TASK-048) ahead of that ratification, the rest remain unverified.
 
 ## 3. Baseline QA status (Phase A definition-of-done self-check)
 

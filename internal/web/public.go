@@ -12,6 +12,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/kriegalex/bahnfrei/internal/app"
 	"github.com/kriegalex/bahnfrei/internal/domain"
 )
 
@@ -79,6 +80,15 @@ type publicHeatEventView struct {
 	DisciplineLabel string
 	Categories      string
 	Rounds          []publicHeatRoundView
+	// AnchorID is the per-event jump-nav target (SYS-153/UC-042 #2): the
+	// heat-sheet section's own discipline+category grouping is the
+	// "category" this page already renders, so the jump nav targets it
+	// directly rather than inventing a second grouping. Index-based
+	// ("heat-event-0", …) rather than slugging DisciplineLabel/Categories:
+	// those are free-text/localized strings that may collide or contain
+	// characters awkward in an HTML id, and the index is already stable
+	// for the lifetime of one render.
+	AnchorID string
 }
 
 type publicStartListsView struct {
@@ -89,6 +99,21 @@ type publicStartListsView struct {
 	// (TASK-018): shown alongside the flat roster below, additively — an
 	// event with no seeded round simply does not appear here.
 	HeatEvents []publicHeatEventView
+	// Query is the SYS-153/UC-042 find-your-athlete filter's current value
+	// (the "q" query-param — DEC-021/TASK-038 convention, searchQuery),
+	// redisplayed so a no-JS filtered page survives reload/bookmark like
+	// every other list filter in this app.
+	Query string
+	// FilterCountLabel is the localized "n results" line (UC-042 #1): the
+	// no-JS baseline the public-filter.ts island updates live as the
+	// visitor types, computed once here from whatever the current Query
+	// already filtered server-side.
+	FilterCountLabel string
+	// FilterCountTemplate is the same message with "{n}" left
+	// unsubstituted — the raw template the island re-interpolates
+	// client-side after every filter keystroke (same data-attribute
+	// convention as capture-offline.ts's data-i18n-pending).
+	FilterCountTemplate string
 }
 
 // handlePublicStartLists serves the meet's participants (UC-017 #2):
@@ -142,12 +167,16 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	for _, ev := range heatSheets {
+	for evIdx, ev := range heatSheets {
 		label := ev.DisciplineName
 		if label == "" {
 			label = ev.EventID
 		}
-		hev := publicHeatEventView{DisciplineLabel: label, Categories: strings.Join(ev.CategoryCodes, ", ")}
+		hev := publicHeatEventView{
+			DisciplineLabel: label,
+			Categories:      strings.Join(ev.CategoryCodes, ", "),
+			AnchorID:        "heat-event-" + strconv.Itoa(evIdx),
+		}
 		for _, round := range ev.Rounds {
 			hr := publicHeatRoundView{RoundLabel: p.T("round." + string(round.RoundKind))}
 			for i, u := range round.Units {
@@ -175,7 +204,73 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 		view.HeatEvents = append(view.HeatEvents, hev)
 	}
 
+	// SYS-153/UC-042 #1: the start-list page is never cached (unlike the
+	// public results fragment, ADR-004 §9), so there is no cache-safety
+	// concern in filtering it server-side on every request — a JS-enabled
+	// visitor still filters entirely client-side over the full, unfiltered
+	// rows (public-filter.ts), so this only ever pays for itself on the
+	// no-JS ?q= fallback path.
+	view = filterPublicStartListsView(p, view, searchQuery(r))
 	_ = publicStartListsPage(p, view).Render(r.Context(), w)
+}
+
+// filterPublicStartListsView narrows v.Rows and v.HeatEvents to entries
+// matching q (name/bib/club for the flat roster; name/club for heat rows,
+// which carry no bib — DEC-021/TASK-038's app.MatchesParticipantSearch,
+// reused verbatim), dropping any heat unit/round/event left with no
+// matching rows (UC-042 #1: "matching rows and their categories remain
+// visible"). Always sets Query/FilterCountLabel/FilterCountTemplate, even
+// for an empty q, so the no-JS and JS-enhanced paths render from the same
+// fields. A no-op filter (q == "") still runs the copy/rebuild below —
+// cheap at this page's scale and it keeps one code path for both cases.
+func filterPublicStartListsView(p PageData, v publicStartListsView, q string) publicStartListsView {
+	v.Query = q
+	v.FilterCountTemplate = p.T("public.filter.count")
+
+	var rows []publicStartListRowView
+	for _, row := range v.Rows {
+		if app.MatchesParticipantSearch(q, row.Name, "", row.Bib, row.Club) {
+			rows = append(rows, row)
+		}
+	}
+	count := len(rows)
+
+	var events []publicHeatEventView
+	for _, ev := range v.HeatEvents {
+		var rounds []publicHeatRoundView
+		for _, round := range ev.Rounds {
+			var units []publicHeatUnitView
+			for _, u := range round.Units {
+				var uRows []publicHeatRowView
+				for _, row := range u.Rows {
+					if app.MatchesParticipantSearch(q, row.Name, "", "", row.Club) {
+						uRows = append(uRows, row)
+					}
+				}
+				if len(uRows) == 0 {
+					continue
+				}
+				u.Rows = uRows
+				count += len(uRows)
+				units = append(units, u)
+			}
+			if len(units) == 0 {
+				continue
+			}
+			round.Units = units
+			rounds = append(rounds, round)
+		}
+		if len(rounds) == 0 {
+			continue
+		}
+		ev.Rounds = rounds
+		events = append(events, ev)
+	}
+
+	v.Rows = rows
+	v.HeatEvents = events
+	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(count))
+	return v
 }
 
 // publicResultsView is the public results page/fragment's view model: the
@@ -192,6 +287,17 @@ type publicResultsView struct {
 	OfficialSourceURL   string
 	Disciplines         []string
 	Divisions           []divisionView
+	// Query is the SYS-153/UC-042 find-your-athlete filter's current value.
+	// Always "" for the cached (ADR-004 §9) render — see
+	// filterPublicResultsView's doc comment for why a non-empty query never
+	// reaches the cache.
+	Query string
+	// FilterCountLabel/FilterCountTemplate mirror
+	// publicStartListsView's fields of the same name: the localized
+	// "n results" line and its raw "{n}"-templated form for
+	// public-filter.ts to re-interpolate client-side.
+	FilterCountLabel    string
+	FilterCountTemplate string
 }
 
 // buildPublicResultsView assembles the results view shared by the full
@@ -231,8 +337,15 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 	for _, code := range standings.Disciplines {
 		v.Disciplines = append(v.Disciplines, s.localizedDisciplineName(p, code)) // SYS-074
 	}
-	for _, div := range standings.Divisions {
-		dv := divisionView{Code: div.CategoryCode}
+	total := 0
+	for divIdx, div := range standings.Divisions {
+		// AnchorID: SYS-153/UC-042 #2's per-category jump nav targets each
+		// division directly — divisions are exactly this page's existing
+		// category grouping, so no new grouping concept is introduced.
+		// Index-based rather than slugging div.CategoryCode: category
+		// codes can contain spaces ("U18 W") and are not guaranteed
+		// distinct from an HTML-id-safe character set.
+		dv := divisionView{Code: div.CategoryCode, AnchorID: "div-" + strconv.Itoa(divIdx)}
 		for _, row := range div.Rows {
 			// SYS-100/SYS-103, UC-023 #1/#2: the same central minimization/
 			// consent functions handlePublicStartLists calls — a fresh
@@ -260,9 +373,57 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 			}
 			dv.Rows = append(dv.Rows, rv)
 		}
+		total += len(dv.Rows)
 		v.Divisions = append(v.Divisions, dv)
 	}
+	v.FilterCountTemplate = p.T("public.filter.count")
+	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(total))
 	return v, nil
+}
+
+// filterPublicResultsView narrows v.Divisions to rows matching q
+// (name/bib/club, case-insensitive substring — DEC-021/TASK-038's
+// app.MatchesParticipantSearch, reused verbatim) and drops any division
+// left with no matching rows (UC-042 #1: "only matching rows and their
+// categories remain visible"). Recomputes FilterCountLabel from the
+// filtered set; FilterCountTemplate is locale-only and untouched.
+//
+// ADR-004 §9 cache-safety (SYS-153/UC-042, TASK-048): this is called ONLY
+// from handlePublicResults' q != "" branch, which builds its own,
+// uncached publicResultsView first (see that handler) — a filtered view
+// is never the thing s.publicResults.getOrBuild stores. The per-meet
+// render cache stays keyed on (meetID, locale) alone; it never sees q, so
+// an unbounded set of ?q= values can never grow the cache map (the exact
+// OOM class ADR-004 §9/TASK-035 fixed). The cost is one uncached
+// Standings()+render per no-JS filtered request — acceptable because it
+// is the rare progressive-enhancement fallback (SYS-153: "functional
+// without client-side scripting"), not the common case: a JS-enabled
+// visitor never sends ?q= at all, filtering entirely client-side over the
+// already-cached, already-rendered fragment (public-filter.ts).
+func filterPublicResultsView(p PageData, v publicResultsView, q string) publicResultsView {
+	if q == "" {
+		return v
+	}
+	var kept []divisionView
+	count := 0
+	for _, div := range v.Divisions {
+		var rows []standingRowView
+		for _, row := range div.Rows {
+			if app.MatchesParticipantSearch(q, row.Name, "", row.Bib, row.Club) {
+				rows = append(rows, row)
+			}
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		div.Rows = rows
+		count += len(rows)
+		kept = append(kept, div)
+	}
+	v.Divisions = kept
+	v.Query = q
+	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(count))
+	return v
 }
 
 // cachedPublicResults resolves meetID's public-results view AND its
@@ -302,13 +463,36 @@ func (s *Server) cachedPublicResults(r *http.Request, meetID string) (publicResu
 // page shell rendered fresh per request (nav, login state, CSRF token —
 // all session-specific), the results section spliced in as the cached,
 // pre-rendered fragment (templ.Raw) rather than recomputed.
+//
+// SYS-153/UC-042 #1 (TASK-048): a non-empty "q" is the no-JS find-your-
+// athlete fallback and takes a completely separate, uncached path —
+// s.publicResults (the ADR-004 §9 render cache) is never consulted or
+// populated for it, so ?q= URLs cannot fragment the cache map. See
+// filterPublicResultsView's doc comment for the full rationale. An empty
+// q (the common case: no filter entered, or a JS-enabled visitor who
+// never round-trips a query at all) is indistinguishable from a plain
+// request and takes the normal cached path.
 func (s *Server) handlePublicResults(w http.ResponseWriter, r *http.Request) {
-	v, frag, err := s.cachedPublicResults(r, r.PathValue("id"))
+	meetID := r.PathValue("id")
+	q := searchQuery(r)
+	p := basePageData(r, s.cats)
+	p.Title = p.T("public.results.title")
+	if q != "" {
+		v, err := s.buildPublicResultsView(r, meetID)
+		if err != nil {
+			s.renderMeetError(w, r, err)
+			return
+		}
+		v = filterPublicResultsView(p, v, q)
+		p.Title = v.MeetName + " — " + p.T("public.results.title")
+		_ = publicResultsPage(p, v, publicResultsFragment(p, v)).Render(r.Context(), w)
+		return
+	}
+	v, frag, err := s.cachedPublicResults(r, meetID)
 	if err != nil {
 		s.renderMeetError(w, r, err)
 		return
 	}
-	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("public.results.title")
 	_ = publicResultsPage(p, v, templ.Raw(frag)).Render(r.Context(), w)
 }
