@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/store"
@@ -183,6 +184,13 @@ type CaptureUnit struct {
 	DisciplineCode string
 	DisciplineName string
 	Family         domain.DisciplineFamily
+	// ScheduledAt and Location carry the unit's timetable placement
+	// (TASK-004/SYS-004 scheduling) through to the field-official "my
+	// assignments" panel (TASK-046, SYS-151/UC-041 #2) so a volunteer's
+	// first two questions — when, where — are answered without a second
+	// page. Nil/"" when the unit has not been scheduled yet.
+	ScheduledAt *time.Time
+	Location    string
 }
 
 // CaptureUnits lists a meet's capturable units — track, horizontal and
@@ -220,6 +228,8 @@ func (s *ResultsService) CaptureUnits(ctx context.Context, actor Session, meetID
 			DisciplineCode: disc.Code,
 			DisciplineName: disc.Name,
 			Family:         disc.Family,
+			ScheduledAt:    u.ScheduledAt,
+			Location:       u.Location,
 		})
 	}
 	return out, nil

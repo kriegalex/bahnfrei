@@ -20,6 +20,14 @@ type captureUnitView struct {
 	UnitID     string
 	Discipline string
 	Family     string // i18n key suffix (family.track, …)
+	// Scheduled/When/Location surface a unit's timetable placement on the
+	// field-official "my assignments" panel (TASK-046, SYS-151/UC-041 #2).
+	// The capture index page (handleCaptureIndex) does not render these —
+	// it stays untouched here, out of this task's scope (TASK-050 owns
+	// that page's discipline-name localization).
+	Scheduled bool
+	When      string
+	Location  string
 }
 
 type captureIndexView struct {

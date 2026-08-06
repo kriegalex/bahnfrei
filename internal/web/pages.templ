@@ -49,6 +49,20 @@ templ assignmentsDashboardPage(p PageData, v assignmentsDashboardView) {
 					for _, m := range v.OfficeMeets {
 						<li>
 							{ m.Name } ({ m.Dates }, { m.Status }) —
+							// TASK-046 (SYS-151/UC-041 #1, OQ-113): check-in is
+							// per-event, so this links the meet hub — its
+							// programme table carries the per-event check-in
+							// links (unchanged by this task) — rather than
+							// guessing a single event. Capture and
+							// reconciliation get their own direct links,
+							// previously reachable only via the field-official
+							// panel or a typed URL.
+							<a href={ templ.URL("/meets/" + m.ID) }>{ p.T("dashboard.office.checkin_link") }</a>
+							·
+							<a href={ templ.URL("/meets/" + m.ID + "/capture") }>{ p.T("capture.title") }</a>
+							·
+							<a href={ templ.URL("/meets/" + m.ID + "/reconciliation") }>{ p.T("reconciliation.title") }</a>
+							·
 							<a href={ templ.URL("/meets/" + m.ID + "/roster") }>{ p.T("roster.title") }</a>
 							·
 							<a href={ templ.URL("/meets/" + m.ID + "/standings") }>{ p.T("standings.title") }</a>
@@ -65,7 +79,15 @@ templ assignmentsDashboardPage(p PageData, v assignmentsDashboardView) {
 					<h3>{ fm.MeetName }</h3>
 					<ul>
 						for _, u := range fm.Units {
-							<li><a href={ templ.URL("/meets/" + fm.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a></li>
+							<li>
+								<a href={ templ.URL("/meets/" + fm.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a>
+								if u.Scheduled {
+									{ " — " + p.T("dashboard.field.scheduled_at", "time", u.When) }
+									if u.Location != "" {
+										{ " · " + u.Location }
+									}
+								}
+							</li>
 						}
 					</ul>
 				}

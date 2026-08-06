@@ -215,35 +215,45 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 			{ d.Venue } · { d.Dates } · { d.Tier } ·
 			<strong>{ d.Status }</strong>
 		</p>
+		// TASK-046 (SYS-151/UC-041 #3, F5): the hub's action list is grouped
+		// by task area (preparation, competition day, publication) instead
+		// of one flat `·`-separated paragraph — NN/g menu/IA guidance, ISO
+		// 9241-110 task suitability. TASK-043's capability filtering carries
+		// over unchanged: every p.CanOrganize gate below matches the one it
+		// replaces, so office sessions still never see an organizer-only
+		// action and no underlying route gate is touched. Check-in stays
+		// where it already lived — the programme table's per-event links,
+		// below — since a meet can have many events and no single "check-in"
+		// link would be unambiguous here. Capture and reconciliation are new
+		// (OQ-113): the hub previously had no forward link into either.
+		<h2>{ p.T("meet.hub.preparation") }</h2>
 		<p>
-			// TASK-043 (OQ-111, SYS-090/091/114): this hub is open to
-			// competition-office sessions as well as organizers. Actions
-			// gated organize()-only in routes.go (edit, entry-standard
-			// exceptions, bibs, fees, sanctioning) are hidden behind
-			// p.CanOrganize so every link this page renders resolves for
-			// the session that sees it — office-level actions (roster,
-			// standings, officials, privacy, timing, entries, entries
-			// import/eligibility) and the public read pages render for
-			// both.
 			if p.CanOrganize {
 				<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
 			}
-			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/privacy") }>{ p.T("privacy.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/timing") }>{ p.T("timing.title") }</a> ·
 			<a href={ templ.URL("/meets/" + d.ID + "/entries") }>{ p.T("entries.title") }</a> ·
-			if p.CanOrganize {
-				<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
-			}
 			<a href={ templ.URL("/meets/" + d.ID + "/entries/import") }>{ p.T("import.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a>
 			if p.CanOrganize {
+				·
+				<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
 				<a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a> ·
 				<a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a> ·
-				<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a> ·
+				<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a>
 			}
+		</p>
+		<h2>{ p.T("meet.hub.competition_day") }</h2>
+		<p>
+			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/capture") }>{ p.T("capture.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/reconciliation") }>{ p.T("reconciliation.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/timing") }>{ p.T("timing.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
+			<a href={ templ.URL("/meets/" + d.ID + "/privacy") }>{ p.T("privacy.title") }</a>
+		</p>
+		<h2>{ p.T("meet.hub.publication") }</h2>
+		<p>
 			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·
 			<a href={ templ.URL("/m/" + d.ID + "/startlists") }>{ p.T("public.nav.startlists") }</a> ·

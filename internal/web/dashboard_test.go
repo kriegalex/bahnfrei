@@ -4,8 +4,10 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -168,5 +170,113 @@ func TestAssignmentsDashboardEmptyStatesSYS090DEC025(t *testing.T) {
 				t.Errorf("empty %s dashboard missing honest empty-state copy: %s", role, body)
 			}
 		})
+	}
+}
+
+// TestOfficeHomeDayOfLinksSYS151UC041_1 covers F5/SYS-151/UC-041 #1: the
+// office dashboard panel previously linked only roster and standings per
+// meet (OQ-111's own framing — check-in and capture/reconciliation were
+// unreachable without a typed URL or an organizer handing one over). It now
+// carries a direct link into the capture index and reconciliation, plus a
+// link into the meet hub for check-in (a meet can have many events, so a
+// single "check-in" link cannot target one unambiguously — the hub's
+// programme table is where the per-event check-in links already live,
+// unchanged by this task).
+func TestOfficeHomeDayOfLinksSYS151UC041_1(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base) // admin
+	meetID := createUCMeet(t, client, base)
+	createAccountWeb(t, client, base, "office3", "competition_office")
+
+	logout(t, client, base)
+	login(t, client, base, "office3", "s3cret-passphrase")
+
+	body := bodyString(t, mustGet(t, client, base+"/"))
+	for _, want := range []string{
+		`href="/meets/` + meetID + `"`,
+		`href="/meets/` + meetID + `/capture"`,
+		`href="/meets/` + meetID + `/reconciliation"`,
+		`href="/meets/` + meetID + `/roster"`,
+		`href="/meets/` + meetID + `/standings"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("office home missing %q: %s", want, body)
+		}
+	}
+}
+
+// TestFieldHomeLocalizedDisciplineAndScheduleSYS151UC041_2 covers F5/SYS-151
+// /UC-041 #2: a field official's dashboard panel previously named each
+// assigned unit with the catalog's English canonical discipline name and
+// showed no scheduled time or location — a volunteer's first two questions
+// (finding F5). It now reuses the localized-discipline path standings
+// already relies on (localizedDisciplineName, SYS-111/SYS-074) and, where
+// the unit has been scheduled, appends its time and location; an
+// unscheduled unit still renders (by discipline name alone) rather than
+// being hidden.
+func TestFieldHomeLocalizedDisciplineAndScheduleSYS151UC041_2(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base) // admin, organizer-capable
+
+	meetID, units := ukcCaptureFixture(t, client, base)
+	zoneLJUnit := units["Zone Long Jump (UKC)"]
+	sixtyMUnit := units["60 metres"]
+
+	resp := postForm(t, client, base+"/admin", base+"/admin/accounts", url.Values{
+		"username": {"fo2"}, "display_name": {"Field Official Two"},
+		"password": {"s3cret-passphrase"}, "role": {"field_official"},
+	})
+	_ = resp.Body.Close()
+	acctID := accountIDFromAdminPage(t, bodyString(t, mustGet(t, client, base+"/admin")), "fo2")
+
+	for _, unitID := range []string{zoneLJUnit, sixtyMUnit} {
+		resp = postForm(t, client, base+"/meets/"+meetID+"/officials", base+"/meets/"+meetID+"/officials/assign", url.Values{
+			"account_id": {acctID}, "unit_id": {unitID},
+		})
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusSeeOther {
+			t.Fatalf("assign unit %s = %d, want 303", unitID, resp.StatusCode)
+		}
+	}
+
+	// Schedule only the zone-long-jump unit; leave 60 metres unscheduled.
+	d, err := deps.meets.Meet(context.Background(), meetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version int64
+	for _, u := range d.Units {
+		if u.UnitID == zoneLJUnit {
+			version = u.UnitVersion
+		}
+	}
+	resp = postForm(t, client, base+"/meets/"+meetID, base+"/meets/"+meetID+"/units/"+zoneLJUnit+"/schedule", url.Values{
+		"version": {strconv.FormatInt(version, 10)}, "scheduled_at": {"2026-08-15T09:30"}, "location": {"Sektor B"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("schedule unit = %d, want 303", resp.StatusCode)
+	}
+
+	logout(t, client, base)
+	login(t, client, base, "fo2", "s3cret-passphrase")
+	body := bodyString(t, mustGet(t, client, base+"/"))
+
+	if !strings.Contains(body, "Zonen-Weitsprung (UKC)") {
+		t.Errorf("field home missing localized discipline name: %s", body)
+	}
+	if strings.Contains(body, "Zone Long Jump (UKC)") {
+		t.Errorf("field home renders the English catalog name instead of the localized one: %s", body)
+	}
+	if !strings.Contains(body, "Sektor B") {
+		t.Errorf("field home missing the scheduled unit's location: %s", body)
+	}
+	if !strings.Contains(body, "09:30") {
+		t.Errorf("field home missing the scheduled unit's time: %s", body)
+	}
+	if !strings.Contains(body, "60 m") {
+		t.Errorf("field home missing the unscheduled unit's localized discipline name: %s", body)
 	}
 }
