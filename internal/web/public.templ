@@ -32,71 +32,106 @@ templ publicMeetPage(p PageData, v publicMeetView) {
 
 // publicStartListsPage lists a meet's participants publicly (SYS-070,
 // UC-017 #2): bib, name, birth year, club — reusing the roster shape.
+// SYS-153/UC-042 (TASK-048, find-your-athlete): the whole filterable area
+// is wrapped in #public-startlists/[data-public-filter] — the root
+// public-filter.ts binds to (input, per-row data-filter-* attributes,
+// data-filter-section groups it hides when empty, the live "n results"
+// count) — and a jump nav lists the heat-sheet event sections, the
+// page's existing per-category grouping. This page has no live-refresh
+// path (unlike public results, ADR-004 §9): every row/section already
+// reflects the current ?q= filter server-side (see
+// filterPublicStartListsView, public.go), so the JS island is pure
+// progressive enhancement here, not required for correctness.
 templ publicStartListsPage(p PageData, v publicStartListsView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("public.startlists.title") }</h1>
 		@publicNav(p, v.MeetID)
-		if len(v.HeatEvents) > 0 {
-			<h2>{ p.T("seeding.title") }</h2>
-			for _, ev := range v.HeatEvents {
-				<h3>{ ev.DisciplineLabel } ({ ev.Categories })</h3>
-				for _, round := range ev.Rounds {
-					<h4>{ round.RoundLabel }</h4>
-					for _, u := range round.Units {
-						<div class="table-scroll" tabindex="0">
-							<table>
-								<caption>{ u.Label }</caption>
-								<thead>
-									<tr>
-										<th scope="col">{ p.T("seeding.lane") }</th>
-										<th scope="col">{ p.T("roster.name") }</th>
-										<th scope="col">{ p.T("roster.club") }</th>
-										<th scope="col">{ p.T("seeding.qualification") }</th>
-									</tr>
-								</thead>
-								<tbody>
-									for _, row := range u.Rows {
-										<tr>
-											<td>{ row.Lane }</td>
-											<td>{ row.Name }</td>
-											<td>{ row.Club }</td>
-											<td>{ row.Qualification }</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						</div>
-					}
-				}
-			}
-			<h2>{ p.T("public.startlists.title") }</h2>
-		}
-		if len(v.Rows) == 0 {
-			<p>{ p.T("public.startlists.empty") }</p>
-		} else {
-			<div class="table-scroll" tabindex="0">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col">{ p.T("roster.bib") }</th>
-							<th scope="col">{ p.T("roster.name") }</th>
-							<th scope="col">{ p.T("roster.birth_year") }</th>
-							<th scope="col">{ p.T("roster.club") }</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, row := range v.Rows {
-							<tr>
-								<td>{ row.Bib }</td>
-								<td>{ row.Name }</td>
-								<td>{ row.BirthYear }</td>
-								<td>{ row.Club }</td>
-							</tr>
+		<div id="public-startlists" data-public-filter>
+			@searchForm(p, "/m/"+v.MeetID+"/startlists", v.Query, "roster.search.label", "roster.search.submit", "roster.search.clear")
+			<p data-filter-count data-filter-count-template={ v.FilterCountTemplate }>{ v.FilterCountLabel }</p>
+			if len(v.HeatEvents) > 0 {
+				<h2>{ p.T("seeding.title") }</h2>
+				<nav aria-label={ p.T("public.jumpnav.title") }>
+					<p>{ p.T("public.jumpnav.title") }</p>
+					<ul>
+						for _, ev := range v.HeatEvents {
+							<li><a href={ templ.URL("#" + ev.AnchorID) }>{ ev.DisciplineLabel } ({ ev.Categories })</a></li>
 						}
-					</tbody>
-				</table>
+					</ul>
+				</nav>
+				for _, ev := range v.HeatEvents {
+					<div data-filter-section>
+						<h3 id={ ev.AnchorID }>
+							{ ev.DisciplineLabel } ({ ev.Categories })
+							{ " " }
+							<a href="#public-startlists">{ p.T("public.jumpnav.top") }</a>
+						</h3>
+						for _, round := range ev.Rounds {
+							<h4>{ round.RoundLabel }</h4>
+							for _, u := range round.Units {
+								<div class="table-scroll" tabindex="0">
+									<table>
+										<caption>{ u.Label }</caption>
+										<thead>
+											<tr>
+												<th scope="col">{ p.T("seeding.lane") }</th>
+												<th scope="col">{ p.T("roster.name") }</th>
+												<th scope="col">{ p.T("roster.club") }</th>
+												<th scope="col">{ p.T("seeding.qualification") }</th>
+											</tr>
+										</thead>
+										<tbody>
+											for _, row := range u.Rows {
+												<tr data-filter-row data-filter-name={ row.Name } data-filter-club={ row.Club }>
+													<td>{ row.Lane }</td>
+													<td>{ row.Name }</td>
+													<td>{ row.Club }</td>
+													<td>{ row.Qualification }</td>
+												</tr>
+											}
+										</tbody>
+									</table>
+								</div>
+							}
+						}
+					</div>
+				}
+				<h2>{ p.T("public.startlists.title") }</h2>
+			}
+			<div data-filter-section>
+				if len(v.Rows) == 0 {
+					if v.Query != "" {
+						<p>{ p.T("roster.search.no_results", "q", v.Query) }</p>
+					} else {
+						<p>{ p.T("public.startlists.empty") }</p>
+					}
+				} else {
+					<div class="table-scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">{ p.T("roster.bib") }</th>
+									<th scope="col">{ p.T("roster.name") }</th>
+									<th scope="col">{ p.T("roster.birth_year") }</th>
+									<th scope="col">{ p.T("roster.club") }</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, row := range v.Rows {
+									<tr data-filter-row data-filter-name={ row.Name } data-filter-bib={ row.Bib } data-filter-club={ row.Club }>
+										<td>{ row.Bib }</td>
+										<td>{ row.Name }</td>
+										<td>{ row.BirthYear }</td>
+										<td>{ row.Club }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
 			</div>
-		}
+		</div>
+		<script src="/static/public-filter.js"></script>
 	}
 }
 
@@ -105,69 +140,105 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 // meet's "results" SSE event) — the SYS-076 unofficial-results label, the
 // meet-state status line, and the division standings with SYS-074
 // localized discipline labels.
+//
+// SYS-153/UC-042 (TASK-048, find-your-athlete): the filter form, "n
+// results" count and per-category jump nav all live INSIDE this fragment,
+// not the page shell — this fragment is exactly what ADR-004 §9's render
+// cache stores (see cachedPublicResults, public.go), and it is only ever
+// cached with an empty Query/full row set (a non-empty q takes a
+// completely separate, uncached rendering path — see
+// filterPublicResultsView's doc comment), so embedding them here costs
+// the cache nothing. Being inside the fragment also means the SSE
+// live-refresh swap (#public-results' innerHTML replaced wholesale by
+// public-live.js) replaces the filter form's own DOM node too — the typed
+// query would otherwise be silently lost on every live update, which is
+// exactly why public-filter.ts watches #public-results for that swap and
+// restores it (UC-042 #3).
 templ publicResultsFragment(p PageData, v publicResultsView) {
-	<p><strong>{ v.StatusLine }</strong></p>
-	if v.ShowUnofficialLabel {
-		<p class="unofficial-label" role="note">
-			{ p.T("public.results.unofficial_badge") }
-			if v.OfficialSourceName != "" {
-				{ " — " + p.T("public.results.official_reference_prefix") + " " }
-				if v.OfficialSourceURL != "" {
-					<a href={ templ.URL(v.OfficialSourceURL) } rel="noopener" target="_blank">{ v.OfficialSourceName }</a>
-				} else {
-					{ v.OfficialSourceName }
+	<div data-public-filter>
+		@searchForm(p, "/m/"+v.MeetID+"/results", v.Query, "roster.search.label", "roster.search.submit", "roster.search.clear")
+		<p data-filter-count data-filter-count-template={ v.FilterCountTemplate }>{ v.FilterCountLabel }</p>
+		<p><strong>{ v.StatusLine }</strong></p>
+		if v.ShowUnofficialLabel {
+			<p class="unofficial-label" role="note">
+				{ p.T("public.results.unofficial_badge") }
+				if v.OfficialSourceName != "" {
+					{ " — " + p.T("public.results.official_reference_prefix") + " " }
+					if v.OfficialSourceURL != "" {
+						<a href={ templ.URL(v.OfficialSourceURL) } rel="noopener" target="_blank">{ v.OfficialSourceName }</a>
+					} else {
+						{ v.OfficialSourceName }
+					}
 				}
-			}
-		</p>
-	}
-	if len(v.Divisions) == 0 {
-		<p>{ p.T("standings.empty") }</p>
-	} else {
-		<p>{ p.T("standings.gap_legend") }</p>
-		for _, div := range v.Divisions {
-			<h2>{ div.Code }</h2>
-			<div class="table-scroll" tabindex="0">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col">{ p.T("standings.rank") }</th>
-							<th scope="col">{ p.T("roster.bib") }</th>
-							<th scope="col">{ p.T("roster.name") }</th>
-							<th scope="col">{ p.T("roster.club") }</th>
-							<th scope="col">{ p.T("roster.birth_year") }</th>
-							for _, d := range v.Disciplines {
-								<th scope="col">{ d }</th>
-							}
-							<th scope="col">{ p.T("standings.total") }</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, row := range div.Rows {
-							<tr>
-								<td>{ row.Rank }</td>
-								<td>{ row.Bib }</td>
-								<td>{ row.Name }</td>
-								<td>{ row.Club }</td>
-								<td>{ row.BirthYear }</td>
-								for _, cell := range row.Cells {
-									<td>
-										{ cell.Mark }
-										if cell.Points != "" {
-											<small>{ " (" + cell.Points + " " + p.T("standings.points_abbr") + ")" }</small>
-										}
-										if cell.Flags != "" {
-											<strong class="record-flags">{ " " + cell.Flags }</strong>
-										}
-									</td>
-								}
-								<td><strong>{ row.Total }</strong></td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			</p>
 		}
-	}
+		if len(v.Divisions) == 0 {
+			if v.Query != "" {
+				<p>{ p.T("roster.search.no_results", "q", v.Query) }</p>
+			} else {
+				<p>{ p.T("standings.empty") }</p>
+			}
+		} else {
+			<nav aria-label={ p.T("public.jumpnav.title") }>
+				<p>{ p.T("public.jumpnav.title") }</p>
+				<ul>
+					for _, div := range v.Divisions {
+						<li><a href={ templ.URL("#" + div.AnchorID) }>{ div.Code }</a></li>
+					}
+				</ul>
+			</nav>
+			<p>{ p.T("standings.gap_legend") }</p>
+			for _, div := range v.Divisions {
+				<div data-filter-section>
+					<h2 id={ div.AnchorID }>
+						{ div.Code }
+						{ " " }
+						<a href="#public-results">{ p.T("public.jumpnav.top") }</a>
+					</h2>
+					<div class="table-scroll" tabindex="0">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">{ p.T("standings.rank") }</th>
+									<th scope="col">{ p.T("roster.bib") }</th>
+									<th scope="col">{ p.T("roster.name") }</th>
+									<th scope="col">{ p.T("roster.club") }</th>
+									<th scope="col">{ p.T("roster.birth_year") }</th>
+									for _, d := range v.Disciplines {
+										<th scope="col">{ d }</th>
+									}
+									<th scope="col">{ p.T("standings.total") }</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, row := range div.Rows {
+									<tr data-filter-row data-filter-name={ row.Name } data-filter-bib={ row.Bib } data-filter-club={ row.Club }>
+										<td>{ row.Rank }</td>
+										<td>{ row.Bib }</td>
+										<td>{ row.Name }</td>
+										<td>{ row.Club }</td>
+										<td>{ row.BirthYear }</td>
+										for _, cell := range row.Cells {
+											<td>
+												{ cell.Mark }
+												if cell.Points != "" {
+													<small>{ " (" + cell.Points + " " + p.T("standings.points_abbr") + ")" }</small>
+												}
+												if cell.Flags != "" {
+													<strong class="record-flags">{ " " + cell.Flags }</strong>
+												}
+											</td>
+										}
+										<td><strong>{ row.Total }</strong></td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			}
+		}
+	</div>
 }
 
 // publicResultsPage is the unauthenticated live-results page (SYS-070/071,
@@ -196,5 +267,6 @@ templ publicResultsPage(p PageData, v publicResultsView, resultsSection templ.Co
 			@resultsSection
 		</section>
 		<script src="/static/public-live.js"></script>
+		<script src="/static/public-filter.js"></script>
 	}
 }

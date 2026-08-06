@@ -94,6 +94,26 @@ touching the write-path decisions above.
      its budget under load (TASK-027 measured 1.9s p95 at 100 subscribers against a 10s budget)
      and this amendment does not change `web.Bus` or the `sseHandler`.
 
+     **TASK-048 addendum (SYS-153/UC-042, find-your-athlete filter):** the public results page
+     grew a `?q=` name/bib/club filter with a no-JS GET fallback. The cache key stays exactly
+     `(meetID, locale)` — `q` was deliberately kept out of it. A per-query cache would turn an
+     attacker- or crawler-controllable input into unbounded cache growth (every distinct `?q=`
+     value would mint its own entry), reopening the same OOM class this amendment fixed for
+     "one entry per viewer" the moment it became "one entry per viewer × per query." Instead,
+     `handlePublicResults` (`internal/web/public.go`) branches before touching the cache at
+     all: an empty `q` (the common case — a JS-enabled visitor filters entirely client-side over
+     the cached, already-rendered fragment, `public-filter.ts`, and never sends `?q=` over the
+     wire) takes the existing cached path unchanged; a non-empty `q` calls
+     `buildPublicResultsView` directly and renders through `filterPublicResultsView`, bypassing
+     `s.publicResults.getOrBuild` entirely — that request is never cached and never
+     read from the cache. The `?q=` path is the SYS-153 "functional without client-side
+     scripting" fallback, not the common case, so its cost (one uncached `Standings()`
+     computation + render per no-JS filtered request) is the accepted trade-off; a request
+     using it degrades to pre-TASK-035 per-request cost for itself alone, without affecting any
+     other viewer's cached entry or growing the cache map. `TestPublicResultsQueryFilterCacheSafetySYS153UC042_1`
+     (`internal/web/public_test.go`) asserts `publicResultsCache.entries` stays at exactly one
+     entry across a sweep of distinct `?q=` values.
+
 ## Alternatives considered
 
 | Option | Why rejected |
