@@ -54,6 +54,11 @@
         error: req("i18nError"),
         discard: req("i18nDiscard"),
         rejectGeneric: req("i18nRejectGeneric"),
+        // Per-cell save-state badge text (SYS-148, UC-039 #4/#5): distinguishable
+        // by text/icon, not color alone (base.css styles data-pending/data-state
+        // on the same .cell-form these badges live in).
+        cellPending: req("i18nCellPending"),
+        cellConfirmed: req("i18nCellConfirmed"),
     };
     // Per-reason rejection text, keyed by the wire's RejectReason vocabulary
     // (internal/domain/sync.go). An unrecognized/future reason code falls
@@ -290,6 +295,56 @@
                     : String((parseInt(vInput.value, 10) || 0) + 1);
         }
     }
+    // ---- Per-cell save-state badge (SYS-148, UC-039 #4/#5) ------------------
+    // Styles data-pending/data-state on the SAME .cell-form base.css already
+    // has rules for — never a parallel attribute — plus a small text/icon
+    // badge so the state is distinguishable by more than color (WCAG 2.2).
+    // "confirmed" is the state added by this task: previously data-pending
+    // was set on enqueue and never cleared, so a saved cell looked identical
+    // to an unsaved one forever (usability-audit finding F3).
+    function cellBadge(form) {
+        let badge = form.querySelector(".cell-save-badge");
+        if (!badge) {
+            badge = document.createElement("span");
+            badge.className = "cell-save-badge";
+            badge.setAttribute("aria-hidden", "true");
+            form.appendChild(badge);
+        }
+        return badge;
+    }
+    function markPending(form) {
+        delete form.dataset.state;
+        form.dataset.pending = "1";
+        cellBadge(form).textContent = TXT.cellPending;
+    }
+    function markConfirmed(form) {
+        delete form.dataset.pending;
+        form.dataset.state = "confirmed";
+        cellBadge(form).textContent = TXT.cellConfirmed;
+    }
+    function clearCellBadge(form) {
+        delete form.dataset.state;
+        const badge = form.querySelector(".cell-save-badge");
+        if (badge) {
+            badge.textContent = "";
+        }
+    }
+    // ---- Row-derived cells (SYS-148, UC-039 #4) ------------------------------
+    // Updates the grid's own Result/Points cells for one athlete straight from
+    // the sync ack's authoritative values (never a client-side recompute — it
+    // cannot see corrections or the meet's scoring-table lookup), so they
+    // reflect a confirmed save without a manual reload (usability-audit F3:
+    // previously only the standings fragment below the fold updated).
+    function updateRowDerived(athleteId, result, points) {
+        const resultCell = document.querySelector('[data-role="result"][data-athlete-row="' + cssEscape(athleteId) + '"]');
+        if (resultCell) {
+            resultCell.textContent = result;
+        }
+        const pointsCell = document.querySelector('[data-role="points"][data-athlete-row="' + cssEscape(athleteId) + '"]');
+        if (pointsCell) {
+            pointsCell.textContent = points;
+        }
+    }
     // ---- Per-op rejection (SYS-149, UC-040 #1/#3) ---------------------------
     // A rejected op is terminal and non-retryable: it never re-enters the
     // queue. What renders here is purely a UI affordance at the offending
@@ -299,6 +354,7 @@
     function clearRejection(form) {
         delete form.dataset.rejected;
         form.querySelectorAll(".cell-reject").forEach((el) => el.remove());
+        clearCellBadge(form);
     }
     function renderRejection(athleteId, seq, reason) {
         const form = cellFor(athleteId, seq);
@@ -444,12 +500,22 @@
                         appliedAny = true;
                         if (op) {
                             setCellVersion(op.athleteId, op.seq, r.version);
+                            const form = cellFor(op.athleteId, op.seq);
+                            if (form) {
+                                markConfirmed(form);
+                            }
+                            updateRowDerived(op.athleteId, r.result || "", r.points || "");
                         }
                         await deleteOp(r.opId);
                     }
                     else if (r.status === "duplicate") {
                         if (op) {
                             setCellVersion(op.athleteId, op.seq, r.version);
+                            const form = cellFor(op.athleteId, op.seq);
+                            if (form) {
+                                markConfirmed(form);
+                            }
+                            updateRowDerived(op.athleteId, r.result || "", r.points || "");
                         }
                         await deleteOp(r.opId);
                     }
@@ -572,7 +638,7 @@
         // Durable-first: the op is in IndexedDB before any network I/O, so a crash
         // or offline reload never loses the capture (SYS-085).
         await putOp(op);
-        form.dataset.pending = "1";
+        markPending(form);
         await refreshIndicator();
         void flush();
     }
@@ -615,7 +681,7 @@
             if (windInput && op.wind) {
                 windInput.value = op.wind;
             }
-            form.dataset.pending = "1";
+            markPending(form);
         }
     }
     // ---- Wiring -------------------------------------------------------------

@@ -67,8 +67,8 @@
 //	    }
 //	  Response:
 //	    {"results":[
-//	       {"opId":"01H…","status":"applied"},
-//	       {"opId":"01H…","status":"duplicate"},
+//	       {"opId":"01H…","status":"applied","version":3,"result":"6.12","points":"620"},
+//	       {"opId":"01H…","status":"duplicate","version":3,"result":"6.12","points":"620"},
 //	       {"opId":"01H…","status":"reconciliation","reason":"stale_checkout"},
 //	       {"opId":"01H…","status":"rejected","reason":"invalid_mark"}
 //	    ]}
@@ -133,6 +133,15 @@
 // when an op whose ack was lost is re-acknowledged after a page render
 // already reflected the write, and the inflated version would send the next
 // correction to reconciliation with a stale expectedVersion (SYS-085).
+//
+// "applied" and "duplicate" results also carry "result" and "points"
+// (SYS-148, UC-039 #4): the athlete's current settled display values, so the
+// client updates the capture grid's own Result/Points cells in place without
+// a reload, from the same server-authoritative source "version" already
+// uses — never a client-side recompute (it cannot see corrections or the
+// meet's scoring-table lookup). Both are "" when the athlete has no settled
+// mark yet (e.g. every trial so far was a foul/pass); absent for
+// reconciliation/rejected, where nothing was applied.
 //
 // ## Guarantees
 //

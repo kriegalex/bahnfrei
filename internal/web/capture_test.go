@@ -537,6 +537,119 @@ func TestCaptureAnnounceAndCorrectRequireOfficeRoleSYS090UC015Web(t *testing.T) 
 	}
 }
 
+// TestFieldGridMobileCaptureMarkupSYS147UC039TASK045 pins the field-
+// horizontal grid's mobile-ergonomics markup (SYS-147, UC-039 #1-#3): the
+// row-card responsive class, restored table-semantics roles, the mark
+// input's numeric keyboard hint, and the letter-marker quick-action
+// buttons — the actual mobile rendering (no page-level horizontal scroll,
+// touch-target sizes) is proven live in the browser by
+// e2e/tests/mobile-capture-UC039.spec.ts; this test guards the server-
+// rendered markup those CSS rules and the capture-markers.js script depend
+// on existing at all.
+func TestFieldGridMobileCaptureMarkupSYS147UC039TASK045(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	for _, want := range []string{
+		`class="capture-grid stack-table"`,
+		`role="table"`,
+		`role="columnheader"`,
+		`role="cell"`,
+		`inputmode="decimal"`,
+		`enterkeyhint="done"`,
+		`class="marker-btn" data-marker="X"`,
+		`class="marker-btn" data-marker="–"`,
+		`class="marker-btn" data-marker="r"`,
+		`data-role="result"`,
+		`data-role="points"`,
+		`/static/capture-markers.js`,
+		`class="capture-title"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("field-grid capture page missing %q", want)
+		}
+	}
+	// The shortened on-page heading is just the discipline, not the former
+	// "MeetName — Discipline" concatenation (UC-039 #2) — the <title> tag
+	// (browser tab) keeps the full string separately.
+	if strings.Contains(body, "<h1>") {
+		t.Error("capture page should render the compact <h1 class=\"capture-title\">, not a bare <h1>")
+	}
+}
+
+// TestTrackFormMobileCaptureMarkupSYS147UC039TASK045 pins the track form's
+// equivalent markup: the row-card class/roles, the time input's numeric
+// keyboard hint, the compact per-row timing select (kept per-row, not
+// collapsed to a unit-level control, because SYS-041 hand/FAT timing is
+// stored per result — see the doc comment on `.timing-select` in
+// base.css), and the DQ-rule cell's collapsible class (shown only once
+// status=DQ is selected, via CSS :has() — proven live by
+// e2e/tests/mobile-capture-UC039.spec.ts).
+func TestTrackFormMobileCaptureMarkupSYS147UC039TASK045(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	for _, want := range []string{
+		`class="capture-grid stack-table"`,
+		`role="table"`,
+		`inputmode="decimal"`,
+		`enterkeyhint="done"`,
+		`class="timing-select"`,
+		`class="dq-rule-cell"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("track-form capture page missing %q", want)
+		}
+	}
+}
+
+// TestTrackFormPerRowTimingStaysIndependentTASK045 protects the design
+// decision behind keeping the timing-method select per row instead of
+// collapsing it to one unit-level default (TASK-045's brief: "per-row
+// override only if the data model already stores it per-result"): two
+// athletes in the SAME unit can carry different Timing values
+// simultaneously, which a single unit-level control could not express.
+func TestTrackFormPerRowTimingStaysIndependentTASK045(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, units := ukcCaptureFixture(t, client, base)
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+	body := bodyString(t, mustGet(t, client, unitURL))
+	athletes := athleteIDsFrom(t, body)
+
+	resp := postForm(t, client, unitURL, unitURL+"/track", url.Values{
+		"athlete": {athletes["101"]}, "time": {"9.32"}, "timing": {"manual"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("manual time = %d, want 303", resp.StatusCode)
+	}
+	resp = postForm(t, client, unitURL, unitURL+"/track", url.Values{
+		"athlete": {athletes["102"]}, "time": {"9.10"}, "timing": {"electronic"},
+	})
+	_ = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("electronic time = %d, want 303", resp.StatusCode)
+	}
+
+	body = bodyString(t, mustGet(t, client, unitURL))
+	if !strings.Contains(body, "9.4 h") {
+		t.Error("athlete 101's hand-timed result must still render its own provenance")
+	}
+	if !strings.Contains(body, "9.10") {
+		t.Error("athlete 102's electronic time must be unaffected by athlete 101's timing method")
+	}
+}
+
 // athleteIDsFrom maps bib → athlete ID from the capture page's hidden
 // athlete inputs (each cell form names its row's athlete).
 func athleteIDsFrom(t *testing.T, body string) map[string]string {
@@ -544,9 +657,12 @@ func athleteIDsFrom(t *testing.T, body string) map[string]string {
 	out := map[string]string{}
 	// Rows render "<td>{bib}</td><td>{name}</td>…" followed by the
 	// athlete's hidden input (field grid) or form= references (track form).
+	// (TASK-045: rows now render `<tr role="row">` and `<td role="cell"
+	// data-label="…">`, so the tag-matching below tolerates any attributes
+	// rather than requiring bare `<tr>`/`<td>`.)
 	for _, re := range []*regexp.Regexp{
-		regexp.MustCompile(`(?s)<tr>\s*<td>(\d+)</td>.*?name="athlete" value="([0-9A-Za-z]+)"`),
-		regexp.MustCompile(`(?s)<tr>\s*<td>(\d+)</td>.*?form="track-([0-9A-Za-z]+)"`),
+		regexp.MustCompile(`(?s)<tr[^>]*>\s*<td[^>]*>(\d+)</td>.*?name="athlete" value="([0-9A-Za-z]+)"`),
+		regexp.MustCompile(`(?s)<tr[^>]*>\s*<td[^>]*>(\d+)</td>.*?form="track-([0-9A-Za-z]+)"`),
 	} {
 		for _, m := range re.FindAllStringSubmatch(body, -1) {
 			out[m[1]] = m[2]

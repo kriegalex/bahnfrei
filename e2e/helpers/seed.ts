@@ -114,8 +114,12 @@ export async function seedUkcMeet(
   const unitURL = `${baseURL}/meets/${meetID}/capture/${unitID}`;
   const page = await getBody(request, unitURL);
   const athletes: Record<string, string> = {};
+  // TASK-045: rows now render `<tr role="row">` and `<td role="cell"
+  // data-label="…">`, so the tag-matching below tolerates any attributes
+  // rather than requiring bare `<tr>`/`<td>` (mirrors the same fix in
+  // internal/web/capture_test.go's athleteIDsFrom).
   for (const m of page.matchAll(
-    /<tr>\s*<td>(\d+)<\/td>[\s\S]*?name="athlete" value="([0-9A-Za-z]+)"/g,
+    /<tr[^>]*>\s*<td[^>]*>(\d+)<\/td>[\s\S]*?name="athlete" value="([0-9A-Za-z]+)"/g,
   )) {
     athletes[m[1]] = m[2];
   }
@@ -203,6 +207,69 @@ export async function seedTrackMeet(
     checkinURL: `${meetPage}/events/${eventID}/checkin`,
     unitURL: `${meetPage}/capture/${unitMatch[1]}`,
   };
+}
+
+export interface VerticalMeetFixture {
+  meetID: string;
+  /** field-official capture page for the HJ unit (UC-012, vertical family). */
+  unitURL: string;
+}
+
+/**
+ * Creates a standalone High Jump meet with two athletes (mirrors
+ * internal/web/verticaljump_test.go's verticalCaptureFixture, over real
+ * HTTP so it seeds a browser context's cookies): used by the UC-039 mobile
+ * capture suite, which needs a real instance of all three capture
+ * families (track, field-horizontal, field-vertical) — seedUkcMeet only
+ * covers the first two.
+ */
+export async function seedVerticalMeet(
+  request: APIRequestContext,
+  baseURL: string,
+): Promise<VerticalMeetFixture> {
+  const location = await postForm(request, baseURL + "/meets/new", baseURL + "/meets", {
+    name: "HJ Test Meet",
+    venue: "Fribourg",
+    start_date: "2026-08-15",
+    end_date: "2026-08-15",
+    scheme: "swiss-athletics",
+  });
+  const meetID = location.replace("/meets/", "");
+  expect(meetID).toMatch(/^[0-9A-Za-z]+$/);
+  const meetPage = `${baseURL}/meets/${meetID}`;
+
+  // A single category (both fixture athletes are adult women): the JS
+  // helper's `form` shape is one string per key, so unlike the Go-level
+  // fixture (internal/web/verticaljump_test.go's verticalCaptureFixture,
+  // which posts "categories" twice) this cannot send two form values under
+  // the same key without a lower-level multipart/urlencoded body.
+  await postForm(request, meetPage, `${meetPage}/events`, {
+    discipline: "HJ",
+    categories: "Women",
+  });
+
+  for (const athlete of [
+    { first_name: "Anna", last_name: "Muster", birth_year: "1998", sex: "W", bib: "1" },
+    { first_name: "Bea", last_name: "Beispiel", birth_year: "1997", sex: "W", bib: "2" },
+  ]) {
+    await postForm(request, `${meetPage}/roster`, `${meetPage}/roster`, athlete);
+  }
+
+  const index = await getBody(request, `${meetPage}/capture`);
+  const unitMatch = index.match(new RegExp(`/meets/${meetID}/capture/([0-9A-Za-z]+)"`));
+  if (!unitMatch) {
+    throw new Error("capture index missing the HJ unit");
+  }
+  const unitURL = `${meetPage}/capture/${unitMatch[1]}`;
+
+  // Configure a height progression so the trial grid renders (SYS-043
+  // requires an office-configured progression before capture starts).
+  await postForm(request, unitURL, `${unitURL}/vertical-heights`, {
+    heights: "1.60",
+    version: "0",
+  });
+
+  return { meetID, unitURL };
 }
 
 /**

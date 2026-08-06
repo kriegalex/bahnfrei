@@ -138,6 +138,50 @@ func TestVerticalCaptureRequiresHeightsThenGridWebSYS043UC012(t *testing.T) {
 	}
 }
 
+// TestVerticalGridMobileCaptureMarkupSYS147UC039TASK045 pins the vertical-
+// jump grid's mobile-ergonomics markup (SYS-147, UC-039 #1/#3). Unlike the
+// field-horizontal/track grids, the height x trial matrix is inherently
+// two-dimensional and does not linearize into a row-card without hiding
+// most of the in-progress state, so the chosen pattern here is a sticky
+// bib/name column with an inner scrolling region — this test asserts that
+// markup and the letter-marker quick actions (o/x/–/r) instead of a
+// stack-table class. See design-system.md §2 for the documented trade-off
+// and e2e/tests/mobile-capture-UC039.spec.ts for the live-browser proof
+// (the page itself never gains horizontal scroll).
+func TestVerticalGridMobileCaptureMarkupSYS147UC039TASK045(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	_, unitURL := verticalCaptureFixture(t, client, base)
+
+	resp := postForm(t, client, unitURL, unitURL+"/vertical-heights", url.Values{
+		"heights": {"1.60", "1.65"}, "version": {"0"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("configure heights = %d, want 303", resp.StatusCode)
+	}
+
+	body := bodyString(t, mustGet(t, client, unitURL))
+	for _, want := range []string{
+		`class="table-scroll vertical-grid-sticky"`,
+		`inputmode="none"`,
+		`class="marker-btn" data-marker="o"`,
+		`class="marker-btn" data-marker="x"`,
+		`class="marker-btn" data-marker="–"`,
+		`class="marker-btn" data-marker="r"`,
+		`/static/capture-markers.js`,
+		`class="capture-title"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vertical-grid capture page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<h1>") {
+		t.Error("vertical capture page should render the compact <h1 class=\"capture-title\">, not a bare <h1>")
+	}
+}
+
 // TestVerticalHeightsConfigureIsOfficeOnlyWebSYS043 checks the office-only
 // gate on the height-configuration route at the HTTP layer.
 func TestVerticalHeightsConfigureIsOfficeOnlyWebSYS043(t *testing.T) {

@@ -63,4 +63,12 @@
   --focus-ring-color: var(--color-accent);
   --focus-ring-width: 3px;
   --focus-ring-offset: 2px;
+
+  /* --- Touch target (SYS-147, UC-039 #2): the minimum hit-target size for
+     a primary point-of-competition control operated by touch, outdoors,
+     under time pressure — Apple HIG (44x44 pt) / Material Design (48x48 dp)
+     recommend well above WCAG 2.2 SC 2.5.8's 24x24 px floor; this project
+     targets the HIG/Material floor exactly (44px), applied at the phone
+     breakpoint the mobile usability audit measured (see base.css). --- */
+  --touch-target-min: 2.75rem;
 }

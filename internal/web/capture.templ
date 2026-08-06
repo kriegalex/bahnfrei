@@ -37,7 +37,8 @@ templ captureIndexPage(p PageData, v captureIndexView) {
 // the CSP forbids inline scripts).
 templ capturePage(p PageData, v captureView) {
 	@layout(p) {
-		<h1>{ v.MeetName } — { v.Discipline }</h1>
+		<p class="capture-context">{ v.MeetName }</p>
+		<h1 class="capture-title">{ v.Discipline }</h1>
 		<p>
 			<a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("capture.back_to_units") }</a>
 			{ " · " }
@@ -65,6 +66,7 @@ templ capturePage(p PageData, v captureView) {
 		</section>
 		<script src="/static/capture.js"></script>
 		if v.IsField {
+			<script src="/static/capture-markers.js"></script>
 			<script src="/static/capture-offline.js"></script>
 		}
 	}
@@ -148,6 +150,8 @@ templ offlineCaptureControls(p PageData, v captureView) {
 		data-i18n-reconcile={ p.T("capture.offline.reconcile") }
 		data-i18n-error={ p.T("capture.offline.error") }
 		data-i18n-discard={ p.T("capture.offline.discard") }
+		data-i18n-cell-pending={ p.T("capture.cell.pending") }
+		data-i18n-cell-confirmed={ p.T("capture.cell.confirmed") }
 		data-i18n-reject-invalid-mark={ p.T("capture.offline.reject.invalid_mark") }
 		data-i18n-reject-unknown-athlete={ p.T("capture.offline.reject.unknown_athlete") }
 		data-i18n-reject-announced={ p.T("capture.offline.reject.announced") }
@@ -181,33 +185,33 @@ templ fieldGrid(p PageData, v captureView) {
 			</form>
 		}
 	}
-	<table class="capture-grid">
-		<thead>
-			<tr>
-				<th>{ p.T("roster.bib") }</th>
-				<th>{ p.T("roster.name") }</th>
+	<table class="capture-grid stack-table" role="table">
+		<thead role="rowgroup">
+			<tr role="row">
+				<th role="columnheader">{ p.T("roster.bib") }</th>
+				<th role="columnheader">{ p.T("roster.name") }</th>
 				for i := 1; i <= v.Attempts; i++ {
-					<th>{ p.T("capture.trial_abbr") + intToStr(int64(i)) }</th>
+					<th role="columnheader">{ p.T("capture.trial_abbr") + intToStr(int64(i)) }</th>
 				}
 				if v.Protest.CorrectionMode {
-					<th>{ p.T("capture.correct.mark") }</th>
-					<th>{ p.T("capture.status") }</th>
-					<th>{ p.T("capture.dq_rule") }</th>
-					<th>{ p.T("capture.correct.reason") }</th>
-					<th>{ p.T("capture.correct.escalation") }</th>
-					<th></th>
+					<th role="columnheader">{ p.T("capture.correct.mark") }</th>
+					<th role="columnheader">{ p.T("capture.status") }</th>
+					<th role="columnheader">{ p.T("capture.dq_rule") }</th>
+					<th role="columnheader">{ p.T("capture.correct.reason") }</th>
+					<th role="columnheader">{ p.T("capture.correct.escalation") }</th>
+					<th role="columnheader"></th>
 				}
-				<th>{ p.T("capture.result") }</th>
-				<th>{ p.T("standings.points_abbr") }</th>
+				<th role="columnheader">{ p.T("capture.result") }</th>
+				<th role="columnheader">{ p.T("standings.points_abbr") }</th>
 			</tr>
 		</thead>
-		<tbody>
+		<tbody role="rowgroup">
 			for _, row := range v.Rows {
-				<tr>
-					<td>{ row.Bib }</td>
-					<td>{ row.Name }</td>
+				<tr role="row">
+					<td role="cell" data-label={ p.T("roster.bib") }>{ row.Bib }</td>
+					<td role="cell" data-label={ p.T("roster.name") }>{ row.Name }</td>
 					for _, cell := range row.Cells {
-						<td>
+						<td role="cell" data-label={ p.T("capture.trial_abbr") + cell.Seq }>
 							if v.Protest.CorrectionMode {
 								{ cell.Display }
 							} else {
@@ -227,25 +231,35 @@ templ fieldGrid(p PageData, v captureView) {
 										name="value"
 										value={ cell.Value }
 										size="6"
+										inputmode="decimal"
+										enterkeyhint="done"
 										aria-label={ p.T("capture.trial_abbr") + cell.Seq + " " + row.Name }
 									/>
+									<span class="marker-actions" role="group" aria-label={ p.T("capture.marker_group") }>
+										@markerButton("X", p.T("capture.marker.foul"))
+										@markerButton("–", p.T("capture.marker.pass"))
+										@markerButton("r", p.T("capture.marker.retire"))
+									</span>
 									if v.WindRelevant {
 										<input
 											type="text"
 											name="wind"
 											value={ cell.Wind }
 											size="4"
+											inputmode="decimal"
+											enterkeyhint="done"
 											placeholder={ p.T("capture.wind") }
 											aria-label={ p.T("capture.wind") + " " + row.Name }
 										/>
 									}
 									<button type="submit">{ p.T("capture.save") }</button>
+									<span class="cell-save-badge" aria-hidden="true"></span>
 								</form>
 							}
 						</td>
 					}
 					if v.Protest.CorrectionMode {
-						<td>
+						<td role="cell" data-label={ p.T("capture.correct.mark") }>
 							<input
 								type="text"
 								name="time"
@@ -255,7 +269,7 @@ templ fieldGrid(p PageData, v captureView) {
 								aria-label={ p.T("capture.correct.mark") + " " + row.Name }
 							/>
 						</td>
-						<td>
+						<td role="cell" data-label={ p.T("capture.status") }>
 							<select name="status" form={ "field-correct-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
 								<option value="" selected?={ row.Status == "" }>{ p.T("capture.status.none_mark") }</option>
 								for _, st := range v.FieldStatuses {
@@ -263,8 +277,8 @@ templ fieldGrid(p PageData, v captureView) {
 								}
 							</select>
 						</td>
-						<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "field-correct-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
-						<td>
+						<td role="cell" data-label={ p.T("capture.dq_rule") } class="dq-rule-cell"><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "field-correct-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+						<td role="cell" data-label={ p.T("capture.correct.reason") }>
 							<input
 								type="text"
 								name="reason"
@@ -279,7 +293,7 @@ templ fieldGrid(p PageData, v captureView) {
 							/>
 							@fieldError(rowFieldKey("reason", row.AthleteID), row.Errors)
 						</td>
-						<td>
+						<td role="cell" data-label={ p.T("capture.correct.escalation") }>
 							<input
 								type="text"
 								name="escalation"
@@ -294,14 +308,29 @@ templ fieldGrid(p PageData, v captureView) {
 							/>
 							@fieldError(rowFieldKey("escalation", row.AthleteID), row.Errors)
 						</td>
-						<td><button type="submit" form={ "field-correct-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
+						<td role="cell" data-label=""><button type="submit" form={ "field-correct-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
 					}
-					<td>{ row.Result }</td>
-					<td>{ row.Points }</td>
+					<td role="cell" data-label={ p.T("capture.result") } data-role="result" data-athlete-row={ row.AthleteID }>{ row.Result }</td>
+					<td role="cell" data-label={ p.T("standings.points_abbr") } data-role="points" data-athlete-row={ row.AthleteID }>{ row.Points }</td>
 				</tr>
 			}
 		</tbody>
 	</table>
+}
+
+// markerButton renders one D5.2 letter-marker quick-action button
+// (SYS-147, UC-039 #3): the mark/value input declares inputmode="decimal"
+// (a numeric-only virtual keyboard), so these buttons are the alternate,
+// always-available path for the non-numeric markers (X foul, – pass, r
+// retirement in the horizontal grid; o clear as well in the vertical grid,
+// verticaljump.templ). Wired by /static/capture-markers.js — a small,
+// family-agnostic script that sets the sibling value input and re-submits
+// the enclosing form, so it works whether that submit is a plain POST
+// (track/vertical) or intercepted by the offline-capture island (field
+// horizontal). glyph is the visible D5.2 notation (matches what the grid
+// displays once saved); label is the localized accessible name.
+templ markerButton(glyph, label string) {
+	<button type="button" class="marker-btn" data-marker={ glyph } aria-label={ label }>{ glyph }</button>
 }
 
 // trackForm renders manual/FAT time entry per athlete (UC-010 subset for
@@ -327,42 +356,51 @@ templ trackForm(p PageData, v captureView) {
 			<input type="hidden" name="athlete" value={ row.AthleteID }/>
 		</form>
 	}
-	<table class="capture-grid">
-		<thead>
-			<tr>
-				<th>{ p.T("roster.bib") }</th>
-				<th>{ p.T("seeding.lane") }</th>
-				<th>{ p.T("roster.name") }</th>
-				<th>{ p.T("capture.time") }</th>
-				<th>{ p.T("capture.timing") }</th>
-				<th>{ p.T("capture.status") }</th>
-				<th>{ p.T("capture.dq_rule") }</th>
+	<table class="capture-grid stack-table" role="table">
+		<thead role="rowgroup">
+			<tr role="row">
+				<th role="columnheader">{ p.T("roster.bib") }</th>
+				<th role="columnheader">{ p.T("seeding.lane") }</th>
+				<th role="columnheader">{ p.T("roster.name") }</th>
+				<th role="columnheader">{ p.T("capture.time") }</th>
+				<th role="columnheader">{ p.T("capture.timing") }</th>
+				<th role="columnheader">{ p.T("capture.status") }</th>
+				<th role="columnheader">{ p.T("capture.dq_rule") }</th>
 				if v.Protest.CorrectionMode {
-					<th>{ p.T("capture.correct.reason") }</th>
-					<th>{ p.T("capture.correct.escalation") }</th>
+					<th role="columnheader">{ p.T("capture.correct.reason") }</th>
+					<th role="columnheader">{ p.T("capture.correct.escalation") }</th>
 				}
-				<th></th>
-				<th>{ p.T("capture.result") }</th>
-				<th>{ p.T("standings.points_abbr") }</th>
+				<th role="columnheader"></th>
+				<th role="columnheader">{ p.T("capture.result") }</th>
+				<th role="columnheader">{ p.T("standings.points_abbr") }</th>
 			</tr>
 		</thead>
-		<tbody>
+		<tbody role="rowgroup">
 			for _, row := range v.Rows {
-				<tr>
-					<td>{ row.Bib }</td>
-					<td>{ row.Lane }</td>
-					<td>{ row.Name }</td>
-					<td>
-						<input type="text" name="time" size="7" value={ row.Time } form={ "track-" + row.AthleteID } aria-label={ p.T("capture.time") + " " + row.Name }/>
+				<tr role="row">
+					<td role="cell" data-label={ p.T("roster.bib") }>{ row.Bib }</td>
+					<td role="cell" data-label={ p.T("seeding.lane") }>{ row.Lane }</td>
+					<td role="cell" data-label={ p.T("roster.name") }>{ row.Name }</td>
+					<td role="cell" data-label={ p.T("capture.time") }>
+						<input
+							type="text"
+							name="time"
+							size="7"
+							value={ row.Time }
+							form={ "track-" + row.AthleteID }
+							inputmode="decimal"
+							enterkeyhint="done"
+							aria-label={ p.T("capture.time") + " " + row.Name }
+						/>
 					</td>
-					<td>
-						<select name="timing" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.timing") + " " + row.Name }>
+					<td role="cell" data-label={ p.T("capture.timing") }>
+						<select name="timing" form={ "track-" + row.AthleteID } class="timing-select" aria-label={ p.T("capture.timing") + " " + row.Name }>
 							for _, t := range v.TrackTimings {
 								<option value={ t } selected?={ t == row.Timing }>{ p.T("capture.timing." + t) }</option>
 							}
 						</select>
 					</td>
-					<td>
+					<td role="cell" data-label={ p.T("capture.status") }>
 						<select name="status" form={ "track-" + row.AthleteID } aria-label={ p.T("capture.status") + " " + row.Name }>
 							<option value="" selected?={ row.Status == "" }>{ p.T("capture.status.none") }</option>
 							for _, st := range v.TrackStatuses {
@@ -370,9 +408,9 @@ templ trackForm(p PageData, v captureView) {
 							}
 						</select>
 					</td>
-					<td><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
+					<td role="cell" data-label={ p.T("capture.dq_rule") } class="dq-rule-cell"><input type="text" name="status_detail" size="8" placeholder="TR16.8" value={ row.StatusDetail } form={ "track-" + row.AthleteID } aria-label={ p.T("capture.dq_rule") + " " + row.Name }/></td>
 					if v.Protest.CorrectionMode {
-						<td>
+						<td role="cell" data-label={ p.T("capture.correct.reason") }>
 							<input
 								type="text"
 								name="reason"
@@ -387,7 +425,7 @@ templ trackForm(p PageData, v captureView) {
 							/>
 							@fieldError(rowFieldKey("reason", row.AthleteID), row.Errors)
 						</td>
-						<td>
+						<td role="cell" data-label={ p.T("capture.correct.escalation") }>
 							<input
 								type="text"
 								name="escalation"
@@ -403,9 +441,9 @@ templ trackForm(p PageData, v captureView) {
 							@fieldError(rowFieldKey("escalation", row.AthleteID), row.Errors)
 						</td>
 					}
-					<td><button type="submit" form={ "track-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
-					<td>{ row.Result }</td>
-					<td>{ row.Points }</td>
+					<td role="cell" data-label=""><button type="submit" form={ "track-" + row.AthleteID }>{ p.T("capture.save") }</button></td>
+					<td role="cell" data-label={ p.T("capture.result") }>{ row.Result }</td>
+					<td role="cell" data-label={ p.T("standings.points_abbr") }>{ row.Points }</td>
 				</tr>
 			}
 		</tbody>
@@ -424,7 +462,7 @@ templ windForm(p PageData, v captureView) {
 		<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 		<label>
 			{ p.T("capture.wind") }
-			<input type="text" name="wind" size="4" value={ v.CurrentWind } aria-label={ p.T("capture.wind") } aria-describedby="capture-wind-hint"/>
+			<input type="text" name="wind" size="4" value={ v.CurrentWind } inputmode="decimal" enterkeyhint="done" aria-label={ p.T("capture.wind") } aria-describedby="capture-wind-hint"/>
 		</label>
 		@helpIcon(p, "capture.wind")
 		<p class="hint" id="capture-wind-hint">{ p.T("capture.hint.wind") }</p>
@@ -466,31 +504,35 @@ templ standingsTable(p PageData, meetID, unitID string, rows []standingRowView2,
 	if len(rows) == 0 {
 		<p>{ emptyText }</p>
 	} else {
-		<table>
-			<thead>
-				<tr>
-					<th>{ p.T("standings.rank") }</th>
-					<th>{ p.T("roster.bib") }</th>
-					<th>{ p.T("roster.name") }</th>
-					<th>{ p.T("capture.result") }</th>
-					<th>{ p.T("standings.points_abbr") }</th>
-					<th>{ p.T("capture.record_flags") }</th>
+		// SYS-147 names "unit standings" among the operator surfaces that
+		// must fit 360px without page-level horizontal scroll — this table
+		// renders on the same page as the capture grid above it, so it gets
+		// the same row-card treatment (UC-039 #1).
+		<table class="stack-table" role="table">
+			<thead role="rowgroup">
+				<tr role="row">
+					<th role="columnheader">{ p.T("standings.rank") }</th>
+					<th role="columnheader">{ p.T("roster.bib") }</th>
+					<th role="columnheader">{ p.T("roster.name") }</th>
+					<th role="columnheader">{ p.T("capture.result") }</th>
+					<th role="columnheader">{ p.T("standings.points_abbr") }</th>
+					<th role="columnheader">{ p.T("capture.record_flags") }</th>
 				</tr>
 			</thead>
-			<tbody>
+			<tbody role="rowgroup">
 				for _, row := range rows {
-					<tr>
-						<td>{ row.Rank }</td>
-						<td>{ row.Bib }</td>
-						<td>{ row.Name }</td>
-						<td>
+					<tr role="row">
+						<td role="cell" data-label={ p.T("standings.rank") }>{ row.Rank }</td>
+						<td role="cell" data-label={ p.T("roster.bib") }>{ row.Bib }</td>
+						<td role="cell" data-label={ p.T("roster.name") }>{ row.Name }</td>
+						<td role="cell" data-label={ p.T("capture.result") }>
 							{ row.Mark }
 							if row.Status != "" {
 								{ " " + row.Status }
 							}
 						</td>
-						<td>{ row.Points }</td>
-						<td>
+						<td role="cell" data-label={ p.T("standings.points_abbr") }>{ row.Points }</td>
+						<td role="cell" data-label={ p.T("capture.record_flags") }>
 							if row.Flags != "" {
 								<a href={ templ.URL("/meets/" + meetID + "/capture/" + unitID + "/record-checklist/" + row.AthleteID) }>
 									{ row.Flags }

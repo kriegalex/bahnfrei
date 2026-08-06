@@ -151,6 +151,51 @@ func TestCheckInFlowHTTPSYS025UC007(t *testing.T) {
 	}
 }
 
+// TestCheckInMobileCaptureMarkupSYS147UC039TASK045 pins the check-in
+// table's mobile-ergonomics markup (SYS-147, UC-039 #1): the row-card
+// responsive class and the restored table-semantics roles/data-label the
+// row-card CSS depends on, plus the compact breadcrumb-style heading — the
+// actual no-horizontal-scroll rendering is proven live in the browser by
+// e2e/tests/mobile-capture-UC039.spec.ts.
+func TestCheckInMobileCaptureMarkupSYS147UC039TASK045(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID := createUCMeet(t, client, base)
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"100m"}, "categories": {"U18 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+	publishMeetWeb(t, client, base, meetID)
+	eventID := mustEventID(t, deps, meetID, "100m")
+
+	ctx := context.Background()
+	if _, err := deps.results.SubmitIndividualEntry(ctx, webSubmitter, meetID, app.IndividualEntryInput{
+		EventID: eventID, FirstName: "Athlete", LastName: "Test",
+		BirthYear: 2009, Sex: domain.SexFemale, SeedPerformance: "13.50",
+	}); err != nil {
+		t.Fatalf("SubmitIndividualEntry: %v", err)
+	}
+
+	checkinPage := base + "/meets/" + meetID + "/events/" + eventID + "/checkin"
+	body := bodyString(t, mustGet(t, client, checkinPage))
+	for _, want := range []string{
+		`class="stack-table"`,
+		`role="table"`,
+		`role="columnheader"`,
+		`role="cell"`,
+		`data-label=`,
+		`class="capture-title"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("check-in page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<h1>") {
+		t.Error("check-in page should render the compact <h1 class=\"capture-title\">, not a bare <h1>")
+	}
+}
+
 // TestSeedingGenerateAndOverrideHTTPSYS026UC008 drives heat generation and a
 // manual override over real HTTP.
 func TestSeedingGenerateAndOverrideHTTPSYS026UC008(t *testing.T) {
