@@ -13,6 +13,15 @@ import (
 	"testing"
 )
 
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse %q: %v", raw, err)
+	}
+	return u
+}
+
 // postJSON sends a JSON body with the double-submit CSRF header (SYS-092) the
 // client island uses, and returns the response.
 func postJSON(t *testing.T, client *http.Client, target, csrf string, body any) *http.Response {
@@ -182,6 +191,80 @@ func TestUC034_ReconciliationApplyOverJSON(t *testing.T) {
 	recon = bodyString(t, mustGet(t, client, meetURL+"/reconciliation"))
 	if !strings.Contains(recon, "Keine offenen") { // "no pending" empty state (DE)
 		t.Errorf("reconciliation queue should be empty after apply: %s", recon)
+	}
+}
+
+// TestSyncPerOpRejectionSYS149UC040_1OverJSON is the F1 defect regression
+// (usability-audit-volunteer-2026-08.md) at the HTTP boundary: saving an
+// invalid mark ("abc") no longer fails the whole /sync request with 400 —
+// the endpoint still answers 200 with a per-op "rejected" outcome, and a
+// second, valid op in the SAME batch still applies (UC-040 #1/#2: a
+// rejection never blocks the queue).
+func TestSyncPerOpRejectionSYS149UC040_1OverJSON(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	unitURL, athletes, csrf := syncSetup(t, client, base)
+	co := checkoutStamp(t, client, unitURL, csrf)
+
+	resp := postJSON(t, client, unitURL+"/sync", csrf, syncRequest{
+		Token: co.Token, DeviceLabel: "tablet-A", Generation: co.Generation, StartListVersion: co.StartListVersion,
+		Ops: []syncOp{
+			{OpID: "01OP00000000000000000J001", AthleteID: athletes["101"], Seq: 1, Value: "abc"},
+			{OpID: "01OP00000000000000000J002", AthleteID: athletes["102"], Seq: 1, Value: "3.80"},
+		},
+	})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sync with an invalid op = %d, want 200 (a per-op rejection is not a batch-wide HTTP error)", resp.StatusCode)
+	}
+	var out syncResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode sync: %v", err)
+	}
+	if len(out.Results) != 2 {
+		t.Fatalf("results = %+v, want 2", out.Results)
+	}
+	if out.Results[0].Status != "rejected" || out.Results[0].Reason != "invalid_mark" {
+		t.Errorf("op 0 = %+v, want rejected/invalid_mark", out.Results[0])
+	}
+	if out.Results[1].Status != "applied" {
+		t.Errorf("op 1 = %+v, want applied (a rejection must not block the queue, UC-040 #2)", out.Results[1])
+	}
+
+	standings := bodyString(t, mustGet(t, client, unitURL+"/standings"))
+	if !strings.Contains(standings, "3.80") {
+		t.Error("the valid op behind the rejected one must still reach standings")
+	}
+}
+
+// TestSyncSYS149UC040_4ExpiredSessionIs403 is the server half of UC-040 #4
+// (SYS-149): a request whose session cookie no longer resolves to a live
+// session — the real shape of the 12h TTL lapsing mid-queue
+// (internal/web/config.go) — never reaches handleUnitSync's own error
+// mapping at all: captureRole (routes.go, requireRole(RoleFieldOfficial))
+// already answers with its own 403 upstream. This pins that behavior so a
+// future routing change cannot silently regress the client's 401/403
+// re-authentication classification (islands/src/capture-offline.ts) back
+// into a 500/400 the client would treat as a generic sync error instead of
+// a re-authentication prompt.
+func TestSyncSYS149UC040_4ExpiredSessionIs403(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	unitURL, athletes, csrf := syncSetup(t, client, base)
+	co := checkoutStamp(t, client, unitURL, csrf)
+
+	// Corrupt the session cookie in place — same shape as a stale/expired
+	// cookie the browser still sends but the server can no longer resolve.
+	u := mustParseURL(t, base)
+	client.Jar.SetCookies(u, []*http.Cookie{{Name: sessionCookieName, Value: "not-a-real-session-token"}})
+
+	resp := postJSON(t, client, unitURL+"/sync", csrf, syncRequest{
+		Token: co.Token, DeviceLabel: "tablet-A", Generation: co.Generation, StartListVersion: co.StartListVersion,
+		Ops: []syncOp{{OpID: "01OP00000000000000000E001", AthleteID: athletes["101"], Seq: 1, Value: "3.40"}},
+	})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("sync with an unresolvable session cookie = %d, want 403 (the client's reauth classification depends on 401/403)", resp.StatusCode)
 	}
 }
 

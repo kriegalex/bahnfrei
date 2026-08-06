@@ -32,31 +32,40 @@ type Attempt struct {
 	Wind *float64 // m/s, only where wind-relevant
 }
 
+// ErrInvalidMark means an attempt's captured value failed SYS-042 validation:
+// not a parseable mark or D5.2 symbol, a non-positive mark, a symbol
+// carrying a stray mark, or an unrecognized kind. It is a sentinel so
+// callers — notably the offline sync replay path (internal/app/sync.go,
+// SYS-149/UC-040) — can classify the failure as a non-retryable per-op
+// rejection rather than an infrastructure fault, without parsing message
+// text.
+var ErrInvalidMark = errors.New("attempt value failed validation")
+
 // Validate checks one attempt against the SYS-042 capture rules and
 // normalizes a valid mark to its canonical two-decimal form ("6.1" → "6.10").
 func (a *Attempt) Validate(windRelevant bool) error {
 	if a.Seq < 1 {
-		return errors.New("attempt: trial number must be ≥ 1")
+		return fmt.Errorf("%w: trial number must be ≥ 1", ErrInvalidMark)
 	}
 	switch a.Kind {
 	case AttemptValid:
 		centi, err := ParseCentiMark(a.Mark)
 		if err != nil {
-			return fmt.Errorf("attempt: %w", err)
+			return fmt.Errorf("%w: %w", ErrInvalidMark, err)
 		}
 		if centi == 0 {
-			return errors.New("attempt: a valid attempt needs a mark > 0")
+			return fmt.Errorf("%w: a valid attempt needs a mark > 0", ErrInvalidMark)
 		}
 		a.Mark = FormatCentiMark(centi, 2)
 	case AttemptFoul, AttemptPass, AttemptRetire:
 		if a.Mark != "" {
-			return fmt.Errorf("attempt: a %s carries no mark", a.Kind)
+			return fmt.Errorf("%w: a %s carries no mark", ErrInvalidMark, a.Kind)
 		}
 	default:
-		return fmt.Errorf("attempt: unknown kind %q", a.Kind)
+		return fmt.Errorf("%w: unknown kind %q", ErrInvalidMark, a.Kind)
 	}
 	if a.Wind != nil && !windRelevant {
-		return errors.New("attempt: discipline is not wind-relevant, no wind reading expected")
+		return fmt.Errorf("%w: discipline is not wind-relevant, no wind reading expected", ErrInvalidMark)
 	}
 	return nil
 }

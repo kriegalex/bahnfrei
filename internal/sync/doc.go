@@ -69,8 +69,19 @@
 //	    {"results":[
 //	       {"opId":"01H…","status":"applied"},
 //	       {"opId":"01H…","status":"duplicate"},
-//	       {"opId":"01H…","status":"reconciliation","reason":"stale_checkout"}
+//	       {"opId":"01H…","status":"reconciliation","reason":"stale_checkout"},
+//	       {"opId":"01H…","status":"rejected","reason":"invalid_mark"}
 //	    ]}
+//
+//	  A malformed envelope (bad JSON) or an authentication/authorization
+//	  failure (401/403) is still an HTTP-level error — those are not
+//	  per-op outcomes. Every other per-op failure — an invalid mark,
+//	  an unregistered athlete, a checkout/start-list mismatch — is a 200
+//	  response whose results carry the per-op status; the server never
+//	  fails the WHOLE batch with 400 for one bad op (SYS-149, UC-040):
+//	  doing so wedges every later op behind the poisoned one, since the
+//	  client cannot tell a batch-wide rejection from a real connectivity
+//	  failure and retries it forever.
 //
 // Field notes:
 //   - opId is a CLIENT-generated ULID and the idempotency key (SYS-085). The
@@ -103,6 +114,17 @@
 //     unit's — the office revised the start list after checkout, UC-034 #4),
 //     or "conflict" (applying would overwrite a diverging attempt captured
 //     meanwhile; surfaced, not merged).
+//   - "rejected" (SYS-149, UC-040): the op failed validation or a capture
+//     business rule and will never succeed by retrying — non-retryable,
+//     and NOT queued for office review (unlike "reconciliation": there is
+//     nothing for the office to apply, the operator must correct or
+//     discard it at the point of capture). "reason" is one of
+//     "invalid_mark" (the value failed SYS-042 attempt validation),
+//     "unknown_athlete" (the athlete is not registered for this meet), or
+//     "announced" (the unit's results are already posted; further edits
+//     are corrections, SYS-046/047, which offline sync cannot express).
+//     The client MUST remove a rejected op from its local queue (it never
+//     auto-retries) and render the reason at the offending cell.
 //
 // "applied" and "duplicate" results also carry "version": the attempt's
 // authoritative stored version after the decision (omitted for

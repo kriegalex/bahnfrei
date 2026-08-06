@@ -189,17 +189,20 @@ type ReplayBatch struct {
 }
 
 // OpOutcome is the per-op result reported to the client: applied, duplicate
-// (already applied — no second write), or reconciliation (with the reason).
-// Version carries the attempt's authoritative stored version after an applied
-// or duplicate decision (0 for reconciliation), so the client SETS the cell's
-// optimistic version to the server truth rather than blindly incrementing it —
-// a blind increment double-counts when the same op is acknowledged again after
-// a page render already reflected the write (SYS-085).
+// (already applied — no second write), reconciliation (with Reason) or
+// rejected (with RejectReason, SYS-149/UC-040) — a non-retryable validation
+// or capture-rule failure, never queued for office review. Version carries
+// the attempt's authoritative stored version after an applied or duplicate
+// decision (0 otherwise), so the client SETS the cell's optimistic version
+// to the server truth rather than blindly incrementing it — a blind
+// increment double-counts when the same op is acknowledged again after a
+// page render already reflected the write (SYS-085).
 type OpOutcome struct {
-	OpID    string
-	Status  domain.OpStatus
-	Reason  domain.ReconcileReason
-	Version int64
+	OpID         string
+	Status       domain.OpStatus
+	Reason       domain.ReconcileReason // set when Status == reconciliation
+	RejectReason domain.RejectReason    // set when Status == rejected
+	Version      int64
 }
 
 // ReplayResult carries one outcome per submitted op, in submission order.
@@ -249,13 +252,20 @@ func (s *ResultsService) replayOne(ctx context.Context, actor Session, meetID, u
 			return OpOutcome{}, fmt.Errorf("op %s was already recorded for unit %s, not unit %s: op ids are unique per capture — regenerate the ULID (SYS-086)",
 				op.OpID, recordedUnit, unitID)
 		}
-		if status == string(domain.OpReconciliation) {
+		switch domain.OpStatus(status) {
+		case domain.OpReconciliation:
 			return OpOutcome{OpID: op.OpID, Status: domain.OpReconciliation, Reason: domain.ReconcileReason(reason)}, nil
+		case domain.OpRejected:
+			// A resend of an op the operator has not yet acted on (e.g. the
+			// first rejection ack was lost): re-acknowledge the same terminal
+			// rejection rather than re-validating (SYS-085 exactly-once).
+			return OpOutcome{OpID: op.OpID, Status: domain.OpRejected, RejectReason: domain.RejectReason(reason)}, nil
+		default:
+			// Already applied by an earlier batch (a flaky reconnect re-sent
+			// it): report the CURRENT authoritative version so the client
+			// converges the cell to the server truth instead of over-counting it.
+			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: s.currentAttemptVersion(ctx, unitID, op.AthleteID, op.Seq)}, nil
 		}
-		// Already applied by an earlier batch (a flaky reconnect re-sent it):
-		// report the CURRENT authoritative version so the client converges the
-		// cell to the server truth instead of over-counting it.
-		return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: s.currentAttemptVersion(ctx, unitID, op.AthleteID, op.Seq)}, nil
 	}
 
 	state := domain.CheckoutState{}
@@ -314,7 +324,33 @@ func (s *ResultsService) applyReplayOp(ctx context.Context, actor Session, meetI
 		}
 		return s.routeReconciliation(ctx, actor, unitID, batch, op, domain.ReasonConflict)
 	}
+	if reason, ok := classifyRejection(err); ok {
+		if e := store.RecordCaptureOp(ctx, s.db, op.OpID, unitID, string(domain.OpRejected), string(reason)); e != nil {
+			return OpOutcome{}, e
+		}
+		return OpOutcome{OpID: op.OpID, Status: domain.OpRejected, RejectReason: reason}, nil
+	}
 	return OpOutcome{}, err
+}
+
+// classifyRejection maps a SaveFieldAttempt failure to a non-retryable
+// per-op rejection reason (SYS-149, UC-040) the client surfaces at the
+// offending cell instead of retrying it as a connectivity problem. It
+// reports ok=false for anything else — an unexpected/infrastructure error
+// still fails the whole batch (propagated as a genuine 5xx by the web
+// layer): SYS-149 only reclassifies validation/business-rule outcomes,
+// never masks a real server fault as if it were the operator's mistake.
+func classifyRejection(err error) (domain.RejectReason, bool) {
+	switch {
+	case errors.Is(err, domain.ErrInvalidMark):
+		return domain.RejectInvalidMark, true
+	case errors.Is(err, store.ErrNotFound):
+		return domain.RejectUnknownAthlete, true
+	case errors.Is(err, ErrCorrectionRequired):
+		return domain.RejectAnnounced, true
+	default:
+		return "", false
+	}
 }
 
 // sameAttempt reports whether a stored attempt already equals what an op would
