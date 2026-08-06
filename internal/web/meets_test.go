@@ -550,6 +550,11 @@ func TestMeetDetailHubOfficeAccessTASK043(t *testing.T) {
 		meetIDPath(meetID, "/entries/eligibility"),
 		meetIDPath(meetID, "/events/"+eventID+"/checkin"),
 		meetIDPath(meetID, "/events/"+eventID+"/rounds/"+roundID+"/seeding"),
+		// TASK-046 (OQ-113, SYS-151): the hub gained a forward link into the
+		// capture index and reconciliation, previously reachable only via
+		// the field-official dashboard panel or a typed URL.
+		meetIDPath(meetID, "/capture"),
+		meetIDPath(meetID, "/reconciliation"),
 	}
 
 	// --- Organizer view: unchanged — every action present. ---
@@ -651,5 +656,122 @@ func TestRosterBackToMeetOfficeSessionTASK043(t *testing.T) {
 	_ = bodyString(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("office session following roster.back_to_meet = %d, want 200 (TASK-042/OQ-111 repro)", resp.StatusCode)
+	}
+}
+
+// crawlLinks performs a breadth-first walk of every <a>/<form> target
+// rendered starting from startPath (TASK-046, SYS-151/UC-041 #1/#3: "every
+// operator surface SHALL be reachable through rendered links … within two
+// link activations"). It follows only same-origin "/", "/meets/…" and
+// "/m/…" targets (the operator/public surfaces this task cares about — not
+// /admin, /login, static assets, or service-worker scope), for up to
+// maxActivations hops, asserting along the way that nothing it reaches
+// resolves 403 (a 403 there means a rendered link points at a surface its
+// own role cannot open — either a stale/typed-URL-only route or a broken
+// capability gate). It returns every path it actually requested, so a
+// caller can assert a specific surface was reached within budget.
+func crawlLinks(t *testing.T, client *http.Client, base, startPath string, maxActivations int) map[string]bool {
+	t.Helper()
+	visited := map[string]bool{}
+	frontier := []string{startPath}
+	for hop := 0; hop <= maxActivations && len(frontier) > 0; hop++ {
+		var next []string
+		for _, path := range frontier {
+			if visited[path] {
+				continue
+			}
+			visited[path] = true
+			resp := mustGet(t, client, base+path)
+			body := bodyString(t, resp)
+			if resp.StatusCode == http.StatusForbidden {
+				t.Errorf("crawl from %q: rendered link %q resolves 403 (typed-URL-only surface or broken gate)", startPath, path)
+			}
+			for _, m := range hrefRE.FindAllStringSubmatch(body, -1) {
+				href := m[1]
+				if href == "" || strings.Contains(href, "#") || strings.HasPrefix(href, "http") {
+					continue
+				}
+				if href != "/" && href != "/meets" && !strings.HasPrefix(href, "/meets/") && !strings.HasPrefix(href, "/m/") {
+					continue
+				}
+				if !visited[href] {
+					next = append(next, href)
+				}
+			}
+		}
+		frontier = next
+	}
+	return visited
+}
+
+// TestHomeLinkWalkReachabilityUC041_1And3 covers UC-041 #1 and #3 (SYS-151,
+// F5): starting from "/", each role's primary day-of surfaces are reachable
+// within two link activations and every link the walk follows resolves
+// non-403 — no operator surface requires a typed URL. This extends the
+// TASK-043 link-walk pattern (TestMeetDetailHubOfficeAccessTASK043, which
+// walks from the hub itself) one level further back, to the actual role
+// landing page.
+func TestHomeLinkWalkReachabilityUC041_1And3(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base) // admin, organizer-capable
+	meetID := createUCMeet(t, client, base)
+	resp := addEvent(t, client, base, meetID, url.Values{
+		"discipline": {"100m"}, "categories": {"U16 W"}, "round_final": {"1"},
+	})
+	_ = resp.Body.Close()
+
+	createAccountWeb(t, client, base, "office9", "competition_office")
+	createAccountWeb(t, client, base, "fo9", "field_official")
+	acctID := accountIDFromAdminPage(t, bodyString(t, mustGet(t, client, base+"/admin")), "fo9")
+	d, err := deps.meets.Meet(context.Background(), meetID)
+	if err != nil || len(d.Units) != 1 {
+		t.Fatalf("fixture units = %+v, err = %v, want one unit", d.Units, err)
+	}
+	resp = postForm(t, client, base+"/meets/"+meetID+"/officials", base+"/meets/"+meetID+"/officials/assign", url.Values{
+		"account_id": {acctID}, "unit_id": {d.Units[0].UnitID},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("assign field official unit = %d, want 303", resp.StatusCode)
+	}
+
+	// --- Office: check-in, capture, reconciliation, roster, standings all
+	// reachable within two link activations from "/" (UC-041 #1). ---
+	logout(t, client, base)
+	login(t, client, base, "office9", "s3cret-passphrase")
+	visited := crawlLinks(t, client, base, "/", 2)
+	for _, want := range []string{
+		meetIDPath(meetID, "/roster"),
+		meetIDPath(meetID, "/standings"),
+		meetIDPath(meetID, "/capture"),
+		meetIDPath(meetID, "/reconciliation"),
+	} {
+		if !visited[want] {
+			t.Errorf("office: %q not reached within two link activations from / (visited: %v)", want, visited)
+		}
+	}
+	if !visited[meetIDPath(meetID, "/events/"+d.Programme[0].ID+"/checkin")] {
+		t.Errorf("office: check-in not reached within two link activations from / (visited: %v)", visited)
+	}
+
+	// --- Field official: its assigned unit's capture page is reachable in
+	// one activation, with no other operator surface needing a typed URL. ---
+	logout(t, client, base)
+	login(t, client, base, "fo9", "s3cret-passphrase")
+	visited = crawlLinks(t, client, base, "/", 2)
+	if !visited[meetIDPath(meetID, "/capture/"+d.Units[0].UnitID)] {
+		t.Errorf("field official: assigned unit's capture page not reached from / (visited: %v)", visited)
+	}
+
+	// --- Organizer: unchanged /meets → hub flow stays link-walkable too. ---
+	logout(t, client, base)
+	login(t, client, base, "admin", "s3cret-passphrase")
+	visited = crawlLinks(t, client, base, "/", 2)
+	if !visited["/meets"] {
+		t.Errorf("organizer: /meets not reached from / (visited: %v)", visited)
+	}
+	if !visited[meetIDPath(meetID, "")] {
+		t.Errorf("organizer: meet hub not reached within two link activations from / (visited: %v)", visited)
 	}
 }

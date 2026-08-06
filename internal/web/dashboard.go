@@ -74,11 +74,21 @@ func (s *Server) buildAssignmentsDashboard(ctx context.Context, p PageData, acto
 		for _, am := range assigned {
 			fm := fieldAssignmentMeetView{MeetID: am.MeetID, MeetName: am.MeetName}
 			for _, u := range am.Units {
-				fm.Units = append(fm.Units, captureUnitView{
+				// Localized discipline name + schedule (SYS-151/UC-041 #2):
+				// the localized-name path already used by standings
+				// (localizedDisciplineName, SYS-111), reused here rather
+				// than the catalog's English canonical name.
+				cv := captureUnitView{
 					UnitID:     u.UnitID,
-					Discipline: u.DisciplineName,
+					Discipline: s.localizedDisciplineName(p, u.DisciplineCode),
 					Family:     string(u.Family),
-				})
+				}
+				if u.ScheduledAt != nil {
+					cv.Scheduled = true
+					cv.When = p.FormatDateTime(*u.ScheduledAt)
+					cv.Location = u.Location
+				}
+				fm.Units = append(fm.Units, cv)
 			}
 			v.FieldMeets = append(v.FieldMeets, fm)
 		}
