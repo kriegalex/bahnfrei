@@ -63,7 +63,7 @@ func TestCapturePageWiresOfflineIsland(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitID := units["Zone Long Jump (UKC)"]
+	unitID := units["Zonen-Weitsprung (UKC)"] // localized discipline name (SYS-111/F6, TASK-050)
 	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/capture/"+unitID))
 
 	for _, want := range []string{

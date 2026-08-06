@@ -50,15 +50,17 @@ func (s *Server) handleCaptureIndex(w http.ResponseWriter, r *http.Request) {
 		s.renderMeetError(w, r, err)
 		return
 	}
+	p := basePageData(r, s.cats)
 	v := captureIndexView{MeetID: detail.ID, MeetName: detail.Name}
 	for _, u := range units {
 		v.Units = append(v.Units, captureUnitView{
-			UnitID:     u.UnitID,
-			Discipline: u.DisciplineName,
+			UnitID: u.UnitID,
+			// SYS-111/F6: localize like the standings/hub surfaces rather
+			// than the catalog's canonical English name.
+			Discipline: s.localizedDisciplineName(p, u.DisciplineCode),
 			Family:     string(u.Family),
 		})
 	}
-	p := basePageData(r, s.cats)
 	p.Title = v.MeetName + " — " + p.T("capture.title")
 	_ = captureIndexPage(p, v).Render(r.Context(), w)
 }
@@ -215,12 +217,17 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 	if protestState.Announced {
 		trackAction = "correct"
 	}
+	// SYS-111/F6: the capture unit page's title/h1 localizes the discipline
+	// name like every other operator surface; basePageData is cheap (locale
+	// + session lookup only) and every caller of captureView builds its own
+	// PageData for rendering anyway.
+	p := basePageData(r, s.cats)
 	v := captureView{
 		MeetID:          uc.Meet.ID,
 		MeetName:        uc.Meet.Name,
 		Protest:         buildProtestView(protestState),
 		UnitID:          unitID,
-		Discipline:      uc.DisciplineName,
+		Discipline:      s.localizedDisciplineName(p, uc.DisciplineCode),
 		IsField:         uc.Family == domain.FamilyFieldHorizontal,
 		WindRelevant:    uc.WindRelevant,
 		Attempts:        uc.Config.Attempts,

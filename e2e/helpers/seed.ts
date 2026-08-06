@@ -68,7 +68,9 @@ export async function setupAndLogin(
 
 export interface UkcFixture {
   meetID: string;
-  /** discipline name -> unit ID (e.g. "Zone Long Jump (UKC)"). */
+  /** localized discipline name -> unit ID (e.g. "Zonen-Weitsprung (UKC)",
+   *  the DE catalog string — SYS-111/F6, TASK-050 localized the capture
+   *  index that this map is scraped from). */
   units: Record<string, string>;
   /** bib -> athlete ID. */
   athletes: Record<string, string>;
@@ -110,7 +112,7 @@ export async function seedUkcMeet(
   }
   expect(Object.keys(units), "the 3 UKC disciplines").toHaveLength(3);
 
-  const unitID = units["Zone Long Jump (UKC)"];
+  const unitID = units["Zonen-Weitsprung (UKC)"];
   const unitURL = `${baseURL}/meets/${meetID}/capture/${unitID}`;
   const page = await getBody(request, unitURL);
   const athletes: Record<string, string> = {};
@@ -190,8 +192,11 @@ export async function seedTrackMeet(
   }
 
   const captureIndex = await getBody(request, `${meetPage}/capture`);
+  // The capture index localizes discipline names (SYS-111/F6, TASK-050):
+  // the DE catalog renders code "100m" as "100 m", not the catalog's
+  // canonical English "100 metres".
   const unitMatch = captureIndex.match(
-    new RegExp(`/meets/${meetID}/capture/([0-9A-Za-z]+)">100 metres<`),
+    new RegExp(`/meets/${meetID}/capture/([0-9A-Za-z]+)">100 m<`),
   );
   if (!unitMatch) {
     throw new Error("capture index missing the 100m unit");

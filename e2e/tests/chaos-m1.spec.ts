@@ -272,8 +272,11 @@ test("M1 connectivity chaos: two field officials + office survive a flapping mee
   await setupAndLogin(context.request, app.baseURL);
   const fx = await seedUkcMeet(context.request, app.baseURL);
 
-  const unitAID = fx.units["Zone Long Jump (UKC)"];
-  const unitBID = fx.units["200 g Ball Throw (UKC)"];
+  // SYS-111/F6 (TASK-050): the capture index now localizes discipline
+  // names, so fx.units is keyed by the DE catalog string, not the English
+  // canonical name.
+  const unitAID = fx.units["Zonen-Weitsprung (UKC)"];
+  const unitBID = fx.units["Ballwurf 200 g (UKC)"];
   const unitAURL = `${app.baseURL}/meets/${fx.meetID}/capture/${unitAID}`;
   const unitBURL = `${app.baseURL}/meets/${fx.meetID}/capture/${unitBID}`;
   const anna = fx.athletes["101"];

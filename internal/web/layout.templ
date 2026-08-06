@@ -17,6 +17,15 @@ templ layout(p PageData) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ p.Title } · { p.T("app.title") }</title>
+			<link rel="icon" href="/static/favicon.ico"/>
+			// htmx defaults to injecting a <style> tag for .htmx-indicator
+			// opacity rules on load; the strict CSP here (default-src 'self',
+			// no style-src exception) blocks that inline style and logs a
+			// console error on every page (F11/TASK-050). No template uses
+			// hx-indicator/.htmx-indicator, so disabling the feature via its
+			// documented meta-config hook is a clean no-op for the UI rather
+			// than loosening the CSP.
+			<meta name="htmx-config" content='{"includeIndicatorStyles": false}'/>
 			<script src="/static/htmx.min.js"></script>
 			<link rel="stylesheet" href="/static/tokens.css"/>
 			<link rel="stylesheet" href="/static/base.css"/>

@@ -106,8 +106,8 @@ func TestFieldOfficialEventScopeSYS090UC022_2(t *testing.T) {
 	setupAndLogin(t, client, base) // admin
 
 	meetID, units := ukcCaptureFixture(t, client, base)
-	assignedURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
-	unassignedURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	assignedURL := base + "/meets/" + meetID + "/capture/" + units["60 m"]
+	unassignedURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	// Provision the field-official account through the account admin UI.
 	resp := postForm(t, client, base+"/admin", base+"/admin/accounts", url.Values{
@@ -122,7 +122,7 @@ func TestFieldOfficialEventScopeSYS090UC022_2(t *testing.T) {
 
 	// Scope it to the 60 m unit only, through the assignment matrix UI.
 	resp = postForm(t, client, base+"/meets/"+meetID+"/officials", base+"/meets/"+meetID+"/officials/assign", url.Values{
-		"account_id": {acctID}, "unit_id": {units["60 metres"]},
+		"account_id": {acctID}, "unit_id": {units["60 m"]},
 	})
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {

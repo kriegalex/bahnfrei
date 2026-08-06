@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestAssignmentsDashboardOfficePanelSYS090DEC025 covers the competition-
@@ -66,7 +67,7 @@ func TestAssignmentsDashboardFieldPanelScopingSYS090UC022DEC025(t *testing.T) {
 	// Scope fo1 to exactly one unit of meetA; meetB and meetA's other units
 	// are left unassigned.
 	resp = postForm(t, client, base+"/meets/"+meetA+"/officials", base+"/meets/"+meetA+"/officials/assign", url.Values{
-		"account_id": {acctID}, "unit_id": {unitsA["60 metres"]},
+		"account_id": {acctID}, "unit_id": {unitsA["60 m"]},
 	})
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
@@ -77,11 +78,11 @@ func TestAssignmentsDashboardFieldPanelScopingSYS090UC022DEC025(t *testing.T) {
 	login(t, client, base, "fo1", "s3cret-passphrase")
 
 	body := bodyString(t, mustGet(t, client, base+"/"))
-	assignedHref := `href="/meets/` + meetA + `/capture/` + unitsA["60 metres"] + `"`
+	assignedHref := `href="/meets/` + meetA + `/capture/` + unitsA["60 m"] + `"`
 	if !strings.Contains(body, assignedHref) {
 		t.Errorf("field dashboard missing the assigned unit link: %s", body)
 	}
-	unassignedHref := `/meets/` + meetA + `/capture/` + unitsA["Zone Long Jump (UKC)"]
+	unassignedHref := `/meets/` + meetA + `/capture/` + unitsA["Zonen-Weitsprung (UKC)"]
 	if strings.Contains(body, unassignedHref) {
 		t.Errorf("field dashboard leaked an unassigned unit of a scoped meet (SYS-090): %s", body)
 	}
@@ -221,8 +222,8 @@ func TestFieldHomeLocalizedDisciplineAndScheduleSYS151UC041_2(t *testing.T) {
 	setupAndLogin(t, client, base) // admin, organizer-capable
 
 	meetID, units := ukcCaptureFixture(t, client, base)
-	zoneLJUnit := units["Zone Long Jump (UKC)"]
-	sixtyMUnit := units["60 metres"]
+	zoneLJUnit := units["Zonen-Weitsprung (UKC)"]
+	sixtyMUnit := units["60 m"]
 
 	resp := postForm(t, client, base+"/admin", base+"/admin/accounts", url.Values{
 		"username": {"fo2"}, "display_name": {"Field Official Two"},
@@ -273,8 +274,14 @@ func TestFieldHomeLocalizedDisciplineAndScheduleSYS151UC041_2(t *testing.T) {
 	if !strings.Contains(body, "Sektor B") {
 		t.Errorf("field home missing the scheduled unit's location: %s", body)
 	}
-	if !strings.Contains(body, "09:30") {
-		t.Errorf("field home missing the scheduled unit's time: %s", body)
+	// The form submitted "2026-08-15T09:30" with no zone (parsed as UTC by
+	// time.Parse, meets.go's parseUnitScheduleForm); the dashboard now
+	// renders it in the server's local zone (SYS-110/F6, TASK-050's
+	// FormatDateTime), not the raw stored value, so the expected wall clock
+	// is computed the same way rather than hardcoded to a zone.
+	wantWhen := time.Date(2026, time.August, 15, 9, 30, 0, 0, time.UTC).Local().Format("15:04")
+	if !strings.Contains(body, wantWhen) {
+		t.Errorf("field home missing the scheduled unit's local time %q: %s", wantWhen, body)
 	}
 	if !strings.Contains(body, "60 m") {
 		t.Errorf("field home missing the unscheduled unit's localized discipline name: %s", body)

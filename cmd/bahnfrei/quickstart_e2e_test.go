@@ -162,7 +162,13 @@ func TestQuickstartFreshInstallE2E(t *testing.T) {
 		}
 	}
 	_, page = get(meetPath)
-	for _, want := range []string{"Lauf", "Weite", "Staffel", "01.06.2027 23:59"} {
+	// The deadline was submitted as "2027-06-01T23:59" with no zone (parsed
+	// as UTC); the programme renders it in the server's local zone
+	// (SYS-110/F6, TASK-050's PageData.FormatDateTime), so the expected
+	// wall clock is computed the same way rather than assuming it equals
+	// the stored UTC value.
+	wantDeadline := time.Date(2027, time.June, 1, 23, 59, 0, 0, time.UTC).Local().Format("02.01.2006 15:04")
+	for _, want := range []string{"Lauf", "Weite", "Staffel", wantDeadline} {
 		if !strings.Contains(page, want) {
 			t.Errorf("programme missing %q (UC-001 #3: capture types + deadlines)", want)
 		}
@@ -199,7 +205,13 @@ func TestQuickstartFreshInstallE2E(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("public timetable = %d", code)
 	}
-	if !strings.Contains(pub, "15:15") || strings.Contains(pub, "14:30") {
+	// Both times were submitted with no zone (parsed as UTC); the public
+	// timetable renders them in the server's local zone (SYS-110/F6,
+	// TASK-050's FormatDateTime), so the expected wall clock is computed
+	// the same way rather than assuming it equals the stored UTC value.
+	amendedLocal := time.Date(2027, time.June, 12, 15, 15, 0, 0, time.UTC).Local().Format("15:04")
+	preAmendLocal := time.Date(2027, time.June, 12, 14, 30, 0, 0, time.UTC).Local().Format("15:04")
+	if !strings.Contains(pub, amendedLocal) || strings.Contains(pub, preAmendLocal) {
 		t.Errorf("public timetable does not show the amended time (UC-001 #4)")
 	}
 	_, page = get(meetPath)

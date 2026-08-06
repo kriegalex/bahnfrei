@@ -95,11 +95,11 @@ func TestCaptureSheetPDFFieldGridSYS072UC018_1(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	// The unit list offers a download link for the sheet.
 	indexBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/capture"))
-	if !strings.Contains(indexBody, units["Zone Long Jump (UKC)"]+"/sheet.pdf") {
+	if !strings.Contains(indexBody, units["Zonen-Weitsprung (UKC)"]+"/sheet.pdf") {
 		t.Error("capture index does not link the unit's PDF capture sheet")
 	}
 
@@ -139,7 +139,7 @@ func TestCaptureSheetPDFTrackLaneSYS072UC018_1(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 m"]
 
 	text := extractPDFText(t, client, unitURL+"/sheet.pdf")
 	for _, want := range []string{
@@ -164,7 +164,7 @@ func TestResultListPDFSYS072UC018_2(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	body := bodyString(t, mustGet(t, client, ljURL))
 	athletes := athleteIDsFrom(t, body)
@@ -211,7 +211,7 @@ func TestResultListPDFMinimizationSYS103UC023_2(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	privacyBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/privacy"))
 	i := strings.Index(privacyBody, "101")

@@ -30,8 +30,12 @@ import (
 // public-filter.js is the public find-your-athlete filter island
 // (TASK-048, SYS-153/UC-042), compiled from islands/src/public-filter.ts —
 // loaded on both the public results and start-list pages.
+// favicon.ico is a neutral, brand-free placeholder icon (F11/TASK-050 — the
+// prior absence 404'd on every page load); OQ-061 (organizer branding) is
+// still open, so this placeholder is expected to be replaced once that
+// question is ratified.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js static/favicon.ico
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.
@@ -41,6 +45,21 @@ func staticHandler() http.Handler {
 		panic(err) // embed layout is fixed at compile time
 	}
 	return http.StripPrefix("/static/", http.FileServerFS(sub))
+}
+
+// handleFavicon serves the embedded placeholder favicon at the conventional
+// root path (F11/TASK-050): browsers request GET /favicon.ico regardless of
+// the <link rel="icon"> in layout.templ, so /static/favicon.ico alone still
+// left that bare-path request 404ing.
+func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	body, err := staticAssets.ReadFile("static/favicon.ico")
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "image/vnd.microsoft.icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(body)
 }
 
 // handleServiceWorker serves the capture-surface service worker (UC-034 #3)
