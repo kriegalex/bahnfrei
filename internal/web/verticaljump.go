@@ -82,6 +82,12 @@ type verticalCaptureView struct {
 	Protest protestView
 	// FieldStatuses is the correction-row status options (fieldCorrectionStatuses).
 	FieldStatuses []string
+	// StandingsEmpty mirrors captureView's field (F8/SYS-152):
+	// domain.RankVertical ranks every entrant regardless of whether they
+	// have attempted a height yet, so len(Standings) == 0 is never true for
+	// a unit with participants — verticalCaptureStandings uses this flag
+	// instead of a raw length check to collapse to one concise empty state.
+	StandingsEmpty bool
 }
 
 func (s *Server) verticalCaptureView(r *http.Request, meetID, unitID string) (verticalCaptureView, error) {
@@ -171,7 +177,22 @@ func (s *Server) verticalCaptureView(r *http.Request, meetID, unitID string) (ve
 		rv.Flags = strings.Join(flags, " · ")
 		v.Standings = append(v.Standings, rv)
 	}
+	v.StandingsEmpty = !verticalStandingsHaveAnyResult(v.Standings)
 	return v, nil
+}
+
+// verticalStandingsHaveAnyResult mirrors capture.go's
+// standingsHaveAnyResult for vertical jump (F8/SYS-152): a blank row (no
+// cleared height, no eliminated/retired/tie flag) is what RankVertical
+// produces for every entrant who has not attempted a height yet, so a
+// row's mere presence does not mean capture has started.
+func verticalStandingsHaveAnyResult(rows []verticalStandingRowView) bool {
+	for _, r := range rows {
+		if r.BestHeight != "" || r.Flags != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // verticalDisplay renders a stored trial kind as the grid's editable

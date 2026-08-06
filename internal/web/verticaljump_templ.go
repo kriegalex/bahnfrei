@@ -1425,7 +1425,7 @@ func verticalCaptureStandings(p PageData, v verticalCaptureView) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if len(v.Standings) == 0 {
+		if v.StandingsEmpty {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 124, "<p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

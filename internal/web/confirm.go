@@ -66,6 +66,14 @@ type confirmView struct {
 	// this same page re-renders with an inline error at that one field
 	// (OQ-075's convention) instead of silently failing.
 	FieldErr string
+	// Inapplicable means the action this confirm page fronts has nothing
+	// to affect right now (TASK-047/SYS-152/UC-041 #4): a link that was
+	// live when the referring page rendered can go stale by the time the
+	// operator lands here (someone else finished the last capture, closed
+	// check-in, etc.). Description then carries the explanation instead of
+	// a scope count, and confirmPage renders it with no form/confirm
+	// button — a real state, not a live action with nothing to confirm.
+	Inapplicable bool
 }
 
 func (s *Server) renderConfirm(w http.ResponseWriter, r *http.Request, p PageData, v confirmView, status int) {
@@ -209,14 +217,32 @@ func (s *Server) eraseConfirmView(p PageData, meetID, athleteID, name, bib, fiel
 const retentionPurgeConfirmToken = "PURGE"
 
 func (s *Server) handleRetentionPurgeConfirm(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
 	p := basePageData(r, s.cats)
-	s.renderConfirm(w, r, p, s.retentionPurgeConfirmView(p, ""), http.StatusOK)
+	s.renderConfirm(w, r, p, s.retentionPurgeConfirmView(r, actor, p, ""), http.StatusOK)
 }
 
-func (s *Server) retentionPurgeConfirmView(p PageData, fieldErr string) confirmView {
+// retentionPurgeConfirmView builds the SYS-102 retention-purge confirm
+// page. TASK-047/SYS-152/UC-041 #5: it states the affected scope — how
+// many athletes and meets currently sit outside the retention window — by
+// re-running RetentionPurgePreviewCount's two read-only queries (the same
+// ones purge() itself runs first), cheaply available since they are plain
+// row-count lookups with no write. Falls back to the plain days-only
+// description if the privacy service is unavailable or the preview query
+// itself fails, rather than blocking the confirm page on it.
+func (s *Server) retentionPurgeConfirmView(r *http.Request, actor app.Session, p PageData, fieldErr string) confirmView {
+	desc := p.T("privacy.retention.confirm.description", "days", intToStr(int64(app.DefaultRetentionDays)))
+	if s.privacy != nil {
+		if athletes, meets, err := s.privacy.RetentionPurgePreviewCount(r.Context(), actor, app.DefaultRetentionDays); err == nil {
+			desc = p.T("privacy.retention.confirm.description_scoped",
+				"days", intToStr(int64(app.DefaultRetentionDays)),
+				"athletes", intToStr(int64(athletes)),
+				"meets", intToStr(int64(meets)))
+		}
+	}
 	return confirmView{
 		Title:             p.T("privacy.retention.confirm.title"),
-		Description:       p.T("privacy.retention.confirm.description", "days", intToStr(int64(app.DefaultRetentionDays))),
+		Description:       desc,
 		FormAction:        "/admin/privacy/purge",
 		CancelHref:        "/admin",
 		ConfirmLabel:      p.T("privacy.retention.action"),

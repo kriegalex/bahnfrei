@@ -180,6 +180,16 @@ type captureView struct {
 	// remaining as DNS" bulk action link renders at all: a track unit with
 	// every entrant already resulted has nothing left for it to do.
 	HasUnresulted bool
+	// StandingsEmpty is true when capture has not produced a single result
+	// yet (F8/SYS-152): fieldStandings/RankFieldSeries ranks every entrant,
+	// resulted or not, so len(Standings) == 0 is never true for a field
+	// unit with participants — a naive empty check would render a
+	// full-header table of blank rows instead of a concise empty state.
+	// captureStandings uses this one flag to fold the combined table, the
+	// continuation list and every per-category split into a single message
+	// rather than rendering (and, for category splits, repeating) an empty
+	// state per section.
+	StandingsEmpty bool
 }
 
 // protestView is the capture page's SYS-047 protest-clock display: whether
@@ -305,7 +315,30 @@ func (s *Server) captureView(r *http.Request, meetID, unitID string) (captureVie
 			v.CategorySplits = append(v.CategorySplits, sv)
 		}
 	}
+	v.StandingsEmpty = !standingsHaveAnyResult(v.Standings)
+	if v.StandingsEmpty {
+		for _, split := range v.CategorySplits {
+			if standingsHaveAnyResult(split.Standings) {
+				v.StandingsEmpty = false
+				break
+			}
+		}
+	}
 	return v, nil
+}
+
+// standingsHaveAnyResult reports whether at least one ranking row carries an
+// actual captured result (F8/SYS-152): a blank row (no mark, no status) is
+// what fieldStandings/RankFieldSeries produces for every not-yet-captured
+// entrant, so a row's mere presence in the slice does not mean capture has
+// started.
+func standingsHaveAnyResult(rows []standingRowView2) bool {
+	for _, r := range rows {
+		if r.Mark != "" || r.Status != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // buildStandingRowView renders one app.UnitStandingRow for display —
@@ -684,7 +717,13 @@ func (s *Server) renderBulkDNSError(w http.ResponseWriter, r *http.Request, meet
 // OQ-070, SYS-114/SYS-046): a plain Confirm/Cancel step, no typed-token
 // friction — unlike athlete erasure/retention purge, this is recoverable
 // via the correction flow (UC-015 #2), matching account-disable/meet-archive
-// friction level (confirm.go's package doc).
+// friction level (confirm.go's package doc). TASK-047/SYS-152/UC-041 #4: the
+// capture page's bulkDNSAction link only renders while HasUnresulted is
+// true, but that condition can go stale between render and click (another
+// operator finishes capture in the meantime, or navigates here directly) —
+// so this handler re-checks the live count and, when it has dropped to
+// zero, renders an inapplicable explanatory state instead of a live confirm
+// button that would just apply a no-op.
 func (s *Server) handleCaptureBulkDNSConfirm(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
 	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
@@ -695,11 +734,16 @@ func (s *Server) handleCaptureBulkDNSConfirm(w http.ResponseWriter, r *http.Requ
 	}
 	p := basePageData(r, s.cats)
 	v := confirmView{
-		Title:        p.T("capture.bulk_dns.confirm.title"),
-		Description:  p.T("capture.bulk_dns.confirm.description", "n", intToStr(int64(n))),
-		FormAction:   "/meets/" + meetID + "/capture/" + unitID + "/bulk-dns",
-		CancelHref:   "/meets/" + meetID + "/capture/" + unitID,
-		ConfirmLabel: p.T("capture.bulk_dns.action"),
+		Title:      p.T("capture.bulk_dns.confirm.title"),
+		FormAction: "/meets/" + meetID + "/capture/" + unitID + "/bulk-dns",
+		CancelHref: "/meets/" + meetID + "/capture/" + unitID,
+	}
+	if n > 0 {
+		v.Description = p.T("capture.bulk_dns.confirm.description", "n", intToStr(int64(n)))
+		v.ConfirmLabel = p.T("capture.bulk_dns.action")
+	} else {
+		v.Inapplicable = true
+		v.Description = p.T("capture.bulk_dns.confirm.inapplicable")
 	}
 	s.renderConfirm(w, r, p, v, http.StatusOK)
 }
