@@ -80,6 +80,37 @@ func TestUpdateParticipantBibSYS018UC006_1_2(t *testing.T) {
 	}
 }
 
+// TestGetParticipantSYS150UC043 covers the TASK-049 roster-edit form's
+// by-ID lookup: it finds the row regardless of meet (the app layer is
+// responsible for the meetID ownership check) and returns ErrNotFound for
+// an unknown ID.
+func TestGetParticipantSYS150UC043(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	meet := testMeet(t, s)
+	athlete := entryFixtureAthlete(t, s, "Anna")
+
+	p, err := EnsureParticipant(ctx, s.DB(), meet.ID, athlete.ID)
+	if err != nil {
+		t.Fatalf("EnsureParticipant: %v", err)
+	}
+	if _, err := UpdateParticipantBib(ctx, s.DB(), p.ID, p.Version, "101"); err != nil {
+		t.Fatalf("UpdateParticipantBib: %v", err)
+	}
+
+	got, err := GetParticipant(ctx, s.DB(), p.ID)
+	if err != nil {
+		t.Fatalf("GetParticipant: %v", err)
+	}
+	if got.MeetID != meet.ID || got.AthleteID != athlete.ID || got.Bib != "101" || got.Version != p.Version+1 {
+		t.Errorf("GetParticipant = %+v, want meet %s athlete %s bib 101 version %d", got, meet.ID, athlete.ID, p.Version+1)
+	}
+
+	if _, err := GetParticipant(ctx, s.DB(), "no-such-participant"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetParticipant(unknown) = %v, want ErrNotFound", err)
+	}
+}
+
 // TestUpdateParticipantOutOfCompetition covers the TASK-036/DEC-016/OQ-020
 // investigation's ausser-Konkurrenz flag (0020_out_of_competition.sql):
 // defaults to false for every ordinary registration, round-trips through

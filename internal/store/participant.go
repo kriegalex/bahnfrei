@@ -56,6 +56,27 @@ func RegisterParticipant(ctx context.Context, db DBTX, meetID, athleteID, bib st
 	return p, nil
 }
 
+// GetParticipant looks up one participant row by its own ID, regardless of
+// meet (TASK-049, SYS-150/UC-043): the roster-edit form and its POST
+// handler both need the row's meet/athlete linkage and current version
+// before mutating identity data, and only have the participant ID from the
+// route — callers MUST still check the returned MeetID against the meet
+// they expected (an ID from another meet's roster must never be editable
+// through this one's URL).
+func GetParticipant(ctx context.Context, db DBTX, id string) (Participant, error) {
+	var p Participant
+	err := db.QueryRowContext(ctx, `SELECT id, meet_id, athlete_id, bib, version, out_of_competition
+		FROM participants WHERE id = ?`, id).
+		Scan(&p.ID, &p.MeetID, &p.AthleteID, &p.Bib, &p.Version, &p.OutOfCompetition)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Participant{}, ErrNotFound
+	case err != nil:
+		return Participant{}, err
+	}
+	return p, nil
+}
+
 // GetParticipantByAthlete looks up an athlete's participant row at meetID.
 func GetParticipantByAthlete(ctx context.Context, db DBTX, meetID, athleteID string) (Participant, error) {
 	var p Participant

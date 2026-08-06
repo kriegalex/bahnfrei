@@ -83,10 +83,16 @@ func (s *Server) handleTemplateMeetCreate(w http.ResponseWriter, r *http.Request
 // --- participants roster (C7.3 participant list; feeds UC-033 #2) ---
 
 type rosterRowView struct {
-	Bib       string
-	Name      string
-	BirthYear string
-	Club      string
+	ParticipantID string
+	Version       string
+	Bib           string
+	Name          string
+	BirthYear     string
+	Club          string
+	// Anonymized mirrors the athlete's SYS-101 erasure state (TASK-049):
+	// an erased participant renders with no edit link at all, rather than
+	// one that errors on click.
+	Anonymized bool
 }
 
 type rosterView struct {
@@ -123,10 +129,13 @@ func (s *Server) rosterView(r *http.Request, meetID string) (rosterView, error) 
 			continue
 		}
 		v.Rows = append(v.Rows, rosterRowView{
-			Bib:       p.Bib,
-			Name:      p.Athlete.FirstName + " " + p.Athlete.LastName,
-			BirthYear: strconv.Itoa(p.Athlete.BirthYear),
-			Club:      club,
+			ParticipantID: p.ID,
+			Version:       intToStr(p.Version),
+			Bib:           p.Bib,
+			Name:          p.Athlete.FirstName + " " + p.Athlete.LastName,
+			BirthYear:     strconv.Itoa(p.Athlete.BirthYear),
+			Club:          club,
+			Anonymized:    p.Athlete.Anonymized,
 		})
 	}
 	return v, nil
@@ -180,6 +189,178 @@ func (s *Server) handleRosterAdd(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = rosterPage(p, v).Render(r.Context(), w)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/roster", http.StatusSeeOther)
+}
+
+// --- participant identity correction (TASK-049, SYS-150/UC-043) ---
+
+// participantFormView is the roster-edit form's view model: current values
+// pre-filled (GET) or the just-submitted, possibly-invalid values
+// preserved on a validation failure (POST) — the same shape every
+// version-guarded edit form in this app uses (meetFormView's precedent).
+type participantFormView struct {
+	MeetID        string
+	MeetName      string
+	ParticipantID string
+	Version       int64
+	FirstName     string
+	LastName      string
+	BirthYear     string
+	Sex           string
+	Club          string
+	Bib           string
+	Reason        string
+	Errors        FieldErrors
+}
+
+// handleParticipantEditForm serves the pre-filled correction form (UC-043:
+// "the form must show current values"). The web layer never names a store
+// type (architecture.md §3, depguard's web-goes-through-app rule): it
+// finds the row by ranging over ResultsService.Participants' result with
+// an inferred element type, never a `store.` qualifier.
+func (s *Server) handleParticipantEditForm(w http.ResponseWriter, r *http.Request) {
+	meetID := r.PathValue("id")
+	participantID := r.PathValue("participant")
+	detail, err := s.meets.Meet(r.Context(), meetID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	participants, err := s.results.Participants(r.Context(), meetID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	idx := -1
+	for i, p := range participants {
+		if p.ID == participantID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 || participants[idx].Athlete.Anonymized {
+		// TASK-049: an erased participant is never editable — same 404 as
+		// a participant that does not exist, rather than a form that
+		// errors on submit.
+		s.handleNotFound(w, r)
+		return
+	}
+	found := participants[idx]
+	club := ""
+	if len(found.Athlete.ClubIDs) > 0 {
+		if names, err := s.results.ClubNamesFor(r.Context(), participants[idx:idx+1]); err == nil {
+			club = names[found.Athlete.ClubIDs[0]]
+		}
+	}
+	form := participantFormView{
+		MeetID: meetID, MeetName: detail.Name, ParticipantID: found.ID, Version: found.Version,
+		FirstName: found.Athlete.FirstName, LastName: found.Athlete.LastName,
+		BirthYear: strconv.Itoa(found.Athlete.BirthYear), Sex: string(found.Athlete.Sex),
+		Club: club, Bib: found.Bib,
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("roster.edit.title")
+	_ = participantFormPage(p, form).Render(r.Context(), w)
+}
+
+// participantIdentityFlashKey maps an UpdateParticipantIdentity business
+// error onto the "roster.edit.flash.*" key suffix the form's page-level
+// alert renders (the conflict/duplicate/anonymized cases are whole-form
+// state, not attributable to one input field — mirrors
+// flashKeyFor/entryFlashKey's precedent).
+func participantIdentityFlashKey(err error) string {
+	switch {
+	case errors.Is(err, app.ErrConflict):
+		return "conflict"
+	case errors.Is(err, app.ErrDuplicateParticipant):
+		return "duplicate"
+	case errors.Is(err, app.ErrAthleteAnonymized):
+		return "anonymized"
+	default:
+		return "invalid"
+	}
+}
+
+func participantIdentityStatus(err error) int {
+	if errors.Is(err, app.ErrConflict) {
+		return http.StatusConflict
+	}
+	return http.StatusUnprocessableEntity
+}
+
+func (s *Server) handleParticipantEditSubmit(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID := r.PathValue("id")
+	participantID := r.PathValue("participant")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	detail, err := s.meets.Meet(r.Context(), meetID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	p := basePageData(r, s.cats)
+	p.Title = p.T("roster.edit.title")
+
+	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
+	birthYearStr := strings.TrimSpace(r.FormValue("birth_year"))
+	birthYear, _ := strconv.Atoi(birthYearStr)
+	form := participantFormView{
+		MeetID: meetID, MeetName: detail.Name, ParticipantID: participantID, Version: version,
+		FirstName: strings.TrimSpace(r.FormValue("first_name")),
+		LastName:  strings.TrimSpace(r.FormValue("last_name")),
+		BirthYear: birthYearStr,
+		Sex:       r.FormValue("sex"),
+		Club:      strings.TrimSpace(r.FormValue("club")),
+		Bib:       strings.TrimSpace(r.FormValue("bib")),
+		Reason:    strings.TrimSpace(r.FormValue("reason")),
+	}
+
+	renderErr := func(status int, flashKey string, errs FieldErrors) {
+		form.Errors = errs
+		if flashKey != "" {
+			p.FlashError = p.T("roster.edit.flash." + flashKey)
+		}
+		w.WriteHeader(status)
+		_ = participantFormPage(p, form).Render(r.Context(), w)
+	}
+
+	// OQ-075/UC-038 #4: attribute each validation failure to its own
+	// field and re-render with the submitted values intact, mirroring
+	// handleEntryIndividualSubmit's precedent.
+	errs := FieldErrors{}
+	if form.LastName == "" {
+		errs["last_name"] = p.T("roster.field_error.last_name.required")
+	}
+	minYear, maxYear := s.results.ParticipantIdentityBirthYearBounds()
+	if birthYearStr == "" || birthYear < minYear || birthYear > maxYear {
+		errs["birth_year"] = p.T("roster.field_error.birth_year.invalid")
+	}
+	if form.Sex != string(domain.SexMale) && form.Sex != string(domain.SexFemale) {
+		errs["sex"] = p.T("roster.field_error.sex.invalid")
+	}
+	if !app.ValidBibFormat(form.Bib) {
+		errs["bib"] = p.T("roster.field_error.bib.invalid")
+	}
+	if len(errs) > 0 {
+		renderErr(http.StatusUnprocessableEntity, "", errs)
+		return
+	}
+
+	in := app.ParticipantIdentityInput{
+		FirstName: form.FirstName, LastName: form.LastName, BirthYear: birthYear,
+		Sex: domain.Sex(form.Sex), Club: form.Club, Bib: form.Bib, Reason: form.Reason,
+	}
+	if _, err := s.results.UpdateParticipantIdentity(r.Context(), actor, meetID, participantID, version, in); err != nil {
+		if errors.Is(err, app.ErrParticipantIdentityInvalid) {
+			renderErr(http.StatusUnprocessableEntity, "invalid", nil)
+			return
+		}
+		renderErr(participantIdentityStatus(err), participantIdentityFlashKey(err), nil)
 		return
 	}
 	http.Redirect(w, r, "/meets/"+meetID+"/roster", http.StatusSeeOther)

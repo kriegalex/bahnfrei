@@ -114,3 +114,66 @@ func TestSetAthleteExternalIDSYS013(t *testing.T) {
 		t.Fatalf("repeat set with the same value should be a no-op, version = %d, want %d", v2, v)
 	}
 }
+
+// TestUpdateAthleteIdentitySYS150UC043 covers the TASK-049 identity
+// correction's storage primitive: name/birth-year/sex/club overwrite under
+// optimistic concurrency, leaving external IDs and consent untouched (only
+// UpdateParticipantIdentity's caller-facing contract, not this function,
+// enforces the "never touches consent" invariant — this test pins that no
+// column beyond the five documented ones changes).
+func TestUpdateAthleteIdentitySYS150UC043(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	club, err := CreateClub(ctx, s.DB(), domain.Club{Name: "LC Test"})
+	if err != nil {
+		t.Fatalf("CreateClub: %v", err)
+	}
+	created, err := CreateAthlete(ctx, s.DB(), domain.Athlete{
+		FirstName: "Ana", LastName: "Musterr", BirthYear: 2014, Sex: domain.SexFemale,
+		ExternalIDs: domain.ExternalIDs{domain.NamespaceSwissAthleticsLicence: "SA-1"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAthlete: %v", err)
+	}
+
+	v, err := UpdateAthleteIdentity(ctx, s.DB(), created.ID, created.Version,
+		"Anna", "Muster", 2013, domain.SexMale, []string{club.ID})
+	if err != nil {
+		t.Fatalf("UpdateAthleteIdentity: %v", err)
+	}
+	if v != created.Version+1 {
+		t.Fatalf("version = %d, want %d", v, created.Version+1)
+	}
+
+	got, err := GetAthlete(ctx, s.DB(), created.ID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if got.FirstName != "Anna" || got.LastName != "Muster" || got.BirthYear != 2013 || got.Sex != domain.SexMale {
+		t.Errorf("identity after update = %+v, want Anna Muster/2013/M", got.Athlete)
+	}
+	if len(got.ClubIDs) != 1 || got.ClubIDs[0] != club.ID {
+		t.Errorf("club ids after update = %v, want [%s]", got.ClubIDs, club.ID)
+	}
+	if id, ok := got.ExternalIDs.Get(domain.NamespaceSwissAthleticsLicence); !ok || id != "SA-1" {
+		t.Errorf("UpdateAthleteIdentity disturbed external ids: %v/%v", id, ok)
+	}
+
+	// Clearing the club (empty slice) round-trips as no club, not a stray
+	// element.
+	if _, err := UpdateAthleteIdentity(ctx, s.DB(), created.ID, v, "Anna", "Muster", 2013, domain.SexMale, nil); err != nil {
+		t.Fatalf("UpdateAthleteIdentity (clear club): %v", err)
+	}
+	got, err = GetAthlete(ctx, s.DB(), created.ID)
+	if err != nil {
+		t.Fatalf("GetAthlete: %v", err)
+	}
+	if len(got.ClubIDs) != 0 {
+		t.Errorf("club ids after clearing = %v, want empty", got.ClubIDs)
+	}
+
+	// Stale version is rejected.
+	if _, err := UpdateAthleteIdentity(ctx, s.DB(), created.ID, v, "Someone", "Else", 2013, domain.SexMale, nil); !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("stale-version update = %v, want ErrVersionConflict", err)
+	}
+}
