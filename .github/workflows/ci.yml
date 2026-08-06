@@ -1,17 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (c) 2026 Bahnfrei contributors
 #
-# TASK-002 CI gates (SYS-140, SYS-141, ADR-001 §3–4): 3-OS build matrix,
-# lint, TS typecheck, tests + coverage thresholds, dependency licence scan,
-# vulnerability scan. Governance gates (SPDX/DCO) live in governance.yml.
-# style-conformance (TASK-032, SYS-116) is the design-token gate; sast
-# (gosec, SYS-092, OQ-078) is the own-code security scan.
-# scripts/check-gate.sh reproduces this workflow locally — keep them in sync.
+# TASK-002 CI gates (SYS-140, SYS-141, ADR-001 §3–4): build+test (Linux on
+# every push/PR; the macOS/Windows legs run only on release tags — hosted
+# minutes for those OSes bill at 10×/2× and per-push cross-OS coverage adds
+# little between releases), lint, TS typecheck, tests + coverage thresholds,
+# dependency licence scan, vulnerability scan. Governance gates (SPDX/DCO)
+# live in governance.yml. style-conformance (TASK-032, SYS-116) is the
+# design-token gate; sast (gosec, SYS-092, OQ-078) is the own-code security
+# scan. scripts/check-gate.sh reproduces this workflow locally — keep them
+# in sync.
 name: ci
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -25,11 +29,7 @@ concurrency:
 
 jobs:
   build-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -39,6 +39,25 @@ jobs:
       - run: go vet ./...
       # -shuffle=on guards against inter-test order dependence (hidden
       # shared state); the seed is printed on failure for reproduction.
+      - run: go test -shuffle=on ./...
+
+  # Cross-OS build+test runs at release points only (tag pushes): the
+  # release artifacts for these OSes are built by release.yml, and this job
+  # is the matching "does the suite actually pass there" check.
+  build-test-os:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
       - run: go test -shuffle=on ./...
 
   coverage:
