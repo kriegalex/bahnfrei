@@ -30,6 +30,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /events/{topic}", s.handleEvents)
 	mux.Handle("GET /static/", staticHandler())
+	// Browsers probe GET /favicon.ico at the root regardless of the <link
+	// rel="icon"> in layout.templ (which points at /static/favicon.ico for
+	// the normal page-load path); serving it here too closes that 404
+	// (F11/TASK-050).
+	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	// The capture service worker is served from a root-path URL so it can
 	// claim the /meets/…/capture/ scope (UC-034 #3); see handleServiceWorker.
 	mux.HandleFunc("GET /capture-sw.js", s.handleServiceWorker)

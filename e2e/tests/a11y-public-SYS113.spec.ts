@@ -37,7 +37,7 @@ async function seedPopulatedMeet(
 ): Promise<UkcFixture> {
   await setupAndLogin(request, baseURL);
   const fx = await seedUkcMeet(request, baseURL);
-  await publishTimetable(request, baseURL, fx.meetID, fx.units["Zone Long Jump (UKC)"]);
+  await publishTimetable(request, baseURL, fx.meetID, fx.units["Zonen-Weitsprung (UKC)"]);
   await openUnit(page, fx.unitURL);
   await captureAttempt(page, fx.athletes["101"], 1, "3.10");
   await expectSynced(page); // wait for the offline queue to flush before reading it back publicly

@@ -23,7 +23,12 @@ import (
 // through, deliberately distinct from prose numbers/dates which do vary
 // by locale.
 func TestFormatDateAndMarkNotationSYS110UC025_3(t *testing.T) {
-	when := time.Date(2027, time.June, 12, 14, 30, 0, 0, time.UTC)
+	// Constructed already in time.Local (rather than UTC then relying on a
+	// specific offset) so the expected wall-clock string holds regardless of
+	// the machine's configured zone: FormatDateTime renders in the server's
+	// local zone (F6/TASK-050 — see view.go's FormatDateTime doc comment),
+	// not raw UTC, and no longer carries a "UTC" suffix.
+	when := time.Date(2027, time.June, 12, 14, 30, 0, 0, time.Local)
 
 	for _, loc := range []i18n.Locale{i18n.DE, i18n.FR} {
 		p := renderPageData(t, loc)
@@ -31,8 +36,8 @@ func TestFormatDateAndMarkNotationSYS110UC025_3(t *testing.T) {
 		if got, want := p.FormatDate(when), "12.06.2027"; got != want {
 			t.Errorf("locale %q: FormatDate = %q, want %q (SYS-110 documented date convention)", loc, got, want)
 		}
-		if got, want := p.FormatDateTime(when), "12.06.2027 14:30 UTC"; got != want {
-			t.Errorf("locale %q: FormatDateTime = %q, want %q", loc, got, want)
+		if got, want := p.FormatDateTime(when), "12.06.2027 14:30"; got != want {
+			t.Errorf("locale %q: FormatDateTime = %q, want %q (no raw UTC suffix, SYS-110/F6)", loc, got, want)
 		}
 	}
 

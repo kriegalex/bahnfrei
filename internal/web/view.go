@@ -63,11 +63,21 @@ func (p PageData) FormatDate(t time.Time) string {
 	return t.Format(dateDisplayLayout)
 }
 
-// FormatDateTime renders t for display, normalized to UTC (the system's
-// storage/display convention throughout) with an explicit "UTC" suffix so
-// a rendered timestamp is never ambiguous about its zone (SYS-110).
+// FormatDateTime renders t for display in the meet's local time (SYS-110:
+// "locale-correct formatting SHALL apply" — Swiss meets run on local time,
+// not raw UTC; a volunteer reading "publiziert am 06.08.2026 05:29 UTC" at
+// 07:29 local has no reason to trust the clock, F6/TASK-050). Every stored
+// instant is UTC internally (see the store package's *.UTC() write path);
+// this converts to the server process's local zone for display. There is
+// currently no per-meet timezone field in the data model — Swiss Athletics
+// meets are all Europe/Zurich in practice, and the server is assumed to run
+// in that zone, but a multi-timezone deployment (or a server misconfigured
+// away from the meet's zone) would render a wrong local time with no way to
+// correct it from the product. Raised as OQ-137 (does bahnfrei need an
+// explicit per-meet timezone field, independent of the server's OS zone?)
+// rather than inventing that schema change here.
 func (p PageData) FormatDateTime(t time.Time) string {
-	return t.UTC().Format(dateTimeDisplayLayout) + " UTC"
+	return t.Local().Format(dateTimeDisplayLayout)
 }
 
 // localeLabel renders the display name of loc in the page's own language,

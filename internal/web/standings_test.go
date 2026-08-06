@@ -46,7 +46,10 @@ func TestUKCTemplateRosterStandingsFlow(t *testing.T) {
 
 	// The workspace shows the derived name and the UKC programme.
 	body = bodyString(t, mustGet(t, client, base+loc))
-	for _, want := range []string{"UBS Kids Cup Le Mouret 2026", "60 metres", "Zone Long Jump (UKC)", "200 g Ball Throw (UKC)"} {
+	// SYS-111/F6 (TASK-050): the meet-hub programme/timetable tables now
+	// localize discipline names like standings already did — the assertion
+	// pins the DE catalog string, not the English canonical name.
+	for _, want := range []string{"UBS Kids Cup Le Mouret 2026", "60 m", "Zonen-Weitsprung (UKC)", "Ballwurf 200 g (UKC)"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("meet page misses %q", want)
 		}

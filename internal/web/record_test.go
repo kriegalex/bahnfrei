@@ -54,7 +54,10 @@ func TestUC016_RecordFlagRendersAndChecklistLinksThroughWeb(t *testing.T) {
 	}
 
 	body := bodyString(t, mustGet(t, client, meetURL+"/capture"))
-	re := regexp.MustCompile(`/meets/` + meetID + `/capture/([0-9A-Za-z]+)">100 metres<`)
+	// The capture index localizes discipline names (SYS-111/F6, TASK-050):
+	// the DE catalog renders code "100m" as "100 m", not the catalog's
+	// canonical English "100 metres".
+	re := regexp.MustCompile(`/meets/` + meetID + `/capture/([0-9A-Za-z]+)">100 m<`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	if len(matches) != 2 {
 		t.Fatalf("capture index 100m links = %d, want 2 units: %s", len(matches), body)

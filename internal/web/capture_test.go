@@ -69,7 +69,7 @@ func TestUC011_CaptureGridFlow(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	// The grid shows 3 trial columns (template rule data) and no wind
 	// inputs (ZoneLJ is not wind-relevant).
@@ -141,7 +141,7 @@ func TestUC010_TrackCaptureFlow(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 m"]
 
 	body := bodyString(t, mustGet(t, client, unitURL))
 	athletes := athleteIDsFrom(t, body)
@@ -204,7 +204,7 @@ func TestCaptureBulkDNSConfirmFlowSYS114SYS046Web(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitPath := "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitPath := "/meets/" + meetID + "/capture/" + units["60 m"]
 	unitURL := base + unitPath
 
 	body := bodyString(t, mustGet(t, client, unitURL))
@@ -277,7 +277,7 @@ func TestCaptureWindAppliesUniformlySYS040UC010_4Web(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 m"]
 
 	resp := postForm(t, client, unitURL, unitURL+"/wind", url.Values{"wind": {"1.4"}})
 	_ = bodyString(t, resp)
@@ -319,7 +319,7 @@ func TestCaptureAnnounceAndCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 metres"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["60 m"]
 
 	body := bodyString(t, mustGet(t, client, unitURL))
 	athletes := athleteIDsFrom(t, body)
@@ -432,7 +432,7 @@ func TestCaptureFieldCorrectionFlowSYS046SYS047UC015Web(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	unitURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	body := bodyString(t, mustGet(t, client, unitURL))
 	athletes := athleteIDsFrom(t, body)

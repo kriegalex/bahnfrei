@@ -426,7 +426,7 @@ func TestPublicResultsConsentSuppressionSYS103UC023_2(t *testing.T) {
 	client, base := newTestClient(t, deps)
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	ljURL := base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 
 	// Withdraw consent for bib 101 (Anna Muster) via the office privacy
 	// worklist.

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // setupAndLogin drives the first-run setup form and logs the new admin in —
@@ -266,7 +267,13 @@ func TestEventProgrammeUC001_3(t *testing.T) {
 
 	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID))
 	// Capture types in the DE catalog: track=Lauf, horizontal=Weite, relay=Staffel.
-	for _, want := range []string{"Lauf", "Weite", "Staffel", "U16 W", "01.06.2027 23:59", "Qualifikation"} { //nolint:misspell // "Qualifikation" is the German catalog string (round.qualification, de.json)
+	// The deadline was submitted as "2027-06-01T23:59" with no zone (parsed
+	// as UTC by parseEventForm); the programme now renders it in the
+	// server's local zone (SYS-110/F6, TASK-050's FormatDateTime), so the
+	// expected wall clock is computed the same way rather than assuming it
+	// equals the stored UTC value.
+	wantDeadline := time.Date(2027, time.June, 1, 23, 59, 0, 0, time.UTC).Local().Format(dateTimeDisplayLayout)
+	for _, want := range []string{"Lauf", "Weite", "Staffel", "U16 W", wantDeadline, "Qualifikation"} { //nolint:misspell // "Qualifikation" is the German catalog string (round.qualification, de.json)
 		if !strings.Contains(body, want) {
 			t.Errorf("programme missing %q (UC-001 #3)", want)
 		}
@@ -361,10 +368,16 @@ func TestTimetablePublishAmendPublicUC001_4(t *testing.T) {
 	// second listener over the same routes, either works).
 	_ = anonBase
 	pub := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/timetable"))
-	if !strings.Contains(pub, "15:15") {
+	// Both times were submitted with no zone (parsed as UTC); the public
+	// timetable now renders them in the server's local zone (SYS-110/F6,
+	// TASK-050's FormatDateTime), so the expected wall clock is computed
+	// the same way rather than assuming it equals the stored UTC value.
+	amendedLocal := time.Date(2027, time.June, 12, 15, 15, 0, 0, time.UTC).Local().Format("15:04")
+	preAmendLocal := time.Date(2027, time.June, 12, 14, 30, 0, 0, time.UTC).Local().Format("15:04")
+	if !strings.Contains(pub, amendedLocal) {
 		t.Errorf("public timetable does not show the amended time (UC-001 #4): %s", pub)
 	}
-	if strings.Contains(pub, "14:30") {
+	if strings.Contains(pub, preAmendLocal) {
 		t.Error("public timetable still shows the pre-amendment time")
 	}
 

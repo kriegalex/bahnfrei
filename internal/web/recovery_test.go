@@ -119,9 +119,9 @@ func TestServeRecoveryChildProcess(t *testing.T) {
 
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitID, ok := units["60 metres"]
+	unitID, ok := units["60 m"] // localized discipline name (SYS-111/F6, TASK-050)
 	if !ok {
-		fmt.Printf("child-error: no 60 metres capture unit\n")
+		fmt.Printf("child-error: no 60 m capture unit\n")
 		os.Exit(2)
 	}
 	unitURL := base + "/meets/" + meetID + "/capture/" + unitID

@@ -49,7 +49,7 @@ func syncSetup(t *testing.T, client *http.Client, base string) (unitURL string, 
 	t.Helper()
 	setupAndLogin(t, client, base)
 	meetID, units := ukcCaptureFixture(t, client, base)
-	unitURL = base + "/meets/" + meetID + "/capture/" + units["Zone Long Jump (UKC)"]
+	unitURL = base + "/meets/" + meetID + "/capture/" + units["Zonen-Weitsprung (UKC)"]
 	body := bodyString(t, mustGet(t, client, unitURL)) // opening the unit checks it out (SYS-086)
 	return unitURL, athleteIDsFrom(t, body), csrfTokenFrom(t, body)
 }

@@ -335,21 +335,19 @@ func (s *Server) handlePublicTimetable(w http.ResponseWriter, r *http.Request) {
 	p := basePageData(r, s.cats)
 	p.Title = rec.Name
 	view := publicTimetableView{
-		MeetID:      rec.ID,
-		MeetName:    rec.Name,
-		Venue:       rec.Venue,
-		Dates:       formatDateRange(p, rec.StartDate, rec.EndDate),
-		Version:     v.Version,
+		MeetID:   rec.ID,
+		MeetName: rec.Name,
+		Venue:    rec.Venue,
+		Dates:    formatDateRange(p, rec.StartDate, rec.EndDate),
+		Version:  v.Version,
+		// PublishedAt renders in the operator/local timezone, not raw UTC
+		// (SYS-110, F6 defect sweep TASK-050) — see FormatDateTime.
 		PublishedAt: p.FormatDateTime(v.PublishedAt),
-		Rows:        s.unitRows(p, v.Entries),
-	}
-	// SYS-074/SYS-111: the public timetable localizes discipline names the
-	// same way the public results page does; the operator meet-detail Units
-	// table (the other unitRows caller) keeps the canonical catalog name,
-	// consistent with the operator Programme table on the same page (PoC
-	// scope — see docs/requirements/open-questions-and-assumptions.md).
-	for i, e := range v.Entries {
-		view.Rows[i].Discipline = s.localizedDisciplineName(p, e.DisciplineCode)
+		// unitRows localizes discipline names (SYS-074/SYS-111): the public
+		// timetable, the operator meet-detail Units table and the meet-hub
+		// timetable all share this helper and now render the same localized
+		// name the standings surface already used.
+		Rows: s.unitRows(p, v.Entries),
 	}
 	_ = publicTimetablePage(p, view).Render(r.Context(), w)
 }
@@ -646,15 +644,16 @@ func (s *Server) unitRows(p PageData, entries []app.TimetableEntry) []unitRowVie
 	rows := make([]unitRowView, 0, len(entries))
 	for _, e := range entries {
 		row := unitRowView{
-			UnitID:     e.UnitID,
-			Version:    e.UnitVersion,
-			Discipline: e.DisciplineCode,
+			UnitID:  e.UnitID,
+			Version: e.UnitVersion,
+			// SYS-111/F6: localized discipline name everywhere unitRows is
+			// used — the operator Units table, the meet-hub timetable and
+			// the public timetable all render the same localized name the
+			// standings surface already uses.
+			Discipline: s.localizedDisciplineName(p, e.DisciplineCode),
 			Categories: strings.Join(e.CategoryCodes, ", "),
 			Round:      p.T("round." + e.RoundKind),
 			Location:   e.Location,
-		}
-		if disc, ok := s.meets.Catalog().ByCode(e.DisciplineCode); ok {
-			row.Discipline = disc.Name
 		}
 		if e.ScheduledAt != nil {
 			row.Scheduled = true
@@ -688,13 +687,13 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 	}
 	for _, pe := range d.Programme {
 		row := programmeRowView{
-			EventID:     pe.ID,
-			Discipline:  pe.DisciplineName,
+			EventID: pe.ID,
+			// SYS-111/F6: the Programme table's "Disziplin" column now
+			// localizes like the Units/timetable tables and standings,
+			// rather than the catalog's canonical English name.
+			Discipline:  s.localizedDisciplineName(p, pe.DisciplineCode),
 			Categories:  strings.Join(pe.CategoryCodes, ", "),
 			CaptureType: p.T("family." + string(pe.Family)),
-		}
-		if row.Discipline == "" {
-			row.Discipline = pe.DisciplineCode
 		}
 		kinds := make([]string, 0, len(pe.Rounds))
 		for _, round := range pe.Rounds {
