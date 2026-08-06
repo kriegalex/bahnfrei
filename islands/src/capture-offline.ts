@@ -50,9 +50,23 @@
     syncing: req("i18nSyncing"),
     pending: req("i18nPending"), // contains "{n}"
     reconcile: req("i18nReconcile"),
+    // Non-retryable outcomes (SYS-149, UC-040): a rejected op's reason
+    // renders at its cell, never as a connectivity message.
+    error: req("i18nError"),
+    discard: req("i18nDiscard"),
+    rejectGeneric: req("i18nRejectGeneric"),
+  };
+  // Per-reason rejection text, keyed by the wire's RejectReason vocabulary
+  // (internal/domain/sync.go). An unrecognized/future reason code falls
+  // back to TXT.rejectGeneric rather than rendering nothing.
+  const REJECT_REASON_TEXT: Record<string, string> = {
+    invalid_mark: req("i18nRejectInvalidMark"),
+    unknown_athlete: req("i18nRejectUnknownAthlete"),
+    announced: req("i18nRejectAnnounced"),
   };
 
   const statusEl = document.getElementById("capture-offline-status");
+  const reauthBanner = document.getElementById("capture-reauth-banner");
   const standingsEl = document.querySelector<HTMLElement>("[data-sse-refresh]");
   const REFRESH_URL = standingsEl ? standingsEl.dataset.sseRefresh || "" : "";
 
@@ -210,26 +224,45 @@
     );
   }
 
-  // ---- Indicator (SYS-087) ------------------------------------------------
-  function render(state: "online" | "offline" | "syncing", pending: number): void {
+  // ---- Indicator (SYS-087, SYS-149) ---------------------------------------
+  // "error" is a non-retryable batch-level sync failure (SYS-149): distinct
+  // from "offline" so the region never claims a connectivity problem the
+  // operator cannot fix by walking to a signal — and, per UC-040 #5, the
+  // pending count is always appended here from live queue state, so this
+  // region can never say "all transferred" while ops remain queued.
+  type IndicatorState = "online" | "offline" | "syncing" | "error";
+  function render(state: IndicatorState, pending: number): void {
     if (!statusEl) {
       return;
     }
+    // "online" specifically claims every capture has been transferred
+    // (TXT.online literally reads "…alle Erfassungen übertragen") — that is
+    // only truthful once the queue is empty. A caller reporting "online"
+    // while ops remain queued (e.g. enqueue()'s indicator refresh fires
+    // right after putOp, before flush() has had a chance to mark
+    // "syncing") is downgraded to "syncing" here rather than trusted
+    // verbatim: this is the literal contradiction usability-audit finding
+    // F1 named ("all transferred" + a non-zero pending count shown at
+    // once) and UC-040 #5 forbids it unconditionally, at every call site,
+    // not just the ones this file happens to get right today.
+    const effective = state === "online" && pending > 0 ? "syncing" : state;
     let label = TXT.online;
-    if (state === "offline") {
+    if (effective === "offline") {
       label = TXT.offline;
-    } else if (state === "syncing") {
+    } else if (effective === "syncing") {
       label = TXT.syncing;
+    } else if (effective === "error") {
+      label = TXT.error;
     }
     if (pending > 0) {
       label += " · " + TXT.pending.replace("{n}", String(pending));
     }
     statusEl.textContent = label;
-    statusEl.dataset.state = state;
+    statusEl.dataset.state = effective;
     statusEl.dataset.pending = String(pending);
   }
 
-  async function refreshIndicator(state?: "online" | "offline" | "syncing"): Promise<void> {
+  async function refreshIndicator(state?: IndicatorState): Promise<void> {
     const pending = (await allOps()).length;
     const s = state || (navigator.onLine ? "online" : "offline");
     render(s, pending);
@@ -246,6 +279,24 @@
     note.setAttribute("role", "status");
     note.textContent = TXT.reconcile;
     statusEl.insertAdjacentElement("afterend", note);
+  }
+
+  // ---- Re-authentication prompt (SYS-149, UC-040 #4) ----------------------
+  // A 401/403 from /sync mid-queue is not connectivity and not solved by
+  // retrying: show a persistent banner with a link to /login and stop. The
+  // durable IndexedDB queue is untouched — a plain navigation to /login and
+  // back re-runs this island's startup flow (bottom of file), which resumes
+  // the same queue against the same cached checkout stamp, applying every
+  // pending op with no re-entry (cf. SYS-087).
+  function showReauthBanner(): void {
+    if (reauthBanner) {
+      reauthBanner.hidden = false;
+    }
+  }
+  function hideReauthBanner(): void {
+    if (reauthBanner) {
+      reauthBanner.hidden = true;
+    }
   }
 
   // ---- Optimistic grid update --------------------------------------------
@@ -287,6 +338,55 @@
           ? String(version)
           : String((parseInt(vInput.value, 10) || 0) + 1);
     }
+  }
+
+  // ---- Per-op rejection (SYS-149, UC-040 #1/#3) ---------------------------
+  // A rejected op is terminal and non-retryable: it never re-enters the
+  // queue. What renders here is purely a UI affordance at the offending
+  // cell — correct-or-discard — not durable state; a reload before the
+  // operator acts simply drops the notice (the underlying grid still shows
+  // whatever was last confirmed by the server).
+  function clearRejection(form: HTMLFormElement): void {
+    delete form.dataset.rejected;
+    form.querySelectorAll(".cell-reject").forEach((el) => el.remove());
+  }
+
+  function renderRejection(athleteId: string, seq: number, reason: string): void {
+    const form = cellFor(athleteId, seq);
+    if (!form) {
+      return;
+    }
+    clearRejection(form);
+    form.dataset.rejected = reason;
+    delete form.dataset.pending;
+
+    const wrap = document.createElement("span");
+    wrap.className = "cell-reject";
+    const msg = document.createElement("p");
+    msg.className = "field-error";
+    msg.setAttribute("role", "alert");
+    msg.textContent = REJECT_REASON_TEXT[reason] || TXT.rejectGeneric;
+    const discard = document.createElement("button");
+    discard.type = "button";
+    discard.className = "cell-reject-discard";
+    discard.textContent = TXT.discard;
+    discard.addEventListener("click", () => {
+      const valueInput = form.querySelector<HTMLInputElement>('input[name="value"]');
+      if (valueInput) {
+        valueInput.value = "";
+      }
+      const windInput = form.querySelector<HTMLInputElement>('input[name="wind"]');
+      if (windInput) {
+        windInput.value = "";
+      }
+      clearRejection(form);
+    });
+    wrap.appendChild(msg);
+    wrap.appendChild(discard);
+    // A child of the form, not a sibling: a <form> may hold arbitrary flow
+    // content, and keeping the notice inside it means one query — the cell
+    // form — finds the whole cell's state for tests and future styling.
+    form.appendChild(wrap);
   }
 
   // ---- Flush (auto, in-order, idempotent) ---------------------------------
@@ -370,9 +470,28 @@
           body: JSON.stringify(body),
           credentials: "same-origin",
         });
+        if (res.status === 401 || res.status === 403) {
+          // Expired session, or (403) access to the unit no longer holds —
+          // neither is connectivity and neither is fixed by retrying.
+          // Every queued op is left untouched (SYS-149, UC-040 #4).
+          showReauthBanner();
+          await refreshIndicator();
+          return;
+        }
+        if (!res.ok && res.status < 500) {
+          // A non-retryable batch-level failure that is not a per-op
+          // rejection (validation/business-rule failures already come back
+          // as "rejected" inside a 200 — see below). Surface an error
+          // state, not connectivity, and stop: no scheduleRetry loop. The
+          // ops stay queued for inspection; the next capture (or a reload)
+          // triggers a fresh attempt without an automatic backoff chain.
+          await refreshIndicator("error");
+          return;
+        }
         if (!res.ok) {
           throw new Error("sync HTTP " + res.status);
         }
+        hideReauthBanner();
         const out = (await res.json()) as {
           results: { opId: string; status: string; reason?: string; version?: number }[];
         };
@@ -392,6 +511,16 @@
             await deleteOp(r.opId);
           } else if (r.status === "reconciliation") {
             showReconcileNotice();
+            await deleteOp(r.opId);
+          } else if (r.status === "rejected") {
+            // Non-retryable (SYS-149, UC-040 #1): render at the cell, drop
+            // from the queue — never re-attempted, never a connectivity
+            // message. A rejection never blocks later ops in this same
+            // batch (UC-040 #2): every other result in `out.results` is
+            // still processed on its own branch above/below.
+            if (op) {
+              renderRejection(op.athleteId, op.seq, r.reason || "");
+            }
             await deleteOp(r.opId);
           }
         }
@@ -495,6 +624,10 @@
       wind: windInput ? windInput.value.trim() : "",
       version: versionInput ? parseInt(versionInput.value, 10) || 0 : 0,
     };
+    // A fresh submit on a previously rejected cell is the "correct" path
+    // (UC-040 #1/#3): clear the stale rejection notice before queuing the
+    // new attempt.
+    clearRejection(form);
     // Durable-first: the op is in IndexedDB before any network I/O, so a crash
     // or offline reload never loses the capture (SYS-085).
     await putOp(op);

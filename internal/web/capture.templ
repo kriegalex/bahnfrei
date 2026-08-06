@@ -112,7 +112,10 @@ templ bulkDNSAction(p PageData, meetID, unitID string) {
 }
 
 // offlineCaptureControls renders the offline-capture island's status
-// indicator plus its configuration/i18n block (UC-034; SYS-085/087). The
+// indicator plus its configuration/i18n block (UC-034; SYS-085/087), and the
+// re-authentication banner a 401/403 mid-queue surfaces (SYS-149, UC-040
+// #4) — hidden by default, toggled by the island, never a plain-form
+// element itself so a stale queue is never lost to a failed submit. The
 // island (/static/capture-offline.js) reads everything from the config
 // element's data-* attributes — the CSP forbids inline scripts, so no
 // English is hardcoded in TypeScript: all strings arrive translated here.
@@ -123,6 +126,11 @@ templ offlineCaptureControls(p PageData, v captureView) {
 		role="status"
 		aria-live="polite"
 	>{ p.T("capture.offline.online") }</div>
+	<div id="capture-reauth-banner" class="offline-banner" role="alert" hidden>
+		{ p.T("capture.offline.reauth") }
+		{ " " }
+		<a href="/login">{ p.T("capture.offline.reauth_link") }</a>
+	</div>
 	<div
 		id="capture-offline-config"
 		hidden
@@ -138,6 +146,12 @@ templ offlineCaptureControls(p PageData, v captureView) {
 		data-i18n-syncing={ p.T("capture.offline.syncing") }
 		data-i18n-pending={ p.T("capture.offline.pending", "n", "{n}") }
 		data-i18n-reconcile={ p.T("capture.offline.reconcile") }
+		data-i18n-error={ p.T("capture.offline.error") }
+		data-i18n-discard={ p.T("capture.offline.discard") }
+		data-i18n-reject-invalid-mark={ p.T("capture.offline.reject.invalid_mark") }
+		data-i18n-reject-unknown-athlete={ p.T("capture.offline.reject.unknown_athlete") }
+		data-i18n-reject-announced={ p.T("capture.offline.reject.announced") }
+		data-i18n-reject-generic={ p.T("capture.offline.reject.generic") }
 	></div>
 }
 

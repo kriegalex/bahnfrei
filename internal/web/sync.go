@@ -99,8 +99,17 @@ type syncResponse struct {
 }
 
 // handleUnitSync replays an ordered batch of queued field captures
-// idempotently (SYS-085): applied / duplicate / reconciliation per op. JSON
-// in/out.
+// idempotently (SYS-085): applied / duplicate / reconciliation / rejected
+// per op. JSON in/out.
+//
+// A missing/expired session (SYS-149, UC-040 #4) never reaches this
+// handler's error branches at all: captureRole (routes.go) wraps this route
+// in requireRole(RoleFieldOfficial, …), which already answers an
+// unauthenticated or under-role request with its own 403 before
+// handleUnitSync runs — exactly what happens once the 12h TTL
+// (internal/web/config.go) lapses and the session cookie is rejected on
+// lookup. The client's re-authentication classification (401/403,
+// islands/src/capture-offline.ts) already covers that response.
 func (s *Server) handleUnitSync(w http.ResponseWriter, r *http.Request) {
 	actor, _ := sessionFromContext(r.Context())
 	meetID, unitID := r.PathValue("id"), r.PathValue("unit")
@@ -131,12 +140,23 @@ func (s *Server) handleUnitSync(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "unit_not_assigned"})
 			return
 		}
-		http.Error(w, "replay failed", http.StatusBadRequest)
+		// Every per-op validation/business-rule failure is classified inside
+		// ReplayCaptureBatch as a "rejected" outcome in the 200 response
+		// (SYS-149, UC-040) rather than an error here, so anything that still
+		// reaches this branch is an unexpected/infrastructure fault, not the
+		// operator's mistake — a 500 tells the client this is retryable
+		// (today's backoff/offline messaging), not a batch-wide validation
+		// rejection to give up on.
+		http.Error(w, "replay failed", http.StatusInternalServerError)
 		return
 	}
 	out := syncResponse{}
 	for _, o := range res.Outcomes {
-		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: string(o.Reason), Version: o.Version})
+		reason := string(o.Reason)
+		if o.RejectReason != "" {
+			reason = string(o.RejectReason)
+		}
+		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: reason, Version: o.Version})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

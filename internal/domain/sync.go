@@ -74,6 +74,11 @@ const (
 	OpDuplicate OpStatus = "duplicate"
 	// OpReconciliation: the op was routed to the office reconciliation queue.
 	OpReconciliation OpStatus = "reconciliation"
+	// OpRejected: the op failed validation or a capture business rule
+	// (SYS-149, UC-040) — non-retryable and never queued for office review,
+	// unlike OpReconciliation: the client removes it from its local queue
+	// and offers the operator correct-or-discard at the point of capture.
+	OpRejected OpStatus = "rejected"
 )
 
 // ReconcileReason names why a capture could not be applied. It travels to the
@@ -88,4 +93,24 @@ const (
 	// ReasonConflict: the op is from the current holder but applying it would
 	// overwrite a diverging attempt captured meanwhile (surfaced, not merged).
 	ReasonConflict ReconcileReason = "conflict"
+)
+
+// RejectReason names why a queued capture op was rejected outright (SYS-149,
+// UC-040): a non-retryable validation or capture-business-rule failure the
+// operator must correct or discard at the offending cell, as opposed to
+// ReconcileReason's routing to office review — the value is never
+// applicable, retrying it changes nothing.
+type RejectReason string
+
+const (
+	// RejectInvalidMark: the captured value failed SYS-042 attempt
+	// validation (not a recognized mark or D5.2 symbol, a non-positive
+	// mark, a stray mark on a symbol, or an out-of-series trial number).
+	RejectInvalidMark RejectReason = "invalid_mark"
+	// RejectUnknownAthlete: the op's athlete is not registered for this meet.
+	RejectUnknownAthlete RejectReason = "unknown_athlete"
+	// RejectAnnounced: the unit's results are already announced (SYS-047);
+	// further edits go through the audited correction flow, not plain
+	// capture — offline sync cannot express a correction.
+	RejectAnnounced RejectReason = "announced"
 )

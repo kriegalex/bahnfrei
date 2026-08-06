@@ -685,7 +685,7 @@ func (s *ResultsService) SaveFieldAttempt(ctx context.Context, actor Session, me
 		return store.AttemptRecord{}, err
 	}
 	if attempt.Seq > cfg.Attempts {
-		return store.AttemptRecord{}, fmt.Errorf("trial %d exceeds the %d-trial series (SYS-042)", attempt.Seq, cfg.Attempts)
+		return store.AttemptRecord{}, fmt.Errorf("%w: trial %d exceeds the %d-trial series (SYS-042)", domain.ErrInvalidMark, attempt.Seq, cfg.Attempts)
 	}
 	// Once the unit's results are announced (SYS-047), further edits are
 	// corrections (UC-015 #2/#3), not plain capture — see CorrectResult.
