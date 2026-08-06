@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -328,6 +329,193 @@ func (s *ResultsService) SetOutOfCompetition(ctx context.Context, actor Session,
 	}
 	s.notifyChanged(meetID)
 	return nil
+}
+
+// --- participant identity correction (TASK-049, SYS-150/UC-043) ---
+
+// bibFormat is the same shape RegisterParticipant/AssignBib have always
+// accepted in practice (digits, matching the roster's
+// "CAST(p.bib AS INTEGER)" ordering — store.ListParticipants) — an empty
+// value clears the bib, exactly like the roster-add and bib-assignment
+// forms already allow.
+var bibFormat = regexp.MustCompile(`^[0-9]+$`)
+
+// ValidBibFormat reports whether bib is acceptable input for a participant
+// correction: empty (no bib yet) or digits-only. Exported so the web
+// layer's field-level validation (OQ-075/UC-038 #4) shares this exact rule
+// with the app-layer defense-in-depth check in UpdateParticipantIdentity.
+func ValidBibFormat(bib string) bool {
+	return bib == "" || bibFormat.MatchString(bib)
+}
+
+// ParticipantIdentityBirthYearBounds is the plausible-birth-year range
+// shared by every registration/correction form (mirrors
+// internal/web.individualEntryBirthYearBounds's rationale: no athlete
+// competing today was born before 1900, and a future birth year is never
+// valid). Takes the clock the service was wired with so tests using
+// WithClock stay deterministic.
+func (s *ResultsService) ParticipantIdentityBirthYearBounds() (min, max int) {
+	return 1900, s.now().Year()
+}
+
+// ErrParticipantIdentityInvalid means an UpdateParticipantIdentity call
+// failed structural validation (required name, birth-year bounds, sex,
+// bib format) — a defense-in-depth backstop behind the web layer's own
+// field-level validation, mirroring SubmitIndividualEntry's precedent.
+var ErrParticipantIdentityInvalid = errors.New("participant identity: invalid field values")
+
+// ParticipantIdentityInput is one office-issued correction to a
+// participant's identity data (SYS-150: name, birth year, sex, club, bib).
+// Reason is optional — unlike CorrectionInput's result-correction reason
+// (SYS-046), SYS-150 does not require one; it is carried into the audit
+// row when given.
+type ParticipantIdentityInput struct {
+	FirstName string
+	LastName  string
+	BirthYear int
+	Sex       domain.Sex
+	Club      string
+	Bib       string
+	Reason    string
+}
+
+// UpdateParticipantIdentity corrects a participant's identity data after
+// registration (SYS-150, UC-043 F4): office-only, optimistic-version-
+// guarded on the participant row (a concurrent edit — including a second
+// submission of this same form — yields ErrConflict), rejects a bib
+// already taken by someone else in the meet (ErrDuplicateParticipant,
+// reusing AssignBib's store-level uniqueness check) and an already-erased
+// athlete (ErrAthleteAnonymized — an erased participant is never
+// editable). The correction never touches the athletes.birth_date,
+// external_ids, para_classes or consent columns, and never writes to
+// results/attempts: UC-043 #3 requires captured marks to survive a
+// correction byte-identical, which holds trivially here since this
+// function's only writes are to the participants and athletes rows.
+//
+// Category re-derivation (UC-043 #1) needs no extra step: every
+// standings/capture-grouping call resolves an athlete's division from
+// their *current* birth year and sex on every read
+// (ResultsService.standings, capture.go's catByAthlete — see
+// domain.CategoryScheme.ResolveDefaultCategory) rather than from a stored
+// snapshot, so the very next read after this commits already reflects the
+// athlete's new division.
+func (s *ResultsService) UpdateParticipantIdentity(ctx context.Context, actor Session, meetID, participantID string, expectedVersion int64, in ParticipantIdentityInput) (store.ParticipantRow, error) {
+	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
+		return store.ParticipantRow{}, err
+	}
+	firstName := strings.TrimSpace(in.FirstName)
+	lastName := strings.TrimSpace(in.LastName)
+	club := strings.TrimSpace(in.Club)
+	bib := strings.TrimSpace(in.Bib)
+	minYear, maxYear := s.ParticipantIdentityBirthYearBounds()
+	if lastName == "" || in.BirthYear < minYear || in.BirthYear > maxYear ||
+		(in.Sex != domain.SexMale && in.Sex != domain.SexFemale) || !ValidBibFormat(bib) {
+		return store.ParticipantRow{}, ErrParticipantIdentityInvalid
+	}
+
+	p, err := store.GetParticipant(ctx, s.db, participantID)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+	if p.MeetID != meetID {
+		return store.ParticipantRow{}, store.ErrNotFound
+	}
+	before, err := store.GetAthlete(ctx, s.db, p.AthleteID)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+	if before.Anonymized {
+		return store.ParticipantRow{}, ErrAthleteAnonymized
+	}
+	beforeClubs, err := store.ClubNames(ctx, s.db, before.ClubIDs)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.ParticipantRow{}, fmt.Errorf("update participant identity: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// The participant-row optimistic update is the single concurrency gate
+	// for this whole correction (bib included): it always runs, even when
+	// bib is unchanged, so a stale expectedVersion is rejected regardless
+	// of which fields the office actually changed.
+	if _, err := store.UpdateParticipantBib(ctx, tx, participantID, expectedVersion, bib); err != nil {
+		return store.ParticipantRow{}, err
+	}
+
+	var clubIDs []string
+	if club != "" {
+		c, err := store.GetClubByName(ctx, tx, club)
+		if errors.Is(err, store.ErrNotFound) {
+			c, err = store.CreateClub(ctx, tx, domain.Club{Name: club})
+		}
+		if err != nil {
+			return store.ParticipantRow{}, err
+		}
+		clubIDs = []string{c.ID}
+	}
+
+	// The athlete row's version is re-read inside the write transaction
+	// (fresh, not the caller-supplied expectedVersion): this function is
+	// the only writer of these five columns, and SQLite's single-writer
+	// serialization (ADR-004 §2) guarantees no other transaction can have
+	// changed them between this read and the write below, so the
+	// participant-row check above remains the sole caller-visible
+	// concurrency gate.
+	fresh, err := store.GetAthlete(ctx, tx, p.AthleteID)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+	if fresh.Anonymized {
+		// Defense-in-depth against the narrow window between the
+		// pre-transaction anonymized check above and this write: an
+		// erasure that lands in between must still win over an in-flight
+		// identity correction, never the other way round.
+		return store.ParticipantRow{}, ErrAthleteAnonymized
+	}
+	if _, err := store.UpdateAthleteIdentity(ctx, tx, p.AthleteID, fresh.Version,
+		firstName, lastName, in.BirthYear, in.Sex, clubIDs); err != nil {
+		return store.ParticipantRow{}, err
+	}
+
+	beforeClub := ""
+	if len(before.ClubIDs) > 0 {
+		beforeClub = beforeClubs[before.ClubIDs[0]]
+	}
+	beforeJSON, _ := json.Marshal(map[string]string{
+		"name":      before.FirstName + " " + before.LastName,
+		"birthYear": fmt.Sprintf("%d", before.BirthYear), "sex": string(before.Sex),
+		"club": beforeClub, "bib": p.Bib,
+	})
+	afterJSON, _ := json.Marshal(map[string]string{
+		"name":      firstName + " " + lastName,
+		"birthYear": fmt.Sprintf("%d", in.BirthYear), "sex": string(in.Sex),
+		"club": club, "bib": bib,
+	})
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "participant.identity_correct",
+		EntityType: "participant", EntityID: participantID,
+		Before: string(beforeJSON), After: string(afterJSON), Reason: strings.TrimSpace(in.Reason),
+	}); err != nil {
+		return store.ParticipantRow{}, fmt.Errorf("audit participant.identity_correct: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.ParticipantRow{}, fmt.Errorf("update participant identity: %w", err)
+	}
+	s.notifyChanged(meetID)
+
+	updated, err := store.GetParticipant(ctx, s.db, participantID)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+	updatedAthlete, err := store.GetAthlete(ctx, s.db, p.AthleteID)
+	if err != nil {
+		return store.ParticipantRow{}, err
+	}
+	return store.ParticipantRow{Participant: updated, Athlete: updatedAthlete.Athlete}, nil
 }
 
 // ClubNamesFor resolves the club names of the given participants' club

@@ -136,6 +136,11 @@ func (s *Server) routes() http.Handler {
 	// alongside organize.
 	mux.HandleFunc("GET /meets/{id}/roster", office(s.handleRoster))
 	mux.HandleFunc("POST /meets/{id}/roster", office(s.handleRosterAdd))
+	// Participant identity correction (TASK-049, SYS-150/UC-043): a
+	// dedicated form page per roster row, not an inline/modal edit — same
+	// GET-form/POST-submit shape as the meet-edit form (meets.go).
+	mux.HandleFunc("GET /meets/{id}/roster/{participant}/edit", office(s.handleParticipantEditForm))
+	mux.HandleFunc("POST /meets/{id}/roster/{participant}/edit", office(s.handleParticipantEditSubmit))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
 

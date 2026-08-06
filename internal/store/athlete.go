@@ -272,6 +272,27 @@ func SetAthleteExternalID(ctx context.Context, db DBTX, athleteID string, expect
 		Set{Column: "external_ids", Value: string(data)})
 }
 
+// UpdateAthleteIdentity overwrites the person-data fields a competition
+// office can correct after registration (SYS-150/UC-043, TASK-049): name,
+// birth year, sex and club(s). Deliberately does not touch BirthDate,
+// ExternalIDs, ParaClasses or the SYS-103 consent block — those have their
+// own dedicated mutations (UpdateAthleteConsent, SetAthleteExternalID) and
+// an identity correction must not disturb them as a side effect.
+func UpdateAthleteIdentity(ctx context.Context, db DBTX, id string, expectedVersion int64,
+	firstName, lastName string, birthYear int, sex domain.Sex, clubIDs []string) (int64, error) {
+	clubs, err := json.Marshal(orEmptySlice(clubIDs))
+	if err != nil {
+		return 0, fmt.Errorf("update athlete identity: %w", err)
+	}
+	return OptimisticUpdate(ctx, db, "athletes", id, expectedVersion,
+		Set{Column: "first_name", Value: firstName},
+		Set{Column: "last_name", Value: lastName},
+		Set{Column: "birth_year", Value: birthYear},
+		Set{Column: "sex", Value: string(sex)},
+		Set{Column: "club_ids", Value: string(clubs)},
+	)
+}
+
 func orEmptyMap(m domain.ExternalIDs) domain.ExternalIDs {
 	if m == nil {
 		return domain.ExternalIDs{}

@@ -57,6 +57,7 @@ templ rosterPage(p PageData, v rosterView) {
 						<th scope="col">{ p.T("roster.name") }</th>
 						<th scope="col">{ p.T("roster.birth_year") }</th>
 						<th scope="col">{ p.T("roster.club") }</th>
+						<th scope="col"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -66,6 +67,11 @@ templ rosterPage(p PageData, v rosterView) {
 							<td>{ row.Name }</td>
 							<td>{ row.BirthYear }</td>
 							<td>{ row.Club }</td>
+							<td>
+								if !row.Anonymized {
+									<a href={ templ.URL("/meets/" + v.MeetID + "/roster/" + row.ParticipantID + "/edit") }>{ p.T("roster.edit.link") }</a>
+								}
+							</td>
 						</tr>
 					}
 				</tbody>
@@ -108,6 +114,95 @@ templ rosterPage(p PageData, v rosterView) {
 			</label>
 			@helpIcon(p, "publication_withdrawn")
 			<button type="submit">{ p.T("roster.submit") }</button>
+		</form>
+	}
+}
+
+// participantFormPage is the TASK-049/SYS-150/UC-043 identity-correction
+// form: a dedicated page (not an inline row edit or modal, per the repo's
+// established form-page convention — meetFormPage's precedent), pre-filled
+// with the participant's current values and version-guarded via the
+// hidden version field (meetFormPage's optimistic-concurrency pattern).
+templ participantFormPage(p PageData, f participantFormView) {
+	@layout(p) {
+		<h1>{ f.MeetName } — { p.T("roster.edit.title") }</h1>
+		<p><a href={ templ.URL("/meets/" + f.MeetID + "/roster") }>{ p.T("roster.back_to_meet") }</a></p>
+		<form action={ templ.URL("/meets/" + f.MeetID + "/roster/" + f.ParticipantID + "/edit") } method="post">
+			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+			<input type="hidden" name="version" value={ intToStr(f.Version) }/>
+			<label>
+				{ p.T("roster.first_name") }
+				<input type="text" name="first_name" value={ f.FirstName }/>
+			</label>
+			<label>
+				{ p.T("roster.last_name") }
+				<input
+					type="text"
+					name="last_name"
+					value={ f.LastName }
+					required?={ true }
+					if f.Errors.Has("last_name") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("last_name") }
+					}
+				/>
+			</label>
+			@fieldError("last_name", f.Errors)
+			<label>
+				{ p.T("roster.birth_year") }
+				<input
+					type="number"
+					name="birth_year"
+					min="1900"
+					max="2100"
+					value={ f.BirthYear }
+					required?={ true }
+					aria-describedby="roster-edit-birth-year-hint"
+					if f.Errors.Has("birth_year") {
+						aria-invalid="true"
+						aria-describedby={ "roster-edit-birth-year-hint " + fieldErrorID("birth_year") }
+					}
+				/>
+			</label>
+			<p class="hint" id="roster-edit-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
+			@fieldError("birth_year", f.Errors)
+			<label>
+				{ p.T("roster.sex") }
+				<select
+					name="sex"
+					if f.Errors.Has("sex") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("sex") }
+					}
+				>
+					<option value="W" selected?={ f.Sex == "W" }>{ p.T("sex.female") }</option>
+					<option value="M" selected?={ f.Sex == "M" }>{ p.T("sex.male") }</option>
+				</select>
+			</label>
+			@fieldError("sex", f.Errors)
+			<label>
+				{ p.T("roster.club") }
+				<input type="text" name="club" value={ f.Club }/>
+			</label>
+			<label>
+				{ p.T("roster.bib") }
+				<input
+					type="text"
+					name="bib"
+					value={ f.Bib }
+					if f.Errors.Has("bib") {
+						aria-invalid="true"
+						aria-describedby={ fieldErrorID("bib") }
+					}
+				/>
+			</label>
+			@fieldError("bib", f.Errors)
+			<label>
+				{ p.T("roster.edit.reason") }
+				<input type="text" name="reason" value={ f.Reason } aria-describedby="roster-edit-reason-hint"/>
+			</label>
+			<p class="hint" id="roster-edit-reason-hint">{ p.T("roster.edit.reason_hint") }</p>
+			<button type="submit">{ p.T("roster.edit.submit") }</button>
 		</form>
 	}
 }
