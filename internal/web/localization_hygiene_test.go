@@ -85,7 +85,7 @@ func TestCaptureUnitTitleLocalizedSYS111(t *testing.T) {
 			}
 			body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/capture/"+unitID))
 
-			if !strings.Contains(body, "<h1>") || !strings.Contains(body, want.zoneLJ) {
+			if !strings.Contains(body, `<h1 class="capture-title">`) || !strings.Contains(body, want.zoneLJ) {
 				t.Errorf("[%s] capture unit page missing localized h1 %q: %s", loc, want.zoneLJ, body)
 			}
 			if !strings.Contains(body, "<title>"+"UBS Kids Cup Le Mouret 2026 — "+want.zoneLJ) {

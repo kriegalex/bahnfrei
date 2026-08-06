@@ -34,8 +34,12 @@ import (
 // prior absence 404'd on every page load); OQ-061 (organizer branding) is
 // still open, so this placeholder is expected to be replaced once that
 // question is ratified.
+// capture-markers.js is the letter-marker quick-action wiring (SYS-147,
+// UC-039 #3, TASK-045): a small, hand-authored, family-agnostic script
+// (not a TS island) loaded by the field-horizontal and vertical-jump
+// capture pages.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js static/favicon.ico
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/capture-markers.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js static/favicon.ico
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.

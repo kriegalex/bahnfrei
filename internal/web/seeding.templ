@@ -16,7 +16,8 @@ package web
 // are visible instead.
 templ checkInPage(p PageData, v checkInView) {
 	@layout(p) {
-		<h1>{ v.MeetName } — { v.EventLabel } — { p.T("checkin.title") }</h1>
+		<p class="capture-context">{ v.MeetName } — { v.EventLabel }</p>
+		<h1 class="capture-title">{ p.T("checkin.title") }</h1>
 		<p><a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a></p>
 		if v.CloseCount > 0 {
 			<p><a href={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/checkin/close/confirm") } class="button">{ p.T("checkin.close") }</a></p>
@@ -28,22 +29,22 @@ templ checkInPage(p PageData, v checkInView) {
 			<p><a href={ templ.URL("/meets/" + v.MeetID + "/capture") }>{ p.T("checkin.empty.capture_link") }</a></p>
 		} else {
 			<div class="table-scroll" tabindex="0">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col">{ p.T("roster.name") }</th>
-							<th scope="col">{ p.T("roster.club") }</th>
-							<th scope="col">{ p.T("entries.status") }</th>
-							<th scope="col">{ p.T("checkin.action") }</th>
+				<table class="stack-table" role="table">
+					<thead role="rowgroup">
+						<tr role="row">
+							<th scope="col" role="columnheader">{ p.T("roster.name") }</th>
+							<th scope="col" role="columnheader">{ p.T("roster.club") }</th>
+							<th scope="col" role="columnheader">{ p.T("entries.status") }</th>
+							<th scope="col" role="columnheader">{ p.T("checkin.action") }</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody role="rowgroup">
 						for _, row := range v.Rows {
-							<tr>
-								<td>{ row.Who }</td>
-								<td>{ row.ClubName }</td>
-								<td>{ row.Status }</td>
-								<td>
+							<tr role="row">
+								<td role="cell" data-label={ p.T("roster.name") }>{ row.Who }</td>
+								<td role="cell" data-label={ p.T("roster.club") }>{ row.ClubName }</td>
+								<td role="cell" data-label={ p.T("entries.status") }>{ row.Status }</td>
+								<td role="cell" data-label={ p.T("checkin.action") }>
 									if row.IsEntered {
 										<form action={ templ.URL("/meets/" + v.MeetID + "/entries/" + row.EntryID + "/confirm") } method="post" class="inline-form">
 											<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>

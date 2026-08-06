@@ -92,6 +92,16 @@ type syncOpResult struct {
 	Status  string `json:"status"`            // applied | duplicate | reconciliation
 	Reason  string `json:"reason,omitempty"`  // set when status == reconciliation
 	Version int64  `json:"version,omitempty"` // authoritative attempt version (applied|duplicate)
+	// Result and Points (SYS-148, UC-039 #4) are the athlete's current
+	// settled display values, set only for applied|duplicate — the client
+	// uses them to update the capture grid's Result/Points cells in place
+	// without a reload, the same authoritative-server-truth principle
+	// Version already applies. Deliberately not omitempty: an athlete with
+	// no result yet after a foul/pass-only series is a real, meaningful ""
+	// the client should still apply (clearing any stale display), not an
+	// absent field to be ignored.
+	Result string `json:"result"`
+	Points string `json:"points"`
 }
 
 type syncResponse struct {
@@ -156,7 +166,7 @@ func (s *Server) handleUnitSync(w http.ResponseWriter, r *http.Request) {
 		if o.RejectReason != "" {
 			reason = string(o.RejectReason)
 		}
-		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: reason, Version: o.Version})
+		out.Results = append(out.Results, syncOpResult{OpID: o.OpID, Status: string(o.Status), Reason: reason, Version: o.Version, Result: o.Result, Points: o.Points})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -22,7 +22,10 @@ export function cell(page: Page, athleteID: string, seq: number): Locator {
   );
 }
 
-/** Types a mark into a grid cell and saves it (island-intercepted submit). */
+/** Types a mark into a grid cell and saves it (island-intercepted submit).
+ *  Targets the submit button explicitly (TASK-045): the cell now also
+ *  carries letter-marker quick-action buttons (`.marker-btn`, type=button),
+ *  so a bare `button` locator would be ambiguous. */
 export async function captureAttempt(
   page: Page,
   athleteID: string,
@@ -31,7 +34,50 @@ export async function captureAttempt(
 ): Promise<void> {
   const c = cell(page, athleteID, seq);
   await c.locator('input[name="value"]').fill(value);
-  await c.locator("button").click();
+  await c.locator('button[type="submit"]').click();
+}
+
+/** Clicks a letter-marker quick-action button (TASK-045, SYS-147, UC-039
+ *  #3) instead of typing — the mark input declares inputmode="decimal" (or
+ *  "none" for the vertical grid), so this is the documented alternate path
+ *  for the non-numeric D5.2 markers (X foul, – pass, r retirement, o
+ *  clear). Saves immediately: the button sets the value and re-submits the
+ *  form itself (capture-markers.js). */
+export async function captureMarker(
+  page: Page,
+  athleteID: string,
+  seq: number,
+  marker: string,
+): Promise<void> {
+  const c = cell(page, athleteID, seq);
+  await c.locator(`button.marker-btn[data-marker="${marker}"]`).click();
+}
+
+/** The cell's save-state at a glance (SYS-148, UC-039 #4/#5): "pending"
+ *  while a save is in flight, "confirmed" once acknowledged, or "" once
+ *  neither attribute is present (e.g. before any save, or after a
+ *  rejection clears both). */
+export async function cellSaveState(
+  page: Page,
+  athleteID: string,
+  seq: number,
+): Promise<string> {
+  const c = cell(page, athleteID, seq);
+  const pending = await c.getAttribute("data-pending");
+  if (pending === "1") {
+    return "pending";
+  }
+  return (await c.getAttribute("data-state")) ?? "";
+}
+
+/** The row's own Result/Points cells (field-horizontal grid), keyed by
+ *  athlete — the ones capture-offline.ts updates in place from the sync
+ *  ack (SYS-148, UC-039 #4), distinct from the standings section below. */
+export function rowResultCell(page: Page, athleteID: string): Locator {
+  return page.locator(`[data-role="result"][data-athlete-row="${athleteID}"]`);
+}
+export function rowPointsCell(page: Page, athleteID: string): Locator {
+  return page.locator(`[data-role="points"][data-athlete-row="${athleteID}"]`);
 }
 
 export function offlineStatus(page: Page): Locator {

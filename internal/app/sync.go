@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/kriegalex/bahnfrei/internal/domain"
 	"github.com/kriegalex/bahnfrei/internal/store"
@@ -197,12 +199,21 @@ type ReplayBatch struct {
 // to the server truth rather than blindly incrementing it — a blind
 // increment double-counts when the same op is acknowledged again after a
 // page render already reflected the write (SYS-085).
+// Result and Points are the athlete's current settled display values
+// (SYS-148, UC-039 #4): set only on "applied"/"duplicate" so the client can
+// update the capture grid's own Result/Points cells in place from the ack
+// itself — the same version-authority principle Version already applies,
+// extended to derived display values instead of a client-side recompute
+// (which cannot see corrections/points-table lookups). Empty for
+// reconciliation/rejected, where no attempt landed.
 type OpOutcome struct {
 	OpID         string
 	Status       domain.OpStatus
 	Reason       domain.ReconcileReason // set when Status == reconciliation
 	RejectReason domain.RejectReason    // set when Status == rejected
 	Version      int64
+	Result       string
+	Points       string
 }
 
 // ReplayResult carries one outcome per submitted op, in submission order.
@@ -264,7 +275,8 @@ func (s *ResultsService) replayOne(ctx context.Context, actor Session, meetID, u
 			// Already applied by an earlier batch (a flaky reconnect re-sent
 			// it): report the CURRENT authoritative version so the client
 			// converges the cell to the server truth instead of over-counting it.
-			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: s.currentAttemptVersion(ctx, unitID, op.AthleteID, op.Seq)}, nil
+			result, points := s.currentAttemptResult(ctx, unitID, op.AthleteID)
+			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: s.currentAttemptVersion(ctx, unitID, op.AthleteID, op.Seq), Result: result, Points: points}, nil
 		}
 	}
 
@@ -312,7 +324,8 @@ func (s *ResultsService) applyReplayOp(ctx context.Context, actor Session, meetI
 		if e := store.RecordCaptureOp(ctx, s.db, op.OpID, unitID, string(domain.OpApplied), ""); e != nil {
 			return OpOutcome{}, e
 		}
-		return OpOutcome{OpID: op.OpID, Status: domain.OpApplied, Version: rec.Version}, nil
+		result, points := s.currentAttemptResult(ctx, unitID, op.AthleteID)
+		return OpOutcome{OpID: op.OpID, Status: domain.OpApplied, Version: rec.Version, Result: result, Points: points}, nil
 	}
 	var conflict *AttemptConflictError
 	if errors.As(err, &conflict) {
@@ -320,7 +333,8 @@ func (s *ResultsService) applyReplayOp(ctx context.Context, actor Session, meetI
 			if e := store.RecordCaptureOp(ctx, s.db, op.OpID, unitID, string(domain.OpApplied), ""); e != nil {
 				return OpOutcome{}, e
 			}
-			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: conflict.Current.Version}, nil
+			result, points := s.currentAttemptResult(ctx, unitID, op.AthleteID)
+			return OpOutcome{OpID: op.OpID, Status: domain.OpDuplicate, Version: conflict.Current.Version, Result: result, Points: points}, nil
 		}
 		return s.routeReconciliation(ctx, actor, unitID, batch, op, domain.ReasonConflict)
 	}
@@ -535,6 +549,31 @@ func (s *ResultsService) ResolveReconciliation(ctx context.Context, actor Sessio
 		return fmt.Errorf("audit %s: %w", action, err)
 	}
 	return tx.Commit()
+}
+
+// currentAttemptResult reports the athlete's current settled result display
+// string and points for the sync ack (SYS-148, UC-039 #4): the same rendering
+// rule capture.go's captureRowView uses for the online grid (mark, plus a
+// rendered status suffix once one is set; points when the meet scores).
+// Field results are always TimingNone (SaveFieldAttempt never sets a hand/FAT
+// timing), so no provenance ("h") suffix ever applies here — this is
+// intentionally simpler than markWithProvenance in internal/web/capture.go,
+// which also covers track's hand-timed marks. Returns ("", "") on any lookup
+// failure (including "no result yet") rather than erroring the whole sync
+// batch over a display nicety the client already shows as blank.
+func (s *ResultsService) currentAttemptResult(ctx context.Context, unitID, athleteID string) (result, points string) {
+	rec, err := store.GetResult(ctx, s.db, unitID, athleteID)
+	if err != nil {
+		return "", ""
+	}
+	result = rec.Mark
+	if rec.Status != domain.StatusNone {
+		result = strings.TrimSpace(result + " " + domain.RenderStatus(rec.Status, rec.StatusDetail))
+	}
+	if rec.Points != nil {
+		points = strconv.Itoa(*rec.Points)
+	}
+	return result, points
 }
 
 // currentAttemptVersion returns the stored version of a trial (0 if none), so

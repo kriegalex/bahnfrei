@@ -236,3 +236,216 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   box-shadow: 0 var(--space-1) var(--space-2) var(--color-border);
 }
 .help-popup[hidden] { display: none; }
+
+/* --------------------------------------------------------------------
+   Point-of-competition mobile capture (SYS-147/148, UC-039, TASK-045):
+   the field-horizontal/vertical/track capture grids and the check-in
+   table. 480px is the phone breakpoint the usability-audit walkthrough
+   measured against (docs/delivery/usability-audit-volunteer-2026-08.md,
+   F2) and the ceiling docs/requirements/system-requirements.md SYS-147
+   names ("phones from 360px viewport width"); desktop/office widths keep
+   the plain table layout untouched below.
+   -------------------------------------------------------------------- */
+
+/* Row-card responsive table (UC-039 #1): `.stack-table` (paired with the
+   existing `.capture-grid`/plain `<table>` classes) reflows from a wide
+   multi-column table into one card per row below the breakpoint, so the
+   primary capture/check-in action never needs horizontal page scrolling.
+   Overriding `display` drops the browser's implicit table/row/cell ARIA
+   mapping, so the markup re-asserts it explicitly via role="table" /
+   "rowgroup" / "row" / "columnheader" / "cell" (kept at every viewport —
+   harmless on desktop, required once this rule engages) — see
+   design-system.md §2 and Adrian Roselli, "Tables, CSS Display
+   Properties, and ARIA" (adrianroselli.com/2018/02/tables-css-display-
+   properties-and-aria.html). Column context for sighted users comes from
+   the visible `data-label` prefix below; each primary control keeps its
+   own `aria-label` regardless of table structure, so the accessible name
+   of every interactive element never depends on this layout choice. */
+@media (max-width: 480px) {
+  .stack-table,
+  .stack-table > tbody,
+  .stack-table tr,
+  .stack-table td {
+    display: block;
+    width: 100%;
+  }
+  /* The header cells keep their table-cell display by default even once
+     an ancestor turns block — an inconsistent box mix some browsers give a
+     content-driven (not 1px-clipped) width, which grows the PAGE's own
+     scrollWidth despite the visual clip below. Block-ify thead/th too so
+     the 1x1 clip actually constrains their layout box, not just their
+     paint. */
+  .stack-table thead,
+  .stack-table thead tr,
+  .stack-table th {
+    display: block;
+  }
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .stack-table tbody tr {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2);
+  }
+  .stack-table td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    padding: var(--space-1) 0;
+    border: 0;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: var(--font-weight-bold);
+    flex: 0 0 auto;
+  }
+}
+
+/* Touch targets (SYS-147, UC-039 #2): primary capture controls (mark/time
+   input, save, status select) reach the HIG/Material floor once the
+   viewport is phone-width — scoped to the breakpoint so office/desktop
+   density (SYS-114 keyboard-dense operation) is unaffected. */
+@media (max-width: 480px) {
+  .cell-form input,
+  .cell-form select,
+  .cell-form button,
+  .marker-btn,
+  .stack-table input,
+  .stack-table select,
+  .stack-table button {
+    min-height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+  }
+}
+
+/* Letter-marker quick actions (SYS-147, UC-039 #3): the mark/value inputs
+   declare inputmode="decimal" (field horizontal marks, times, wind) or
+   inputmode="none" (the vertical grid's letter-only trial notation) so a
+   numeric — or no — virtual keyboard shows instead of the full alphabet;
+   these buttons are the documented alternate path for the non-numeric
+   D5.2 markers (X foul, – pass, r retirement, o clear) so every marker
+   stays enterable without ever needing the alpha keyboard. Compact by
+   default; the touch-target rule above enlarges them under the phone
+   breakpoint alongside every other primary capture control. */
+.marker-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-1) 0;
+}
+.marker-btn {
+  padding: 0 var(--space-2);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Per-cell save-state feedback (SYS-148, UC-039 #4/#5): styles the
+   data-pending/data-state attributes islands/src/capture-offline.ts
+   already sets on `.cell-form` — never a parallel attribute — with a
+   left border AND a text/icon badge (`.cell-save-badge`, JS-inserted) so
+   the state is distinguishable by more than color, per WCAG 2.2 (color
+   is never the sole carrier of information) and this component reuses
+   `.cell-reject`'s already-token-driven color convention for the
+   rejected case. */
+.cell-form[data-pending="1"] {
+  border-left: var(--space-1) solid var(--color-info-fg);
+  padding-left: var(--space-1);
+}
+.cell-form[data-state="confirmed"] {
+  border-left: var(--space-1) solid var(--color-success-fg);
+  padding-left: var(--space-1);
+}
+.cell-save-badge {
+  display: inline-block;
+  margin-left: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+.cell-form[data-pending="1"] .cell-save-badge {
+  color: var(--color-info-fg);
+}
+.cell-form[data-state="confirmed"] .cell-save-badge {
+  color: var(--color-success-fg);
+}
+
+/* Track-row progressive disclosure (usability-audit F12, TASK-045): the
+   DQ-rule reference only matters once DQ is the selected status — shown
+   live via :has(), no script needed (the CSP forbids inline scripts).
+   `td.dq-rule-cell` matches `.stack-table td`'s specificity so the
+   card-layout rule above never re-reveals it; the mobile block below
+   re-affirms both the default-hidden state and the reveal at `display:
+   block` (not `table-cell`) for the row-card layout, in the same
+   cascade tier so the later rule wins at that viewport. */
+td.dq-rule-cell {
+  display: none;
+}
+tr:has(select[name="status"] option[value="DQ"]:checked) td.dq-rule-cell {
+  display: table-cell;
+}
+
+/* Compact per-row timing-method select (F12, TASK-045): the data model
+   stores timing per result (SYS-041 hand vs FAT provenance can differ
+   athlete to athlete within the same race), so the control stays
+   per-row rather than collapsing to one unit-level default — this only
+   narrows its width so it stops padding out the row. */
+.timing-select {
+  width: auto;
+  max-width: 11rem;
+}
+
+@media (max-width: 480px) {
+  td.dq-rule-cell {
+    display: none;
+  }
+  tr:has(select[name="status"] option[value="DQ"]:checked) td.dq-rule-cell {
+    display: block;
+  }
+  .timing-select {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Compact capture-page chrome (SYS-147, UC-039 #2): a small breadcrumb
+   line (the meet name) above a short, single-line title — replacing the
+   former "MeetName — Discipline" heading — so the first capture row sits
+   within the first 640px of page height at 360px width. The <title> tag
+   (browser tab) keeps the full "MeetName — Discipline" string the
+   handler already sets; only the on-page heading shortens. */
+.capture-context {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  opacity: 0.75;
+}
+.capture-title {
+  margin: var(--space-1) 0;
+}
+
+/* Sticky first column (SYS-147, UC-039 #1 — vertical-jump grid): the
+   height x trial matrix is inherently two-dimensional and does not
+   linearize into a one-column row-card the way the field-horizontal and
+   track grids do without hiding most of the in-progress state, so the
+   bib/name column is pinned while the height columns scroll within their
+   own `.table-scroll` container — the PAGE itself never gains horizontal
+   scroll (document.documentElement.scrollWidth), only this inner region
+   does. See design-system.md §2 for the documented trade-off. */
+@media (max-width: 480px) {
+  .vertical-grid-sticky th:first-child,
+  .vertical-grid-sticky th:nth-child(2),
+  .vertical-grid-sticky td:first-child,
+  .vertical-grid-sticky td:nth-child(2) {
+    position: sticky;
+    left: 0;
+    background: var(--color-bg);
+  }
+  .vertical-grid-sticky th:nth-child(2),
+  .vertical-grid-sticky td:nth-child(2) {
+    left: 3rem;
+  }
+}
