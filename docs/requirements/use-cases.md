@@ -676,3 +676,101 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
    each input shows a permanently visible label and visible constraint hints, and a
    submitted validation error renders inline at the field, states what to fix, and
    preserves the user's input (T).
+
+## UC-039 Volunteer mobile capture — MVP *(proposed 2026-08-06, pending founder ratification)*
+
+**Actors:** field official (volunteer, own phone).
+**Traces:** SYS-147, SYS-148 → STR-046, STR-035, STR-041.
+**Source:** volunteer walkthrough findings F2/F3 (`../delivery/usability-audit-volunteer-2026-08.md`).
+
+1. **Given** a capture unit page of each family (track, horizontal, vertical) rendered at a
+   360×740 viewport, **when** the operator captures a mark for any athlete, **then** the
+   mark input and its save control are operable without horizontal page scrolling
+   (`document.documentElement.scrollWidth` ≤ viewport width — Playwright mobile viewport).
+2. **Given** the same viewport, **then** the first capture row is visible within the first
+   640 px of page height without scrolling past chrome, and every primary capture control
+   (mark input, save, status select) has a hit target ≥44×44 CSS px (mechanical DOM audit;
+   no interactive element under 24×24 px).
+3. **Given** mark, time and wind inputs, **then** each declares a virtual-keyboard hint
+   (`inputmode`/`enterkeyhint`) appropriate to its format while the documented letter
+   markers (X/–/r) remain enterable.
+4. **Given** a mark saved while online, **then** the cell shows a pending state until the
+   server acknowledgment and a confirmed state after it, each distinguishable by more than
+   color, appearing within 500 ms of the state change; the row's derived result/points cells
+   update without a manual reload.
+5. **Given** a mark saved while offline, **then** the cell's pending state persists and the
+   existing status region (SYS-087) reflects the queued count until reconnection sync
+   confirms it.
+
+## UC-040 Truthful sync-failure handling & recovery — MVP *(proposed 2026-08-06, pending founder ratification)*
+
+**Actors:** field official; competition office.
+**Traces:** SYS-149 → STR-046, STR-041, STR-020.
+**Source:** volunteer walkthrough finding F1 (`../delivery/usability-audit-volunteer-2026-08.md`).
+
+1. **Given** a queued capture the server rejects as invalid (e.g. malformed mark), **when**
+   sync runs, **then** the rejection renders at the offending cell with a plain-language
+   reason, is not presented as a connectivity problem, and is not retried automatically.
+2. **Given** one rejected operation and other valid queued operations, **then** the valid
+   operations apply on the same or next sync cycle — a rejection never blocks the queue
+   (chaos-style e2e).
+3. **Given** a rejected operation, **then** the operator can correct the value or discard
+   the queued operation from the capture page, and the status region's pending count
+   reflects the outcome immediately.
+4. **Given** the operator's session expires while operations are queued, **when** sync next
+   runs, **then** the UI prompts re-authentication, the queue survives re-login, and pending
+   operations apply afterwards without re-entry (cf. SYS-087).
+5. **Given** any point in time, **then** the connectivity/status region never simultaneously
+   reports "all transferred" and a non-zero pending count.
+
+## UC-041 Task-first navigation & empty states — MVP *(proposed 2026-08-06, pending founder ratification)*
+
+**Actors:** competition-office volunteer; field official.
+**Traces:** SYS-151, SYS-152 → STR-035, STR-046, STR-045.
+**Source:** volunteer walkthrough findings F5/F7/F8 (`../delivery/usability-audit-volunteer-2026-08.md`); OQ-113.
+
+1. **Given** a competition-office session's home, **then** check-in, result
+   capture/reconciliation, roster and standings of each of its meets are each reachable
+   within two link activations (link-walk e2e, extending the TASK-043 pattern).
+2. **Given** a field official's home, **then** each assigned unit shows its localized
+   discipline name and, where scheduled, time and location, and links directly to its
+   capture page.
+3. **Given** any operator surface, **then** it is reachable through rendered links starting
+   from its role's home — no surface requires a typed URL.
+4. **Given** an operator list surface in an empty state (e.g. check-in with no entries),
+   **then** the page states why it is empty and the next step where one exists, and actions
+   that cannot apply (close check-in, bulk DNS with nothing to affect) are hidden or
+   disabled with the reason shown.
+5. **Given** an applicable bulk or destructive action, **then** its confirmation step states
+   the number of rows it will affect.
+
+## UC-042 Public find-your-athlete — MVP *(proposed 2026-08-06, pending founder ratification)*
+
+**Actors:** spectator/parent on a phone.
+**Traces:** SYS-153 → STR-022, STR-034.
+**Source:** volunteer walkthrough finding F9 (`../delivery/usability-audit-volunteer-2026-08.md`).
+
+1. **Given** a published meet's public results or start lists on a phone, **when** the
+   visitor filters by name, bib or club, **then** only matching rows (and their categories)
+   remain visible; without client-side scripting the same filter works via a full-page
+   round trip.
+2. **Given** the unfiltered page, **then** per-category jump navigation renders at the top
+   and each category heading links back to the top.
+3. **Given** the live results page with a filter applied, **then** a live update (SSE
+   refresh) does not clear the filter.
+
+## UC-043 Participant data correction — MVP *(proposed 2026-08-06, pending founder ratification)*
+
+**Actors:** competition office.
+**Traces:** SYS-150 → STR-035, STR-031.
+**Source:** volunteer walkthrough finding F4 (`../delivery/usability-audit-volunteer-2026-08.md`).
+
+1. **Given** a rostered participant, **when** office corrects name, birth year, sex, club or
+   bib, **then** the change is optimistic-version-guarded (a concurrent edit yields the
+   standard conflict error, input preserved) and takes effect on roster, start lists,
+   capture pages, standings and exports — including category re-derivation where birth year
+   or sex changed.
+2. **Given** a correction, **then** an audit row records actor, before/after values and
+   timestamp via the SYS-046 mechanism.
+3. **Given** a participant with captured results, **then** identity correction never alters
+   or re-scores captured marks.

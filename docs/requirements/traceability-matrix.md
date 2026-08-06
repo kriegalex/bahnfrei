@@ -30,9 +30,9 @@ Every STR maps to ≥1 SYS. (Priorities per StRS §3.)
 | STR-017 | SYS-048 *(Later)* |
 | STR-018 | SYS-060, SYS-061, SYS-062, SYS-063 *(L)*, SYS-064 *(L)*, SYS-078 *(L)* |
 | STR-019 | SYS-046, SYS-047 |
-| STR-020 | SYS-080 *(L — DEC-013)*, SYS-082 *(L)*, SYS-085, SYS-087, SYS-093, SYS-130 |
+| STR-020 | SYS-080 *(L — DEC-013)*, SYS-082 *(L)*, SYS-085, SYS-087, SYS-093, SYS-130, SYS-149 *(P)* |
 | STR-021 | SYS-083, SYS-085, SYS-086 |
-| STR-022 | SYS-070, SYS-071, SYS-074, SYS-113, SYS-122 |
+| STR-022 | SYS-070, SYS-071, SYS-074, SYS-113, SYS-122, SYS-153 *(P)* |
 | STR-023 | SYS-072, SYS-111 |
 | STR-024 | SYS-041, SYS-049, SYS-050, SYS-051, SYS-142 |
 | STR-025 | SYS-073, SYS-077, SYS-078 *(L)* |
@@ -41,25 +41,28 @@ Every STR maps to ≥1 SYS. (Priorities per StRS §3.)
 | STR-028 | SYS-070 |
 | STR-029 | SYS-003, SYS-005, SYS-010, SYS-052 |
 | STR-030 | SYS-052, SYS-010 (para extension: Later, DEC-007) |
-| STR-031 | SYS-091, SYS-092, SYS-093, SYS-100, SYS-101, SYS-102, SYS-104, SYS-105 |
+| STR-031 | SYS-091, SYS-092, SYS-093, SYS-100, SYS-101, SYS-102, SYS-104, SYS-105, SYS-150 *(P)* |
 | STR-032 | SYS-100, SYS-102, SYS-103 |
 | STR-033 | SYS-074, SYS-110, SYS-111 |
-| STR-034 | SYS-112, SYS-113, SYS-115 |
-| STR-035 | SYS-114, SYS-115, SYS-117, SYS-120, SYS-131 |
+| STR-034 | SYS-112, SYS-113, SYS-115, SYS-153 *(P)* |
+| STR-035 | SYS-114, SYS-115, SYS-117, SYS-120, SYS-131, SYS-147 *(P)*, SYS-150 *(P)*, SYS-151 *(P)*, SYS-152 *(P)* |
 | STR-036 | SYS-092, SYS-132, SYS-133, SYS-146, CON-02 |
 | STR-037 | SYS-062, SYS-073, SYS-078 *(L)*, SYS-105, SYS-144 |
 | STR-038 | SYS-092, SYS-104, SYS-116, SYS-140, SYS-141, SYS-142, SYS-143, SYS-144, SYS-145, SYS-146 |
 | STR-039 | SYS-084, SYS-131, SYS-132 |
 | STR-040 | SYS-090, SYS-091, SYS-086 |
-| STR-041 | SYS-081, SYS-084, SYS-085, SYS-086, SYS-087, SYS-130 |
+| STR-041 | SYS-081, SYS-084, SYS-085, SYS-086, SYS-087, SYS-130, SYS-148 *(P)*, SYS-149 *(P)* |
 | STR-042 | SYS-076, SYS-077, SYS-078 *(L)* |
 | STR-043 | SYS-053, SYS-077 |
 | STR-044 | SYS-115 |
-| STR-045 | SYS-116, SYS-117 |
+| STR-045 | SYS-116, SYS-117, SYS-152 *(P)* |
+| STR-046 *(P)* | SYS-147 *(P)*, SYS-148 *(P)*, SYS-149 *(P)*, SYS-151 *(P)* |
 
-**Coverage check:** 45/45 STR covered. Zero orphan stakeholder requirements.
+**Coverage check:** 46/46 STR covered. Zero orphan stakeholder requirements.
 *(2026-07-05 delta: STR-042/043 added from founder answers; STR-030 re-scoped per DEC-007.
-2026-07-13 delta: STR-044/045 added from founder UX request.)*
+2026-07-13 delta: STR-044/045 added from founder UX request. 2026-08-06 delta: STR-046 and
+SYS-147–153 added from the volunteer usability walkthrough — marked *(P)* = proposed,
+pending founder ratification; see `../delivery/usability-audit-volunteer-2026-08.md`.)*
 
 ## 2. System requirements → Use-cases → verification
 
@@ -159,8 +162,17 @@ inspection/analysis procedure.
 | SYS-145 | ADR inventory inspection at each gate | I | Phase B |
 | SYS-146 | Repository inspection before first release; release-workflow inspection/CI | I | TASK-001: `LICENSE` (AGPL-3.0-only), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, CI SPDX+DCO gates (`.github/workflows/governance.yml`). TASK-028: the documented release process, `docs/ops/release-process.md` (SemVer versioning, `CHANGELOG.md`, artifact build via `scripts/build-release.sh`, checksum/signing stance — OQ-087, container publication — OQ-086, support window — OQ-088) plus the per-OS binaries and container image it produces, verified by actually building all five targets and the Dockerfile in this task. TASK-037 (DEC-017/018/019, closes OQ-086/087/088): `.github/workflows/release.yml` — tag-triggered (`vX.Y.Z`) publish workflow, rebuilding artifacts via `scripts/build-release.sh --skip-image`, pushing the container image to GHCR tagged `<version>`+`latest`, cosign-keyless-signing the image (by digest) and `checksums.txt`, and attaching every artifact to the GitHub release; verified by running `scripts/build-release.sh 0.0.0-dev --skip-image` locally in this task (real triggered-tag-push behavior can only be proven by an actual tag push, a human/CI action outside this task's scope) plus manual workflow review (`actionlint` unavailable in this environment). `docs/ops/release-process.md` §4/§5/§6 updated to the resolved GHCR/cosign/support-window state with verification commands |
 
-**Coverage check:** all SYS verified; every UC traces to ≥1 SYS (see UC index). Zero orphans
-in either direction.
+| SYS-147 *(P)* | UC-039 #1–#3 | T | Planned — TASK-045 (M4). Proposed 2026-08-06 from the volunteer walkthrough (F2: capture table 589/980 px wide at 360 px viewport; 24 px touch targets; no `inputmode`); pending founder ratification |
+| SYS-148 *(P)* | UC-039 #4–#5 | T | Planned — TASK-045 (M4). Walkthrough F3: `data-pending` has no visual rendering; result/points cells only update on reload |
+| SYS-149 *(P)* | UC-040 #1–#5 | T | Planned — TASK-044 (M4). Walkthrough F1 (Critical): 4xx sync rejections retried forever as "Verbindung unterbrochen", queue head-of-line wedge, contradictory status line |
+| SYS-150 *(P)* | UC-043 #1–#3 | T | Planned — TASK-049 (M4). Walkthrough F4: no participant identity correction path exists (only bib / out-of-competition mutations) |
+| SYS-151 *(P)* | UC-041 #1–#3 | T/I | Planned — TASK-046 (M4). Walkthrough F5; ratification would also answer OQ-113 |
+| SYS-152 *(P)* | UC-041 #4–#5 | T/I | Planned — TASK-047 (M4). Walkthrough F7/F8 |
+| SYS-153 *(P)* | UC-042 #1–#3 | T | Planned — TASK-048 (M4). Walkthrough F9 |
+
+**Coverage check:** all baselined SYS verified; every UC traces to ≥1 SYS (see UC index).
+Zero orphans in either direction. SYS-147–153 are *(P)* proposed (2026-08-06 volunteer
+walkthrough), planned against TASK-044…049 — not yet verified, pending founder ratification.
 
 ## 3. Baseline QA status (Phase A definition-of-done self-check)
 
