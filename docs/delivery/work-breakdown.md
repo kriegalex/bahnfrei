@@ -98,6 +98,12 @@ real server). Per UC-038 #3, the two Critical findings (F1/F2 → TASK-044/TASK-
 | TASK-049 | Participant identity correction (walkthrough F4): office edit of name/birth year/sex/club/bib — version-guarded, audited via the SYS-046 mechanism, propagates to roster/start lists/capture/standings/exports, never re-scores captured marks; the tricky part is category re-derivation on birth-year/sex change (standings category move) and bib-uniqueness on bib change; uses the TASK-034 FieldErrors + confirm conventions | SYS-150; UC-043 | — | Sonnet | M |
 | TASK-050 | Localization & UI hygiene sweep (walkthrough F6/F11 — defects vs existing SYS-110/111/116, no new requirement): localized discipline names on the assignments dashboard, capture pages and meet-hub programme/timetable (the standings path already localizes — reuse it); operator-facing timestamps in the meet's local timezone with locale formatting (no raw UTC); fix the htmx CSP inline-style console error (htmx config or hashed style); serve a neutral placeholder favicon to stop the per-page 404 (final icon awaits OQ-061 branding); regression tests pin localized discipline rendering per surface | SYS-110, SYS-111, SYS-116 | — | Sonnet | S |
 
+## Release-0.1 polish
+
+| ID | Description | Traces | Depends on | Tier | Size |
+|----|-------------|--------|------------|------|------|
+| TASK-051 | Release-0.1 audit Minor cleanup (`usability-audit-2026-08-r01.md` N1–N4): N1 localize the check-in page heading's discipline name (the TASK-050 sweep missed this surface — reuse its view-struct-layer localization path); N2 make the "Meine Meldungen" empty state's next-step copy conditional on whether entry forms actually render (closed entry window must not point at "Formulare oben"); N3 singular/plural forms for `public.filter.count` ("1 Ergebnisse"); N4 24 px min-height token for `<select>` controls (locale switcher is 109×21). DE/FR + regenerated pseudo-locale; regression tests pin N1–N3 | SYS-110/111, SYS-152, SYS-116 | M4 | Sonnet | S |
+
 ## Later (not scheduled; triggers noted)
 
 | Item | Trigger |
