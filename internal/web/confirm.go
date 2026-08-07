@@ -92,6 +92,25 @@ type confirmView struct {
 	PasswordField      string
 	PasswordFieldLabel string
 	PasswordFieldErr   string
+	// Danger selects confirmPage's danger button style (DEC-037, TASK-057)
+	// over the default primary one: reserved for the truly destructive/
+	// unrecoverable actions (athlete erasure, retention purge) plus
+	// bulk-DNS (marks every remaining entry DNS in one irreversible pass) —
+	// the founder's review named these explicitly. Account disable,
+	// account reset and meet archive stay primary: each is reversible (an
+	// "enable" action exists, a temporary password can be reset again, a
+	// status change is not data destruction) per the package doc above.
+	Danger bool
+}
+
+// ConfirmButtonClass picks confirmPage's submit-button style (DEC-037,
+// TASK-057): danger for the genuinely destructive/irreversible actions
+// (Danger above), primary for everything else on this shared page.
+func (v confirmView) ConfirmButtonClass() string {
+	if v.Danger {
+		return "button-danger"
+	}
+	return "button-primary"
 }
 
 func (s *Server) renderConfirm(w http.ResponseWriter, r *http.Request, p PageData, v confirmView, status int) {
@@ -255,6 +274,7 @@ func (s *Server) eraseConfirmView(p PageData, meetID, athleteID, name, bib, fiel
 		TypedConfirmField: "confirm_text",
 		TypedConfirmLabel: p.T("privacy.erase.confirm.typed_label", "token", token),
 		FieldErr:          fieldErr,
+		Danger:            true,
 	}
 }
 
@@ -302,5 +322,6 @@ func (s *Server) retentionPurgeConfirmView(r *http.Request, actor app.Session, p
 		TypedConfirmField: "confirm_text",
 		TypedConfirmLabel: p.T("privacy.retention.confirm.typed_label", "token", retentionPurgeConfirmToken),
 		FieldErr:          fieldErr,
+		Danger:            true,
 	}
 }

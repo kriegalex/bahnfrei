@@ -112,22 +112,31 @@ templ assignmentsDashboardPage(p PageData, v assignmentsDashboardView) {
 
 // loginPage renders the credential form (SYS-091). The username/password
 // fields are plain (no client-side islands here — that escape hatch is for
-// per-widget interactivity, ADR-003, not this shell).
+// per-widget interactivity, ADR-003, not this shell). DEC-037/TASK-057:
+// the founder's "looks like a 2000s site" review named this exact form as
+// a worst case — a bounded, centered `.form-panel` with stacked `.field`
+// label/input blocks replaces the former single wrapping row.
 templ loginPage(p PageData) {
 	@layout(p) {
-		<h1>{ p.T("auth.login.title") }</h1>
-		<form action="/login" method="post">
-			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>
-				{ p.T("auth.login.username") }
-				<input type="text" name="username" autocomplete="username" required?={ true }/>
-			</label>
-			<label>
-				{ p.T("auth.login.password") }
-				<input type="password" name="password" autocomplete="current-password" required?={ true }/>
-			</label>
-			<button type="submit">{ p.T("auth.login.submit") }</button>
-		</form>
+		<div class="form-panel">
+			<h1>{ p.T("auth.login.title") }</h1>
+			<form action="/login" method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<div class="field">
+					<label>
+						{ p.T("auth.login.username") }
+						<input type="text" name="username" autocomplete="username" required?={ true }/>
+					</label>
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("auth.login.password") }
+						<input type="password" name="password" autocomplete="current-password" required?={ true }/>
+					</label>
+				</div>
+				<button type="submit" class="button-primary">{ p.T("auth.login.submit") }</button>
+			</form>
+		</div>
 	}
 }
 

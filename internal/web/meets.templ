@@ -8,25 +8,33 @@ package web
 // browser — no configuration file, no CLI wizard (SYS-131).
 templ setupPage(p PageData) {
 	@layout(p) {
-		<h1>{ p.T("setup.title") }</h1>
-		<p>{ p.T("setup.intro") }</p>
-		<form action="/setup" method="post">
-			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>
-				{ p.T("setup.username") }
-				<input type="text" name="username" autocomplete="username" required?={ true }/>
-			</label>
-			<label>
-				{ p.T("setup.display_name") }
-				<input type="text" name="display_name" required?={ true }/>
-			</label>
-			<label>
-				{ p.T("setup.password") }
-				<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8" aria-describedby="setup-password-hint"/>
-			</label>
-			<p class="hint" id="setup-password-hint">{ p.T("setup.hint.password") }</p>
-			<button type="submit">{ p.T("setup.submit") }</button>
-		</form>
+		<div class="form-panel">
+			<h1>{ p.T("setup.title") }</h1>
+			<p>{ p.T("setup.intro") }</p>
+			<form action="/setup" method="post">
+				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+				<div class="field">
+					<label>
+						{ p.T("setup.username") }
+						<input type="text" name="username" autocomplete="username" required?={ true }/>
+					</label>
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("setup.display_name") }
+						<input type="text" name="display_name" required?={ true }/>
+					</label>
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("setup.password") }
+						<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8" aria-describedby="setup-password-hint"/>
+					</label>
+					<p class="hint" id="setup-password-hint">{ p.T("setup.hint.password") }</p>
+				</div>
+				<button type="submit" class="button-primary">{ p.T("setup.submit") }</button>
+			</form>
+		</div>
 	}
 }
 
@@ -72,135 +80,159 @@ templ meetsListPage(p PageData, rows []meetRowView) {
 templ meetFormPage(p PageData, f meetFormView, action string) {
 	@layout(p) {
 		<h1>{ p.T("meet.new.title") }</h1>
-		<form action={ templ.URL(action) } method="post">
+		<form action={ templ.URL(action) } method="post" class="form-grid">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
 			<input type="hidden" name="version" value={ intToStr(f.Version) }/>
-			<label>
-				{ p.T("meet.field.name") }
-				<input
-					type="text"
-					name="name"
-					value={ f.Name }
-					required?={ true }
-					if f.Errors.Has("name") {
-						aria-invalid="true"
-						aria-describedby={ fieldErrorID("name") }
-					}
-				/>
-			</label>
-			@fieldError("name", f.Errors)
-			<label>
-				{ p.T("meet.field.venue") }
-				<input
-					type="text"
-					name="venue"
-					value={ f.Venue }
-					required?={ true }
-					if f.Errors.Has("venue") {
-						aria-invalid="true"
-						aria-describedby={ fieldErrorID("venue") }
-					}
-				/>
-			</label>
-			@fieldError("venue", f.Errors)
-			<label>
-				{ p.T("meet.field.homologation") }
-				<input type="text" name="homologation_ref" value={ f.HomologationRef }/>
-			</label>
-			@helpIcon(p, "meet.homologation")
-			<label>
-				{ p.T("meet.field.start_date") }
-				<input
-					type="date"
-					name="start_date"
-					value={ f.StartDate }
-					required?={ true }
-					if f.Errors.Has("start_date") {
-						aria-invalid="true"
-						aria-describedby={ fieldErrorID("start_date") }
-					}
-				/>
-			</label>
-			@fieldError("start_date", f.Errors)
-			<label>
-				{ p.T("meet.field.end_date") }
-				<input
-					type="date"
-					name="end_date"
-					value={ f.EndDate }
-					required?={ true }
-					if f.Errors.Has("end_date") {
-						aria-invalid="true"
-						aria-describedby={ "meet-end-date-hint " + fieldErrorID("end_date") }
-					} else {
-						aria-describedby="meet-end-date-hint"
-					}
-				/>
-			</label>
-			<p class="hint" id="meet-end-date-hint">{ p.T("meet.hint.end_date") }</p>
-			@fieldError("end_date", f.Errors)
-			<label>
-				{ p.T("meet.field.tier") }
-				<select name="tier">
-					for _, tier := range f.Tiers {
-						<option value={ tier } selected?={ tier == f.Tier }>{ tier }</option>
-					}
-				</select>
-			</label>
-			@helpIcon(p, "meet.tier")
-			if f.SchemeFixed {
-				<input type="hidden" name="scheme" value={ f.SchemeID }/>
-			} else {
+			<div class="field">
 				<label>
-					{ p.T("meet.field.scheme") }
-					<select name="scheme">
-						for _, scheme := range f.Schemes {
-							<option value={ scheme } selected?={ scheme == f.SchemeID }>{ scheme }</option>
+					{ p.T("meet.field.name") }
+					<input
+						type="text"
+						name="name"
+						value={ f.Name }
+						required?={ true }
+						if f.Errors.Has("name") {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID("name") }
+						}
+					/>
+				</label>
+				@fieldError("name", f.Errors)
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("meet.field.venue") }
+					<input
+						type="text"
+						name="venue"
+						value={ f.Venue }
+						required?={ true }
+						if f.Errors.Has("venue") {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID("venue") }
+						}
+					/>
+				</label>
+				@fieldError("venue", f.Errors)
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("meet.field.homologation") }
+					<input type="text" name="homologation_ref" value={ f.HomologationRef }/>
+				</label>
+				@helpIcon(p, "meet.homologation")
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("meet.field.start_date") }
+					<input
+						type="date"
+						name="start_date"
+						value={ f.StartDate }
+						required?={ true }
+						if f.Errors.Has("start_date") {
+							aria-invalid="true"
+							aria-describedby={ fieldErrorID("start_date") }
+						}
+					/>
+				</label>
+				@fieldError("start_date", f.Errors)
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("meet.field.end_date") }
+					<input
+						type="date"
+						name="end_date"
+						value={ f.EndDate }
+						required?={ true }
+						if f.Errors.Has("end_date") {
+							aria-invalid="true"
+							aria-describedby={ "meet-end-date-hint " + fieldErrorID("end_date") }
+						} else {
+							aria-describedby="meet-end-date-hint"
+						}
+					/>
+				</label>
+				<p class="hint" id="meet-end-date-hint">{ p.T("meet.hint.end_date") }</p>
+				@fieldError("end_date", f.Errors)
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("meet.field.tier") }
+					<select name="tier">
+						for _, tier := range f.Tiers {
+							<option value={ tier } selected?={ tier == f.Tier }>{ tier }</option>
 						}
 					</select>
 				</label>
-				@helpIcon(p, "meet.scheme")
+				@helpIcon(p, "meet.tier")
+			</div>
+			if f.SchemeFixed {
+				<input type="hidden" name="scheme" value={ f.SchemeID }/>
+			} else {
+				<div class="field">
+					<label>
+						{ p.T("meet.field.scheme") }
+						<select name="scheme">
+							for _, scheme := range f.Schemes {
+								<option value={ scheme } selected?={ scheme == f.SchemeID }>{ scheme }</option>
+							}
+						</select>
+					</label>
+					@helpIcon(p, "meet.scheme")
+				</div>
 			}
 			<fieldset>
 				<legend>{ p.T("meet.field.sessions") }</legend>
 				<p>{ p.T("meet.sessions.hint") }</p>
 				for i, row := range f.Sessions {
-					<div class="session-row">
-						<label>
-							{ p.T("meet.field.session_day") }
-							<input type="date" name={ "session_day_" + intToStr(int64(i)) } value={ row.Day }/>
-						</label>
-						<label>
-							{ p.T("meet.field.session_label") }
-							<input type="text" name={ "session_label_" + intToStr(int64(i)) } value={ row.Label }/>
-						</label>
+					<div class="session-row form-row">
+						<div class="field">
+							<label>
+								{ p.T("meet.field.session_day") }
+								<input type="date" name={ "session_day_" + intToStr(int64(i)) } value={ row.Day }/>
+							</label>
+						</div>
+						<div class="field">
+							<label>
+								{ p.T("meet.field.session_label") }
+								<input type="text" name={ "session_label_" + intToStr(int64(i)) } value={ row.Label }/>
+							</label>
+						</div>
 					</div>
 				}
 			</fieldset>
 			<fieldset>
 				<legend>{ p.T("meet.field.results_positioning") }</legend>
 				<p>{ p.T("meet.results_positioning.hint") }</p>
-				<label>
-					{ p.T("meet.field.results_positioning") }
-					<select name="results_positioning">
-						for _, pos := range f.ResultsPositionings {
-							<option value={ pos } selected?={ pos == f.ResultsPositioning }>
-								{ p.T("meet.results_positioning.option." + pos) }
-							</option>
-						}
-					</select>
-				</label>
-				@helpIcon(p, "meet.results_positioning")
-				<label>
-					{ p.T("meet.field.official_source_name") }
-					<input type="text" name="official_source_name" value={ f.OfficialSourceName }/>
-				</label>
-				<label>
-					{ p.T("meet.field.official_source_url") }
-					<input type="url" name="official_source_url" value={ f.OfficialSourceURL }/>
-				</label>
+				<div class="field">
+					<label>
+						{ p.T("meet.field.results_positioning") }
+						<select name="results_positioning">
+							for _, pos := range f.ResultsPositionings {
+								<option value={ pos } selected?={ pos == f.ResultsPositioning }>
+									{ p.T("meet.results_positioning.option." + pos) }
+								</option>
+							}
+						</select>
+					</label>
+					@helpIcon(p, "meet.results_positioning")
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("meet.field.official_source_name") }
+						<input type="text" name="official_source_name" value={ f.OfficialSourceName }/>
+					</label>
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("meet.field.official_source_url") }
+						<input type="url" name="official_source_url" value={ f.OfficialSourceURL }/>
+					</label>
+				</div>
 			</fieldset>
-			<button type="submit">{ p.T("meet.form.save") }</button>
+			<button type="submit" class="button-primary">{ p.T("meet.form.save") }</button>
 		</form>
 	}
 }

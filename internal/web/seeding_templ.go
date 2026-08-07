@@ -702,7 +702,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\" method=\"post\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\" method=\"post\" class=\"form-row\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -715,14 +715,14 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\"> <label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\"><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.max_heat_size"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 87, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 88, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -743,20 +743,20 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.hint.max_heat_size"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 89, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 90, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</p><label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</p></div><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.track_lanes"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 90, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 93, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {
@@ -777,20 +777,20 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.hint.track_lanes"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 92, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 95, Col: 83}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</p><button type=\"submit\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</p></div><button type=\"submit\" class=\"button-primary\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var51 string
 			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.generate.submit"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 93, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 97, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 			if templ_7745c5c3_Err != nil {
@@ -808,7 +808,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 				var templ_7745c5c3_Var52 string
 				templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.tie.title"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 97, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 101, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 				if templ_7745c5c3_Err != nil {
@@ -821,7 +821,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.tie.hint", "mark", v.Tie.Mark, "slots", v.Tie.RemainingSlots))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 98, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 102, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 				if templ_7745c5c3_Err != nil {
@@ -839,7 +839,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var54 templ.SafeURL
 					templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/manual-advance"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 100, Col: 120}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 104, Col: 120}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 					if templ_7745c5c3_Err != nil {
@@ -852,7 +852,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRFToken)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 101, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 105, Col: 63}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 					if templ_7745c5c3_Err != nil {
@@ -865,7 +865,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue(te.EntryID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 102, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 106, Col: 60}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 					if templ_7745c5c3_Err != nil {
@@ -878,7 +878,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var57 string
 					templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(te.Who)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 103, Col: 13}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 107, Col: 13}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 					if templ_7745c5c3_Err != nil {
@@ -891,7 +891,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var58 string
 					templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.tie.advance"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 110, Col: 55}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 114, Col: 55}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 					if templ_7745c5c3_Err != nil {
@@ -915,7 +915,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 				var templ_7745c5c3_Var59 string
 				templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.empty"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 116, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 120, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 				if templ_7745c5c3_Err != nil {
@@ -934,7 +934,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var60 string
 					templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(u.Label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 119, Col: 17}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 123, Col: 17}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 					if templ_7745c5c3_Err != nil {
@@ -947,7 +947,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var61 string
 					templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("roster.name"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 124, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 128, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 					if templ_7745c5c3_Err != nil {
@@ -960,7 +960,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var62 string
 					templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("roster.club"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 125, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 129, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 					if templ_7745c5c3_Err != nil {
@@ -973,7 +973,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var63 string
 					templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("entries.seed"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 126, Col: 45}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 130, Col: 45}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 					if templ_7745c5c3_Err != nil {
@@ -986,7 +986,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var64 string
 					templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.lane"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 127, Col: 45}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 131, Col: 45}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 					if templ_7745c5c3_Err != nil {
@@ -999,7 +999,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var65 string
 					templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.qualification"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 128, Col: 54}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 132, Col: 54}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 					if templ_7745c5c3_Err != nil {
@@ -1012,7 +1012,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 					var templ_7745c5c3_Var66 string
 					templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.override"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 129, Col: 49}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 133, Col: 49}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 					if templ_7745c5c3_Err != nil {
@@ -1030,7 +1030,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var67 string
 						templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(row.Who)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 135, Col: 22}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 139, Col: 22}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 						if templ_7745c5c3_Err != nil {
@@ -1043,7 +1043,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var68 string
 						templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(row.ClubName)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 136, Col: 27}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 140, Col: 27}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 						if templ_7745c5c3_Err != nil {
@@ -1056,7 +1056,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var69 string
 						templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(row.SeedMark)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 137, Col: 27}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 141, Col: 27}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 						if templ_7745c5c3_Err != nil {
@@ -1069,7 +1069,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var70 string
 						templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(row.Lane)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 138, Col: 23}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 142, Col: 23}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 						if templ_7745c5c3_Err != nil {
@@ -1082,7 +1082,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var71 string
 						templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(row.Qualification)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 140, Col: 29}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 144, Col: 29}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 						if templ_7745c5c3_Err != nil {
@@ -1100,7 +1100,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 							var templ_7745c5c3_Var72 string
 							templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.manual"))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 142, Col: 42}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 146, Col: 42}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 							if templ_7745c5c3_Err != nil {
@@ -1118,7 +1118,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var73 templ.SafeURL
 						templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/seeding/override"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 146, Col: 128}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 150, Col: 128}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 						if templ_7745c5c3_Err != nil {
@@ -1131,7 +1131,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var74 string
 						templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRFToken)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 147, Col: 69}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 151, Col: 69}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
 						if templ_7745c5c3_Err != nil {
@@ -1144,7 +1144,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var75 string
 						templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.EntryID)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 148, Col: 67}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 152, Col: 67}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var75)
 						if templ_7745c5c3_Err != nil {
@@ -1157,7 +1157,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var76 string
 						templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Version)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 149, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 153, Col: 66}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 						if templ_7745c5c3_Err != nil {
@@ -1175,7 +1175,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 							var templ_7745c5c3_Var77 string
 							templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.ResolveAttributeValue(opt.UnitID)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 152, Col: 39}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 156, Col: 39}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var77)
 							if templ_7745c5c3_Err != nil {
@@ -1198,7 +1198,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 							var templ_7745c5c3_Var78 string
 							templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(opt.Label)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 152, Col: 90}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 156, Col: 90}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 							if templ_7745c5c3_Err != nil {
@@ -1216,7 +1216,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var79 string
 						templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Lane)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 155, Col: 68}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 159, Col: 68}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 						if templ_7745c5c3_Err != nil {
@@ -1229,7 +1229,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 						var templ_7745c5c3_Var80 string
 						templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.override"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 156, Col: 58}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 160, Col: 58}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 						if templ_7745c5c3_Err != nil {
@@ -1253,7 +1253,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var81 string
 			templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.title"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 167, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 171, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 			if templ_7745c5c3_Err != nil {
@@ -1266,33 +1266,33 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var82 templ.SafeURL
 			templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/advance"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 168, Col: 111}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 172, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "\" method=\"post\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "\" method=\"post\" class=\"form-row\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var83 string
 			templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRFToken)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 169, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 173, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var83)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 109, "\"> <label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 109, "\"><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var84 string
 			templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.top_n"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 170, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 175, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 			if templ_7745c5c3_Err != nil {
@@ -1306,14 +1306,14 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 111, "<label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 111, "</div><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var85 string
 			templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.fastest_k"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 172, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 179, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 			if templ_7745c5c3_Err != nil {
@@ -1327,14 +1327,14 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 113, "<label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 113, "</div><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var86 string
 			templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.standard"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 174, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 183, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 			if templ_7745c5c3_Err != nil {
@@ -1355,20 +1355,20 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var87 string
 			templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.hint.standard"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 176, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 185, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 116, "</p><label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 116, "</p></div><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var88 string
 			templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.capacity"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 177, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 188, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 			if templ_7745c5c3_Err != nil {
@@ -1382,14 +1382,14 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "<label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "</div><div class=\"field\"><label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var89 string
 			templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.better_direction"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 180, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 193, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 			if templ_7745c5c3_Err != nil {
@@ -1402,7 +1402,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var90 string
 			templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.higher"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 182, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 195, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 			if templ_7745c5c3_Err != nil {
@@ -1415,7 +1415,7 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			var templ_7745c5c3_Var91 string
 			templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.lower"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 183, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 196, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 			if templ_7745c5c3_Err != nil {
@@ -1429,14 +1429,14 @@ func seedingPage(p PageData, v seedingView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "<button type=\"submit\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 122, "</div><button type=\"submit\" class=\"button-primary\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var92 string
 			templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(p.T("seeding.advance.submit"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 187, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/seeding.templ`, Line: 201, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 			if templ_7745c5c3_Err != nil {

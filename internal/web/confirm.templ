@@ -18,7 +18,7 @@ templ confirmPage(p PageData, v confirmView) {
 		<h1>{ v.Title }</h1>
 		if v.Inapplicable {
 			<p role="status">{ v.Description }</p>
-			<p><a href={ templ.URL(v.CancelHref) }>{ p.T("confirm.back") }</a></p>
+			<p><a href={ templ.URL(v.CancelHref) } class="button">{ p.T("confirm.back") }</a></p>
 		} else {
 			<p class="error" role="alert">{ v.Description }</p>
 			<form action={ templ.URL(v.FormAction) } method="post">
@@ -63,8 +63,8 @@ templ confirmPage(p PageData, v confirmView) {
 						<p class="field-error" id={ fieldErrorID(v.PasswordField) } role="alert">{ v.PasswordFieldErr }</p>
 					}
 				}
-				<button type="submit">{ v.ConfirmLabel }</button>
-				<a href={ templ.URL(v.CancelHref) }>{ p.T("confirm.cancel") }</a>
+				<button type="submit" class={ v.ConfirmButtonClass() }>{ v.ConfirmLabel }</button>
+				<a href={ templ.URL(v.CancelHref) } class="button">{ p.T("confirm.cancel") }</a>
 			</form>
 		}
 	}

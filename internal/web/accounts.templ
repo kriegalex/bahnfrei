@@ -70,29 +70,37 @@ templ accountsPage(p PageData, v accountsView) {
 			</div>
 		}
 		<h2>{ p.T("accounts.new.title") }</h2>
-		<form action="/admin/accounts" method="post">
+		<form action="/admin/accounts" method="post" class="form-grid">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>
-				{ p.T("accounts.field.username") }
-				<input type="text" name="username" autocomplete="username" required?={ true }/>
-			</label>
-			<label>
-				{ p.T("accounts.field.display_name") }
-				<input type="text" name="display_name" required?={ true }/>
-			</label>
-			<label>
-				{ p.T("accounts.new.password") }
-				<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8"/>
-			</label>
-			<label>
-				{ p.T("accounts.field.role") }
-				<select name="role">
-					for _, ro := range v.Roles {
-						<option value={ ro.Value }>{ ro.Label }</option>
-					}
-				</select>
-			</label>
-			<button type="submit">{ p.T("accounts.new.submit") }</button>
+			<div class="field">
+				<label>
+					{ p.T("accounts.field.username") }
+					<input type="text" name="username" autocomplete="username" required?={ true }/>
+				</label>
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("accounts.field.display_name") }
+					<input type="text" name="display_name" required?={ true }/>
+				</label>
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("accounts.new.password") }
+					<input type="password" name="password" autocomplete="new-password" required?={ true } minlength="8"/>
+				</label>
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("accounts.field.role") }
+					<select name="role">
+						for _, ro := range v.Roles {
+							<option value={ ro.Value }>{ ro.Label }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="button-primary">{ p.T("accounts.new.submit") }</button>
 		</form>
 		// One-action backup (TASK-014, SYS-084, UC-020 #3) shares the
 		// instance-admin surface; a GET link is deliberate — the download

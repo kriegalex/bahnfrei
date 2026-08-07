@@ -307,10 +307,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 func basePageData(r *http.Request, cats i18n.Catalogs) PageData {
 	loc := localeFromContext(r.Context())
 	p := PageData{
-		Locale:    loc,
-		Locales:   []i18n.Locale{i18n.DE, i18n.FR},
-		Cats:      cats,
-		CSRFToken: csrfFromContext(r.Context()),
+		Locale:      loc,
+		Locales:     []i18n.Locale{i18n.DE, i18n.FR},
+		Cats:        cats,
+		CSRFToken:   csrfFromContext(r.Context()),
+		CurrentPath: r.URL.Path,
 	}
 	if s, ok := sessionFromContext(r.Context()); ok {
 		p.LoggedIn = true

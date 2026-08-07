@@ -5,6 +5,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kriegalex/bahnfrei/internal/web/i18n"
@@ -35,12 +36,27 @@ type PageData struct {
 	// FlashError, when non-empty, renders as a one-shot alert (e.g. a
 	// failed login attempt); it is never persisted.
 	FlashError string
+	// CurrentPath is the request's URL path (set once in basePageData from
+	// r.URL.Path), consumed only by NavCurrent below for the header nav's
+	// aria-current="page" indicator (DEC-037, TASK-057) — never rendered
+	// or otherwise inspected by a template directly.
+	CurrentPath string
 }
 
 // T looks up a localized, parameter-substituted message (see
 // i18n.Catalogs.Text).
 func (p PageData) T(key string, args ...string) string {
 	return p.Cats.Text(p.Locale, key, args...)
+}
+
+// NavCurrent reports whether the request path sits inside the nav section
+// rooted at prefix (an exact match, or one path segment deeper) — the
+// header nav's aria-current="page" indicator (DEC-037, TASK-057, SYS-116).
+// A prefix match rather than an exact one, since a section's own sub-pages
+// (e.g. "/meets/{id}") should still mark "Meets" current, not just the
+// section's own index route.
+func (p PageData) NavCurrent(prefix string) bool {
+	return p.CurrentPath == prefix || strings.HasPrefix(p.CurrentPath, prefix+"/")
 }
 
 // TPlural resolves base+".one" or base+".other" per i18n.PluralOne(p.Locale,

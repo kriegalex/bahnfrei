@@ -737,6 +737,10 @@ func (s *Server) handleCaptureBulkDNSConfirm(w http.ResponseWriter, r *http.Requ
 		Title:      p.T("capture.bulk_dns.confirm.title"),
 		FormAction: "/meets/" + meetID + "/capture/" + unitID + "/bulk-dns",
 		CancelHref: "/meets/" + meetID + "/capture/" + unitID,
+		// DEC-037/TASK-057: applies DNS to every remaining unstarted
+		// entry in one irreversible pass — named explicitly as a danger
+		// case in the founder's review.
+		Danger: true,
 	}
 	if n > 0 {
 		v.Description = p.T("capture.bulk_dns.confirm.description", "n", intToStr(int64(n)))

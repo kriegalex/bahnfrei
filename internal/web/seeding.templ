@@ -82,15 +82,19 @@ templ seedingPage(p PageData, v seedingView) {
 		}
 
 		<h2>{ p.T("seeding.generate.title") }</h2>
-		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/seeding/generate") } method="post">
+		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/seeding/generate") } method="post" class="form-row">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>{ p.T("seeding.max_heat_size") } <input type="number" name="max_heat_size" min="1" value="8" aria-describedby="seeding-max-heat-size-hint"/></label>
-			@helpIcon(p, "seeding.max_heat_size")
-			<p class="hint" id="seeding-max-heat-size-hint">{ p.T("seeding.hint.max_heat_size") }</p>
-			<label>{ p.T("seeding.track_lanes") } <input type="number" name="track_lanes" min="0" value="8" aria-describedby="seeding-track-lanes-hint"/></label>
-			@helpIcon(p, "seeding.track_lanes")
-			<p class="hint" id="seeding-track-lanes-hint">{ p.T("seeding.hint.track_lanes") }</p>
-			<button type="submit">{ p.T("seeding.generate.submit") }</button>
+			<div class="field">
+				<label>{ p.T("seeding.max_heat_size") } <input type="number" name="max_heat_size" min="1" value="8" aria-describedby="seeding-max-heat-size-hint"/></label>
+				@helpIcon(p, "seeding.max_heat_size")
+				<p class="hint" id="seeding-max-heat-size-hint">{ p.T("seeding.hint.max_heat_size") }</p>
+			</div>
+			<div class="field">
+				<label>{ p.T("seeding.track_lanes") } <input type="number" name="track_lanes" min="0" value="8" aria-describedby="seeding-track-lanes-hint"/></label>
+				@helpIcon(p, "seeding.track_lanes")
+				<p class="hint" id="seeding-track-lanes-hint">{ p.T("seeding.hint.track_lanes") }</p>
+			</div>
+			<button type="submit" class="button-primary">{ p.T("seeding.generate.submit") }</button>
 		</form>
 
 		if v.Tie != nil {
@@ -165,26 +169,36 @@ templ seedingPage(p PageData, v seedingView) {
 		}
 
 		<h2>{ p.T("seeding.advance.title") }</h2>
-		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/advance") } method="post">
+		<form action={ templ.URL("/meets/" + v.MeetID + "/events/" + v.EventID + "/rounds/" + v.RoundID + "/advance") } method="post" class="form-row">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>{ p.T("seeding.advance.top_n") } <input type="number" name="top_n" min="0" placeholder="0"/></label>
-			@helpIcon(p, "seeding.advance.top_n")
-			<label>{ p.T("seeding.advance.fastest_k") } <input type="number" name="fastest_k" min="0" placeholder="0"/></label>
-			@helpIcon(p, "seeding.advance.fastest_k")
-			<label>{ p.T("seeding.advance.standard") } <input type="text" name="standard" placeholder="" aria-describedby="seeding-advance-standard-hint"/></label>
-			@helpIcon(p, "seeding.advance.standard")
-			<p class="hint" id="seeding-advance-standard-hint">{ p.T("seeding.hint.standard") }</p>
-			<label>{ p.T("seeding.advance.capacity") } <input type="number" name="finals_capacity" min="0" placeholder="0"/></label>
-			@helpIcon(p, "seeding.advance.capacity")
-			<label>
-				{ p.T("seeding.advance.better_direction") }
-				<select name="better_direction">
-					<option value="higher">{ p.T("seeding.advance.higher") }</option>
-					<option value="lower">{ p.T("seeding.advance.lower") }</option>
-				</select>
-			</label>
-			@helpIcon(p, "seeding.advance.better_direction")
-			<button type="submit">{ p.T("seeding.advance.submit") }</button>
+			<div class="field">
+				<label>{ p.T("seeding.advance.top_n") } <input type="number" name="top_n" min="0" placeholder="0"/></label>
+				@helpIcon(p, "seeding.advance.top_n")
+			</div>
+			<div class="field">
+				<label>{ p.T("seeding.advance.fastest_k") } <input type="number" name="fastest_k" min="0" placeholder="0"/></label>
+				@helpIcon(p, "seeding.advance.fastest_k")
+			</div>
+			<div class="field">
+				<label>{ p.T("seeding.advance.standard") } <input type="text" name="standard" placeholder="" aria-describedby="seeding-advance-standard-hint"/></label>
+				@helpIcon(p, "seeding.advance.standard")
+				<p class="hint" id="seeding-advance-standard-hint">{ p.T("seeding.hint.standard") }</p>
+			</div>
+			<div class="field">
+				<label>{ p.T("seeding.advance.capacity") } <input type="number" name="finals_capacity" min="0" placeholder="0"/></label>
+				@helpIcon(p, "seeding.advance.capacity")
+			</div>
+			<div class="field">
+				<label>
+					{ p.T("seeding.advance.better_direction") }
+					<select name="better_direction">
+						<option value="higher">{ p.T("seeding.advance.higher") }</option>
+						<option value="lower">{ p.T("seeding.advance.lower") }</option>
+					</select>
+				</label>
+				@helpIcon(p, "seeding.advance.better_direction")
+			</div>
+			<button type="submit" class="button-primary">{ p.T("seeding.advance.submit") }</button>
 		</form>
 	}
 }

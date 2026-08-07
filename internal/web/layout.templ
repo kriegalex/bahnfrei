@@ -38,41 +38,45 @@ templ layout(p PageData) {
 			<header>
 				<nav aria-label={ p.T("nav.aria_label") }>
 					<a href="/" class="brand">{ p.T("app.title") }</a>
-					if p.CanOrganize {
-						<a href="/meets">{ p.T("nav.meets") }</a>
-					}
-					if p.CanViewAudit {
-						<a href="/audit">{ p.T("nav.audit") }</a>
-					}
-					if p.CanManageAccounts {
-						<a href="/admin">{ p.T("nav.accounts") }</a>
-					}
-					if p.LoggedIn {
-						<span class="who">{ p.T("auth.logged_in_as", "name", p.Username) }</span>
-						<form action="/logout" method="post" class="inline-form">
-							<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-							<button type="submit">{ p.T("nav.logout") }</button>
+					<div class="nav-links">
+						if p.CanOrganize {
+							<a href="/meets" class="nav-link" if p.NavCurrent("/meets") { aria-current="page" }>{ p.T("nav.meets") }</a>
+						}
+						if p.CanViewAudit {
+							<a href="/audit" class="nav-link" if p.NavCurrent("/audit") { aria-current="page" }>{ p.T("nav.audit") }</a>
+						}
+						if p.CanManageAccounts {
+							<a href="/admin" class="nav-link" if p.NavCurrent("/admin") { aria-current="page" }>{ p.T("nav.accounts") }</a>
+						}
+					</div>
+					<div class="nav-actions">
+						if p.LoggedIn {
+							<span class="who">{ p.T("auth.logged_in_as", "name", p.Username) }</span>
+							<form action="/logout" method="post" class="inline-form">
+								<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+								<button type="submit" class="button">{ p.T("nav.logout") }</button>
+							</form>
+						} else {
+							<a href="/login" class="nav-link" if p.NavCurrent("/login") { aria-current="page" }>{ p.T("nav.login") }</a>
+						}
+						<form action="/locale" method="get" class="inline-form locale-switch">
+							<label>
+								{ p.T("footer.locale_switch") }
+								<select name="lang" onchange="this.form.submit()">
+									for _, loc := range p.Locales {
+										<option value={ string(loc) } selected?={ loc == p.Locale }>
+											{ localeLabel(p, loc) }
+										</option>
+									}
+								</select>
+							</label>
+							// The onchange auto-submit above is a convenience, not the only
+							// way to act (WCAG 2.2 SC 3.2.2 "On Input", AA): a person using a
+							// screen reader or with JS/onchange-triggered submits disabled
+							// still has an explicit, predictable control to apply the choice.
+							<button type="submit" class="button">{ p.T("footer.locale_apply") }</button>
 						</form>
-					} else {
-						<a href="/login">{ p.T("nav.login") }</a>
-					}
-					<form action="/locale" method="get" class="inline-form locale-switch">
-						<label>
-							{ p.T("footer.locale_switch") }
-							<select name="lang" onchange="this.form.submit()">
-								for _, loc := range p.Locales {
-									<option value={ string(loc) } selected?={ loc == p.Locale }>
-										{ localeLabel(p, loc) }
-									</option>
-								}
-							</select>
-						</label>
-						// The onchange auto-submit above is a convenience, not the only
-						// way to act (WCAG 2.2 SC 3.2.2 "On Input", AA): a person using a
-						// screen reader or with JS/onchange-triggered submits disabled
-						// still has an explicit, predictable control to apply the choice.
-						<button type="submit">{ p.T("footer.locale_apply") }</button>
-					</form>
+					</div>
 				</nav>
 			</header>
 			if p.LoggedIn {
