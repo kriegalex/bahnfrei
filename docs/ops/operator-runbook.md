@@ -19,6 +19,15 @@ directly. A `meet_organizer`+ account manages the meet from a single instance-wi
 (`/meets`); every other role works from meet-scoped links the organizer shares out of band (there
 is no public directory of meets to browse — see the hub landing page, `docs/ops/quickstart.md`).
 
+**A volunteer locked out on meet morning does not need a new account.** On the accounts page,
+next to that account's row, use **Passwort zurücksetzen / Réinitialiser le mot de passe** to set
+a new temporary password — type it in yourself or hand out something short and memorable, since
+it only has to survive one login. Confirming immediately signs that account's device out of any
+session it was still logged into and forces a password change on the very next login: the
+volunteer signs in once with the temporary password, is taken straight to a change-password
+screen, sets their own new password there, and only then reaches the rest of the app. No email or
+outside network access is involved, so this works over the venue hotspot with no internet at all.
+
 ## 2. Network kit for a meet day ([ADR-002](../architecture/adr/ADR-002-deployment-and-application-model.md) v2)
 
 Bahnfrei is **hub-first**: one self-hosted server instance (the "hub") holds the meet, reachable

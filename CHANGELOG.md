@@ -6,7 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet since 0.1.0.
+### Added
+
+- Admin-issued password reset: an instance administrator can set a new temporary password
+  for any locked-out account from the accounts page. It signs that account out of every
+  active session, and the next login is forced through a change-password step before
+  reaching anything else — no email or outside network access required.
 
 ## [0.1.0] — first public release
 
