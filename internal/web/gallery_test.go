@@ -28,6 +28,8 @@ func TestDesignGalleryRendersEveryInventoriedComponentSYS116UC038_2(t *testing.T
 
 	wantIDs := []string{
 		"gallery-button-default",
+		"gallery-button-primary",
+		"gallery-button-danger",
 		"gallery-button-disabled",
 		"gallery-link-default",
 		"gallery-input-text",

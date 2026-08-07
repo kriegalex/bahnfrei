@@ -20,7 +20,13 @@ templ galleryPage(p PageData) {
 		<p>{ p.T("gallery.intro") }</p>
 
 		<h2>{ p.T("gallery.section.buttons") }</h2>
+		// Three documented, token-driven button styles (DEC-037, TASK-057):
+		// the unclassed default below IS the secondary style (a bare
+		// <button> renders it with no class needed), plus the explicit
+		// primary/danger modifiers.
 		<button type="button" id="gallery-button-default">{ p.T("gallery.button.enabled") }</button>
+		<button type="button" id="gallery-button-primary" class="button-primary">{ p.T("gallery.button.enabled") }</button>
+		<button type="button" id="gallery-button-danger" class="button-danger">{ p.T("gallery.button.enabled") }</button>
 		<button type="button" id="gallery-button-disabled" disabled?={ true }>{ p.T("gallery.button.disabled") }</button>
 
 		<h2>{ p.T("gallery.section.links") }</h2>

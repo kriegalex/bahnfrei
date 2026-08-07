@@ -148,6 +148,14 @@ func contrastRatio(r1, g1, b1, r2, g2, b2 float64) float64 {
 // -fg / danger-fg color used standalone as text/border color directly on
 // the page background (.cell-save-badge, .error, .field-error, border-
 // left rules) — not just inside its own tinted chip.
+//
+// DEC-037/TASK-057 extends this with every NEW pair the component-chrome
+// pass introduced: --color-accent-hover (the primary button's hover
+// background and the link/brand hover text color) and --color-surface
+// (form panels/cards, secondary buttons) each paired with every
+// foreground actually rendered on them, plus the danger button's own
+// hover swap (reusing the existing warning-strong/danger tokens, not a
+// new color).
 func TestTokensCSSContrastPairsMeetWCAG_AA_SYS116_DEC036(t *testing.T) {
 	data, err := fs.ReadFile(staticAssets, "static/tokens.css")
 	if err != nil {
@@ -178,6 +186,12 @@ func TestTokensCSSContrastPairsMeetWCAG_AA_SYS116_DEC036(t *testing.T) {
 		{"success-fg used standalone on page bg (.cell-save-badge, border-left)", "color-success-fg", "color-bg", normalText},
 		{"warning-fg used standalone on page bg (border-left, .offline-status[data-state=offline] text reused elsewhere)", "color-warning-fg", "color-bg", normalText},
 		{"info-fg used standalone on page bg (.cell-save-badge, border-left)", "color-info-fg", "color-bg", normalText},
+		// DEC-037/TASK-057 additions:
+		{"primary button hover: --color-accent-fg on --color-accent-hover", "color-accent-fg", "color-accent-hover", normalText},
+		{"link/brand hover text: --color-accent-hover on --color-bg", "color-accent-hover", "color-bg", normalText},
+		{"text on --color-surface (form panels, secondary buttons): --color-fg on --color-surface", "color-fg", "color-surface", normalText},
+		{"danger text on --color-surface (field-error inside a form panel): --color-danger-fg on --color-surface", "color-danger-fg", "color-surface", normalText},
+		{"danger button hover: --color-warning-strong-fg on --color-danger-fg", "color-warning-strong-fg", "color-danger-fg", normalText},
 	}
 
 	for _, p := range pairs {
