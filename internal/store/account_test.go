@@ -102,6 +102,83 @@ func TestUpdateAccountPasswordHash(t *testing.T) {
 	}
 }
 
+// TestResetAccountPasswordSetsMustChangePassword covers the TASK-053 store
+// primitive behind an admin-issued reset: the stored hash is rewritten and
+// must_change_password flips to true, using the shared optimistic-
+// concurrency guard.
+func TestResetAccountPasswordSetsMustChangePassword(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	acct, err := CreateAccount(ctx, s.DB(), Account{Username: "dave", DisplayName: "Dave", PasswordHash: "old-hash", Role: "competition_office"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.MustChangePassword {
+		t.Error("a freshly created account must not start must-change-password")
+	}
+
+	newVersion, err := ResetAccountPassword(ctx, s.DB(), acct.ID, "temp-hash", acct.Version)
+	if err != nil {
+		t.Fatalf("ResetAccountPassword: %v", err)
+	}
+	if newVersion != acct.Version+1 {
+		t.Errorf("newVersion = %d, want %d", newVersion, acct.Version+1)
+	}
+
+	got, err := GetAccountByID(ctx, s.DB(), acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PasswordHash != "temp-hash" {
+		t.Errorf("PasswordHash = %q, want %q", got.PasswordHash, "temp-hash")
+	}
+	if !got.MustChangePassword {
+		t.Error("MustChangePassword = false after ResetAccountPassword, want true")
+	}
+
+	// Stale version must be rejected (optimistic concurrency, ADR-004 §2).
+	if _, err := ResetAccountPassword(ctx, s.DB(), acct.ID, "stale-hash", acct.Version); !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("stale reset error = %v, want ErrVersionConflict", err)
+	}
+}
+
+// TestCompletePasswordChangeClearsMustChangePassword covers the TASK-053
+// store primitive behind the forced change-password step: the stored hash
+// is rewritten and must_change_password flips back to false.
+func TestCompletePasswordChangeClearsMustChangePassword(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	acct, err := CreateAccount(ctx, s.DB(), Account{Username: "erin", DisplayName: "Erin", PasswordHash: "old-hash", Role: "competition_office"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterReset, err := ResetAccountPassword(ctx, s.DB(), acct.ID, "temp-hash", acct.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newVersion, err := CompletePasswordChange(ctx, s.DB(), acct.ID, "final-hash", afterReset)
+	if err != nil {
+		t.Fatalf("CompletePasswordChange: %v", err)
+	}
+	if newVersion != afterReset+1 {
+		t.Errorf("newVersion = %d, want %d", newVersion, afterReset+1)
+	}
+
+	got, err := GetAccountByID(ctx, s.DB(), acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PasswordHash != "final-hash" {
+		t.Errorf("PasswordHash = %q, want %q", got.PasswordHash, "final-hash")
+	}
+	if got.MustChangePassword {
+		t.Error("MustChangePassword = true after CompletePasswordChange, want false")
+	}
+}
+
 func TestCountAccounts(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

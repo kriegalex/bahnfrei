@@ -25,7 +25,12 @@ type Account struct {
 	// for a freshly created account; CreateAccount ignores any caller-set
 	// value on this field for that reason.
 	Enabled bool
-	Version int64
+	// MustChangePassword marks a temporary password an instance admin just
+	// set via ResetAccountPassword (TASK-053, SYS-091): the next login is
+	// forced through a change-password step (web layer) before reaching
+	// anything else. Always false for a freshly created account.
+	MustChangePassword bool
+	Version            int64
 }
 
 // ErrDuplicateUsername means the username is already taken.
@@ -37,9 +42,10 @@ func CreateAccount(ctx context.Context, db DBTX, a Account) (Account, error) {
 	a.ID = NewID()
 	a.Version = 1
 	a.Enabled = true
+	a.MustChangePassword = false
 	_, err := db.ExecContext(ctx, `INSERT INTO accounts
-		(id, username, display_name, password_hash, role, enabled, version)
-		VALUES (?, ?, ?, ?, ?, 1, ?)`,
+		(id, username, display_name, password_hash, role, enabled, must_change_password, version)
+		VALUES (?, ?, ?, ?, ?, 1, 0, ?)`,
 		a.ID, a.Username, a.DisplayName, a.PasswordHash, a.Role, a.Version)
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -53,20 +59,20 @@ func CreateAccount(ctx context.Context, db DBTX, a Account) (Account, error) {
 // GetAccountByUsername looks up an account by its unique username.
 func GetAccountByUsername(ctx context.Context, db DBTX, username string) (Account, error) {
 	return scanAccount(db.QueryRowContext(ctx, `SELECT id, username, display_name,
-		password_hash, role, enabled, version FROM accounts WHERE username = ?`, username))
+		password_hash, role, enabled, must_change_password, version FROM accounts WHERE username = ?`, username))
 }
 
 // GetAccountByID looks up an account by its primary key.
 func GetAccountByID(ctx context.Context, db DBTX, id string) (Account, error) {
 	return scanAccount(db.QueryRowContext(ctx, `SELECT id, username, display_name,
-		password_hash, role, enabled, version FROM accounts WHERE id = ?`, id))
+		password_hash, role, enabled, must_change_password, version FROM accounts WHERE id = ?`, id))
 }
 
 // ListAccounts returns every account ordered by username (TASK-013 account
 // administration view, SYS-090).
 func ListAccounts(ctx context.Context, db DBTX) ([]Account, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, username, display_name,
-		password_hash, role, enabled, version FROM accounts ORDER BY username`)
+		password_hash, role, enabled, must_change_password, version FROM accounts ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +81,12 @@ func ListAccounts(ctx context.Context, db DBTX) ([]Account, error) {
 	var out []Account
 	for rows.Next() {
 		var a Account
-		var enabled int
-		if err := rows.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &a.Version); err != nil {
+		var enabled, mustChange int
+		if err := rows.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &mustChange, &a.Version); err != nil {
 			return nil, err
 		}
 		a.Enabled = enabled != 0
+		a.MustChangePassword = mustChange != 0
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -87,8 +94,8 @@ func ListAccounts(ctx context.Context, db DBTX) ([]Account, error) {
 
 func scanAccount(row *sql.Row) (Account, error) {
 	var a Account
-	var enabled int
-	err := row.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &a.Version)
+	var enabled, mustChange int
+	err := row.Scan(&a.ID, &a.Username, &a.DisplayName, &a.PasswordHash, &a.Role, &enabled, &mustChange, &a.Version)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return Account{}, ErrNotFound
@@ -96,6 +103,7 @@ func scanAccount(row *sql.Row) (Account, error) {
 		return Account{}, err
 	}
 	a.Enabled = enabled != 0
+	a.MustChangePassword = mustChange != 0
 	return a, nil
 }
 
@@ -105,6 +113,26 @@ func scanAccount(row *sql.Row) (Account, error) {
 func UpdateAccountPasswordHash(ctx context.Context, db DBTX, id string, expectedVersion int64, newHash string) (int64, error) {
 	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
 		Set{Column: "password_hash", Value: newHash})
+}
+
+// ResetAccountPassword rewrites an account's stored hash and marks it
+// must-change-password (TASK-053, DEC-030, SYS-090/091): an instance
+// admin's one-time temporary password for a locked-out account. The
+// temporary password only ever grants access to the forced change-password
+// step — see CompletePasswordChange.
+func ResetAccountPassword(ctx context.Context, db DBTX, id string, newHash string, expectedVersion int64) (int64, error) {
+	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
+		Set{Column: "password_hash", Value: newHash},
+		Set{Column: "must_change_password", Value: 1})
+}
+
+// CompletePasswordChange rewrites an account's stored hash and clears
+// must_change_password (TASK-053, SYS-091): called when an operator
+// completes the forced change-password step after an admin-issued reset.
+func CompletePasswordChange(ctx context.Context, db DBTX, id string, newHash string, expectedVersion int64) (int64, error) {
+	return OptimisticUpdate(ctx, db, "accounts", id, expectedVersion,
+		Set{Column: "password_hash", Value: newHash},
+		Set{Column: "must_change_password", Value: 0})
 }
 
 // SetAccountEnabled flips an account's enabled flag (TASK-013 disable/enable
