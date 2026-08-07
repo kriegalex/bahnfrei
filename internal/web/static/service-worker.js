@@ -18,9 +18,23 @@
 //
 // Its own tsconfig (WebWorker lib) — the DOM lib the other islands use is
 // incompatible in a single TS program.
+//
+// CACHE embeds the literal placeholder "%BUNDLE_HASH%", substituted with
+// the current combined static-asset fingerprint at serve time
+// (handleServiceWorker in internal/web/static.go, DEC-039/TASK-059): a
+// deploy that changes any static asset changes this constant, so the
+// worker script's bytes change, the browser (which always re-checks a
+// Cache-Control: no-cache script) installs the new worker, and the
+// existing "activate" handler below deletes the previous cache name.
+//
+// ASSETS itself stays un-fingerprinted: network-first means these entries
+// are only ever read from the cache while offline (see networkFirst
+// below), where a byte-identical-but-differently-named URL would just be a
+// second cache miss, not a correctness issue — online, every request goes
+// to the network first regardless of what is cached.
 /// <reference lib="webworker" />
 const sw = self;
-const CACHE = "bahnfrei-capture-v1";
+const CACHE = "bahnfrei-capture-%BUNDLE_HASH%";
 const ASSETS = [
     "/static/htmx.min.js",
     "/static/base.css",
