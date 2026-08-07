@@ -729,13 +729,14 @@ func TestResolveTimingConflictUnknownActionFails(t *testing.T) {
 }
 
 // TestResolveTimingConflictMergeFillsBlanksOnly covers the "merge" action
-// (never exercised by the existing keep/replace-only tests): an existing
-// DNS status with no mark, merged with an imported row that carries a mark
-// but no status, keeps the DNS (existing.Status wins) and the mark from the
-// import fills the previously-blank field — but since the merged row still
-// carries a non-none status, applyTimingRow never stores the mark (a DQ/DNS
-// carries no time), so the final result is DNS with no mark, not a mix of
-// both.
+// (never exercised by the existing keep/replace-only tests) end to end
+// through ImportTimingFile/ResolveTimingConflict: an existing DNS status
+// with no mark, merged with an imported row that carries a mark but no
+// status, keeps the DNS (existing.Status wins, never overwritten) *and*
+// attaches the imported mark to the previously-blank field (OQ-062 —
+// "merge" now matches its own doc comment, "fill only the existing result's
+// blank fields from the imported data", instead of the mark silently
+// disappearing behind a status-wins gate in applyTimingRow).
 func TestResolveTimingConflictMergeFillsBlanksOnly(t *testing.T) {
 	f := newTimingExchangeFixture(t, 1)
 	ctx := context.Background()
@@ -756,8 +757,103 @@ func TestResolveTimingConflictMergeFillsBlanksOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}
-	if rec.Status != domain.StatusDNS || rec.Mark != "" {
-		t.Fatalf("merged result = %+v, want DNS preserved with no mark", rec)
+	if rec.Status != domain.StatusDNS || rec.Mark != "12.34" {
+		t.Fatalf("merged result = %+v, want DNS preserved and the imported mark 12.34 filled in", rec)
+	}
+}
+
+// TestResolveTimingConflictMergeKeepsExistingMarkFillsStatus is the mirror
+// of TestResolveTimingConflictMergeFillsBlanksOnly: an existing mark with no
+// status, merged with an imported status-only row (e.g. a late DQ/DNF code
+// from the timing device), keeps the mark (never overwritten) and fills the
+// previously-blank status.
+func TestResolveTimingConflictMergeKeepsExistingMarkFillsStatus(t *testing.T) {
+	f := newTimingExchangeFixture(t, 1)
+	ctx := context.Background()
+	save(t, f.results, f.meetID, ResultInput{DisciplineCode: "100m", AthleteID: f.athletes[0], Mark: "13.0", Timing: domain.TimingManual})
+	data := f.lifFor(t, "DNF", "")
+	if _, err := f.results.ImportTimingFile(ctx, office, f.meetID, "test.lif", "lif", data); err != nil {
+		t.Fatalf("ImportTimingFile: %v", err)
+	}
+	conflicts, err := f.results.ListTimingImportConflicts(ctx, office, f.meetID)
+	if err != nil || len(conflicts) != 1 || conflicts[0].Reason != "existing_manual_result" {
+		t.Fatalf("conflicts = %+v (err %v), want one existing_manual_result conflict", conflicts, err)
+	}
+
+	if err := f.results.ResolveTimingConflict(ctx, office, f.meetID, conflicts[0].ID, ResolveTimingConflictInput{Action: "merge"}); err != nil {
+		t.Fatalf("ResolveTimingConflict(merge): %v", err)
+	}
+	rec, err := store.GetResult(ctx, f.st.DB(), f.unitID, f.athletes[0])
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if rec.Mark != "13.0" || rec.Status != domain.StatusDNF {
+		t.Fatalf("merged result = %+v, want mark 13.0 preserved and DNF filled in", rec)
+	}
+}
+
+// TestMergeTimingRowFillBlanks is a table test of mergeTimingRowFillBlanks
+// itself (OQ-062): existing's non-blank fields are never overwritten,
+// blanks are filled from the imported row, covering every existing/import
+// field-presence combination the merge resolution can see.
+func TestMergeTimingRowFillBlanks(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing store.ResultRecord
+		row      timingRow
+		want     timingRow
+	}{
+		{
+			// mark-only: existing carries a mark and no status; the import
+			// brings a status. The mark is kept, the blank status is filled.
+			name:     "mark-only existing fills status from import",
+			existing: store.ResultRecord{Result: domain.Result{Mark: "13.00", Status: domain.StatusNone}, Timing: domain.TimingManual},
+			row:      timingRow{Mark: "", Status: domain.StatusDNF},
+			want:     timingRow{Mark: "13.00", Timing: domain.TimingManual, Status: domain.StatusDNF},
+		},
+		{
+			// status-only: existing carries a status and no mark; the
+			// import brings a mark (the OQ-062 regression: this mark used
+			// to be silently dropped). The status is kept, the blank mark
+			// is filled.
+			name:     "status-only existing fills mark from import",
+			existing: store.ResultRecord{Result: domain.Result{Mark: "", Status: domain.StatusDNS}},
+			row:      timingRow{Mark: "12.34", Timing: domain.TimingElectronic, Status: domain.StatusNone},
+			want:     timingRow{Mark: "12.34", Timing: domain.TimingElectronic, Status: domain.StatusDNS},
+		},
+		{
+			// mark+status: existing already carries both a mark and a
+			// status (reachable via a direct SaveResult call that sets
+			// both). Neither field is blank, so the import is discarded on
+			// both — existing wins entirely.
+			name: "existing carries both fields, import is fully discarded",
+			existing: store.ResultRecord{
+				Result: domain.Result{Mark: "13.00", Status: domain.StatusDQ, StatusDetail: "TR16.8"},
+				Timing: domain.TimingManual,
+			},
+			row:  timingRow{Mark: "99.99", Timing: domain.TimingElectronic, Status: domain.StatusDNF, StatusDetail: "should not survive"},
+			want: timingRow{Mark: "13.00", Timing: domain.TimingManual, Status: domain.StatusDQ, StatusDetail: "TR16.8"},
+		},
+		{
+			// both-present conflict: existing is entirely blank (no
+			// manual result at all — the unresolved/reassigned-athlete
+			// path can reach this) and the import carries both a mark and
+			// a status at once; both fill in since nothing on the existing
+			// side blocks either field.
+			name:     "existing entirely blank, both import fields fill in",
+			existing: store.ResultRecord{},
+			row:      timingRow{Mark: "12.34", Timing: domain.TimingElectronic, Status: domain.StatusDQ, StatusDetail: "TR16.8"},
+			want:     timingRow{Mark: "12.34", Timing: domain.TimingElectronic, Status: domain.StatusDQ, StatusDetail: "TR16.8"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeTimingRowFillBlanks(tt.existing, tt.row)
+			if got.Mark != tt.want.Mark || got.Timing != tt.want.Timing ||
+				got.Status != tt.want.Status || got.StatusDetail != tt.want.StatusDetail {
+				t.Fatalf("mergeTimingRowFillBlanks() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
 

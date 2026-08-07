@@ -578,6 +578,25 @@ func (s *ResultsService) queueTimingConflict(ctx context.Context, batchID, unitI
 	})
 }
 
+// mergeTimingRowFillBlanks implements the "merge" resolution's documented
+// intent (ResolveTimingConflictInput.Action doc comment, OQ-062): existing's
+// non-blank fields are never overwritten, and row (the imported data) fills
+// whatever existing left blank. Mark/Timing and Status/StatusDetail are each
+// filled or kept as a pair so a filled-in mark always carries a valid timing
+// method. Unlike the pre-fix version, this deliberately allows the returned
+// row to carry both a mark and a status at once — e.g. an existing DNS with
+// no mark merged against an imported mark keeps DNS *and* attaches the
+// mark — applyTimingRow persists both.
+func mergeTimingRowFillBlanks(existing store.ResultRecord, row timingRow) timingRow {
+	if existing.Mark != "" {
+		row.Mark, row.Timing = existing.Mark, existing.Timing
+	}
+	if existing.Status != domain.StatusNone {
+		row.Status, row.StatusDetail = existing.Status, existing.StatusDetail
+	}
+	return row
+}
+
 // applyTimingRow writes one non-conflicting (or freshly-resolved) row's
 // result (SYS-040/041, wind/lane auto-population mirroring
 // SaveTrackResult) tagged with its import provenance (source). Unlike
@@ -592,19 +611,32 @@ func (s *ResultsService) applyTimingRow(ctx context.Context, actor Session, meet
 	}
 	result := domain.Result{UnitID: unitID, AthleteID: athleteID, Status: row.Status, StatusDetail: row.StatusDetail}
 	timing := domain.TimingNone
-	if row.Status == domain.StatusNone {
+	// A mark is written whenever the row carries one, independent of
+	// whether a status is also present (a merged row can carry both — see
+	// mergeTimingRowFillBlanks: an existing DNS with a since-filled-in mark
+	// keeps both). Plain (non-merge) rows always have Mark XOR Status set
+	// (rowsFromLIF/rowsFromCSV blank Mark whenever a status is classified),
+	// so this is behavior-preserving there.
+	if row.Mark != "" {
 		mark, terr := parseTimingMark(row.Mark, row.Timing)
 		if terr != nil {
 			return store.ResultRecord{}, terr
 		}
 		result.Mark = mark
 		timing = row.Timing
-		p, err := s.participant(ctx, meetID, athleteID)
-		if err != nil {
-			return store.ResultRecord{}, err
-		}
-		if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
-			return store.ResultRecord{}, err
+		// Points/record scoring stay gated on Status==StatusNone: a
+		// disqualified/non-started result does not score even when a mark
+		// is also on file, matching SaveTrackResult's status-else-mark
+		// split (capture.go) and the "Points nil means DNS/NM/DQ/…"
+		// invariant combined-events standings rely on (domain.CombinedPerformance).
+		if row.Status == domain.StatusNone {
+			p, err := s.participant(ctx, meetID, athleteID)
+			if err != nil {
+				return store.ResultRecord{}, err
+			}
+			if result.Points, err = s.scorePoints(ctx, s.db, uc.meet, uc.disc.Code, timing, p.Athlete.Sex, result.Mark); err != nil {
+				return store.ResultRecord{}, err
+			}
 		}
 	}
 	if uc.disc.WindRelevant {
@@ -777,12 +809,7 @@ func (s *ResultsService) ResolveTimingConflict(ctx context.Context, actor Sessio
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		if existing.Mark != "" {
-			row.Mark, row.Timing = existing.Mark, existing.Timing
-		}
-		if existing.Status != domain.StatusNone {
-			row.Status, row.StatusDetail = existing.Status, existing.StatusDetail
-		}
+		row = mergeTimingRowFillBlanks(existing, row)
 	}
 
 	state, err := s.protestState(ctx, conflict.UnitID)
