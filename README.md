@@ -1,140 +1,160 @@
-# Bahnfrei — Open-Source Athletics Tournament Management System
+# Bahnfrei
 
-**Status: Phase B — both human gates passed 2026-07-05** (requirements baseline + all six
-architecture ADRs ratified, DEC-014). Implementation follows the backlog in
-`docs/delivery/work-breakdown.md`.
+[![Release](https://img.shields.io/github/v/release/kriegalex/bahnfrei)](https://github.com/kriegalex/bahnfrei/releases/latest)
+[![CI](https://github.com/kriegalex/bahnfrei/actions/workflows/ci.yml/badge.svg)](https://github.com/kriegalex/bahnfrei/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kriegalex/bahnfrei)](https://goreportcard.com/report/github.com/kriegalex/bahnfrei)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 
 **Bahnfrei** (from the starter's call *"Bahn frei!"* — "track clear!") is an open-source,
-**AGPL-3.0-only** system to manage athletics (track & field) tournaments end-to-end: meet
-setup, entries, eligibility, seeding, competition-day capture, timing-system exchange, live
-results, records, and federation reporting. Swiss/EU context: nFADP+GDPR, DE/FR first,
-**hub-first and self-hosted** (clubs run their own instance; no subscription SaaS), tolerant
-to venue connectivity loss by design. Parallel systems studied: **Seltec** (TAF3/LA.portal)
-and the **Swiss Athletics** ecosystem (Alabus, federation portals).
+self-hosted management system for athletics (track & field) meets: meet setup, online
+entries, seeding, competition-day result capture, timing-system integration, live results,
+records, and federation reporting.
 
-Architecture in one line: a single self-contained **Go + SQLite** binary serving
-server-rendered HTML (HTMX/SSE) with small TypeScript islands — see `docs/architecture/adr/`.
+It is built for the way real meets actually run: volunteer officials capture results on
+their own phones, the venue network fails at the worst possible moment, and the results
+still have to be right. Clubs run their own instance — a single binary, no subscription,
+no cloud dependency.
 
-This engagement is spec-driven and ran in two phases with hard human gates between them
-(see `CLAUDE.md` / `plan.md`).
+## Features
 
-## How to read this package
+### Meet preparation
 
-Read in this order:
+- Meet, venue, event programme, and timetable setup entirely in the browser — no
+  configuration files.
+- Online entries for individuals, clubs, and relays, with entry windows, optional licence
+  numbers, per-event limits, and fee summaries.
+- Entry import from CSV with mapping profiles and eligibility validation.
+- Category schemes and discipline catalogs as versioned data files — Swiss Athletics
+  categories and the UBS Kids Cup format ship built in.
+- Heat seeding and lane draws following World Athletics TR 20.4, with round progression.
 
-1. **`docs/research/domain-athletics.md`** — how athletics competitions actually work
-   (rules, categories, timing, records, officiating), verified against World Athletics and
-   Swiss Athletics primary sources. Sections `D1…D11`.
-2. **`docs/research/competitive-analysis.md`** — the incumbent landscape (Seltec, Swiss
-   Athletics' stack, timing ecosystem, data standards), gaps, and the OSS opportunity.
-   Sections `C1…C6`.
-3. **`docs/requirements/stakeholder-requirements.md`** (StRS) — 14 stakeholder classes and
-   41 implementation-free stakeholder requirements `STR-###`, with MVP/Later priorities and
-   scope boundaries (§4).
-4. **`docs/requirements/system-requirements.md`** (SyRS) — testable system requirements
-   `SYS-###`: functional, quantified non-functional (performance, offline, privacy,
-   accessibility, i18n, quality gates), conceptual data model, interfaces, constraints.
-5. **`docs/requirements/use-cases.md`** — 32 vertical slices `UC-###` with executable
-   Given/When/Then acceptance criteria: the agent-facing units of work for Phase B.
-6. **`docs/requirements/traceability-matrix.md`** — the zero-orphan proof:
-   `STR → SYS → UC → test → verification method`, plus the Phase A QA self-check.
-7. **`docs/requirements/open-questions-and-assumptions.md`** — **founder attention needed**:
-   open questions `OQ-###`, working assumptions `A-###`, TBD register.
-8. **`docs/requirements/glossary.md`** — domain and project terms (DE/FR equivalents).
-9. **`docs/ops/`** — operator-facing documentation for running an instance: quickstart,
-   operator runbook (network kit, timing-agent mode, backup/restore), privacy documentation
-   (SYS-104), support matrix (SYS-132), defect policy (SYS-143), and release process (SYS-146).
+### Competition day
 
-## ID scheme (stable, never renumbered)
+- Result capture for every discipline family: track times, horizontal attempt series,
+  vertical height progression, and combined events with official scoring tables.
+- Designed for officials' phones: responsive from 360 px, large touch targets, numeric
+  keyboards with one-tap letter markers (X/–/r), visible pending/confirmed save states.
+- Offline-tolerant capture: a durable local queue replays in order after connectivity
+  loss; rejected entries are explained at the exact cell with a correct-or-discard choice,
+  and never block other saves.
+- Check-in with DNS handling and bulk actions; every operator flow works keyboard-only.
+- FinishLynx timing integration: start lists out (`.ppl`/`.sch`/`.evt`), results in
+  (`.lif`) with conflict resolution, including a watched-folder agent mode for the timing
+  PC using the same binary.
+- Result corrections with reasons and a complete audit trail; records and PB/SB flagging.
 
-| Prefix | Layer |
-|--------|-------|
-| `STR-###` | Stakeholder requirement (implementation-free) |
-| `SYS-###` | System requirement (testable, traced to STR) |
-| `UC-###` | Use-case / vertical slice (executable acceptance criteria) |
-| `ADR-###` | Architecture decision record (Phase B) |
-| `TASK-###` | Work item (Phase B) |
+### Publication
 
-## Phase gate (current state)
+- Live public results with server-sent updates, stable URLs, name/bib/club filtering, and
+  per-category navigation — usable on a phone from the stands.
+- Printable capture sheets and result lists (PDF).
+- UBS Kids Cup series-upload export and an open, documented meet exchange format
+  ([omx/v1](docs/schemas/omx-v1.md)).
 
-Both human gates are **passed** (2026-07-05, DEC-014): the requirements baseline is
-approved and ADR-001…006 are ratified. Implementation follows the milestone plan in
-`docs/delivery/work-breakdown.md` (M0 foundation → M1 UBS Kids Cup PoC → M2 full club
-meet → M3 release 0.1). Remaining founder inputs are tracked in
-`docs/requirements/open-questions-and-assumptions.md`.
+### Privacy
 
-## Quickstart (≤30 minutes from nothing to a working system)
+- Built for Swiss and EU privacy law (nFADP, GDPR): public pages are data-minimized,
+  publication consent is enforced, and subject-access export, erasure, and retention
+  purge are first-class operator actions — see the [privacy guide](docs/ops/privacy.md).
 
-No configuration file is ever edited: the first browser visit walks you through creating
-the admin account, and everything else happens in the operator UI (SYS-131, UC-001). This is
-the short version; **`docs/ops/quickstart.md`** has the full walkthrough including the
-release-artifact download path and what to read next (the operator runbook).
+### Technical
 
-**Option A — binary.** A per-OS release binary (built by `scripts/build-release.sh` for
-`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, with a
-`checksums.txt` to verify against) is attached to each tagged release. Or build from source,
-requires Go ≥ 1.26:
+- A single self-contained Go binary; SQLite storage with WAL, a strict single-writer
+  design, and an append-only audit log.
+- Server-rendered HTML with HTMX and SSE; small TypeScript islands only where the UI
+  needs them. No SPA framework.
+- German and French out of the box; adding a language is a translation file, not a code
+  change.
+- Automatic TLS: locally generated certificates for offline venue use, ACME/Let's Encrypt
+  for internet-facing installs.
+- Serves 2,000 concurrent live-results viewers on modest hardware.
+- Container images on GHCR; release binaries for Linux, macOS, and Windows with
+  checksums and cosign signatures.
+
+## Is Bahnfrei right for your meet?
+
+Bahnfrei is aimed at meets where the organizer chooses the tooling: club meets, youth
+series such as the UBS Kids Cup, and school sports days. Honest current limitations:
+
+- **Relays** — entries, team composition, and bibs work; relay *result capture* is not
+  implemented yet.
+- **Swiss championship-tier meets** — the federation's competition rules mandate a
+  specific system (TAF3) for official and championship competitions, so Bahnfrei cannot
+  be the system of record there today.
+- **Connectivity** — the venue needs an internet uplink; brief outages are handled
+  (capture keeps working and syncs when the connection returns), but a fully offline
+  venue mode is still on the roadmap.
+- **Languages** — the user interface ships in German and French; the documentation is in
+  English.
+- **Para athletics** — para classifications are not supported yet.
+
+## Getting started
+
+Grab a [release binary](https://github.com/kriegalex/bahnfrei/releases/latest) for your
+OS, or use the container image:
+
+```
+docker run -d --name bahnfrei -p 8443:8443 -v bahnfrei-data:/data ghcr.io/kriegalex/bahnfrei:latest
+```
+
+Or build from source (Go ≥ 1.26):
 
 ```
 go build -o bahnfrei ./cmd/bahnfrei
 ./bahnfrei serve --data-dir ./data
 ```
 
-**Option B — container.** Requires Docker (or Podman):
+Then open **https://localhost:8443**. In the default venue mode the TLS certificate is
+locally generated and self-signed (works fully offline) — your browser warns once; accept
+it. Internet-facing installs use `--role hub --acme-domain your.domain --acme-email
+you@example.org` for a publicly trusted certificate instead.
 
-```
-docker build -t bahnfrei .
-docker run -d --name bahnfrei -p 8443:8443 -v bahnfrei-data:/data bahnfrei
-```
+The first visit walks you through creating the admin account; everything after that
+happens in the operator UI. To explore with realistic data first, `bahnfrei demo` seeds a
+complete demo meet.
 
-Then, either way:
+All state lives in the data directory — back up that one directory and you have the whole
+meet. The full walkthrough, including artifact verification, is in the
+[quickstart](docs/ops/quickstart.md).
 
-1. Open **https://localhost:8443**. In the default venue mode the TLS certificate is
-   locally generated and self-signed (works fully offline, SYS-093) — your browser will
-   warn once; accept it. Internet-facing hub installs use `--role hub
-   --acme-domain your.domain --acme-email you@example.org` for a publicly trusted
-   certificate instead.
-2. You land on the **setup page**: create the admin account (username, display name,
-   password ≥ 8 characters).
-3. Log in and create your first meet under **Wettkämpfe / Compétitions** — venue, days,
-   sessions, tier, then the event programme and timetable.
+## Documentation
 
-All state lives in the data directory (`bahnfrei.db` plus the TLS cache); back it up and
-you have the whole meet (UC-020, TASK-014).
+**Running an instance:**
 
-## Building & testing
+- [Quickstart](docs/ops/quickstart.md) — installation to first meet in under 30 minutes.
+- [Operator runbook](docs/ops/operator-runbook.md) — roles, the recommended meet-day
+  network kit, timing-agent setup, backup and restore.
+- [Privacy guide](docs/ops/privacy.md) — data-processing overview, a template privacy
+  notice, and controller guidance.
+- [Support matrix](docs/ops/support-matrix.md) · [Defect policy](docs/ops/defect-policy.md)
+  · [Release process](docs/ops/release-process.md) · [Changelog](CHANGELOG.md)
+
+**How it's built:** the project is spec-driven. Stakeholder and system requirements, use
+cases with executable acceptance criteria, and a full requirements-to-test
+[traceability matrix](docs/requirements/traceability-matrix.md) live under
+[`docs/requirements/`](docs/requirements/); architecture decisions are recorded as ADRs
+under [`docs/architecture/adr/`](docs/architecture/adr/). Domain research on how athletics
+competitions work — rules, categories, timing, records — is under
+[`docs/research/`](docs/research/).
+
+## Building and testing
 
 ```
 go build ./...
 go test ./...
 ```
 
-Templates (`*.templ`) are pre-generated and checked in; after editing them run
-`go run github.com/a-h/templ/cmd/templ@latest generate` (or the pinned version from
-`go.mod`).
+HTML templates (`*.templ`) are generated and checked in; after editing them, regenerate
+with the templ version pinned in `go.mod`. `scripts/check-gate.sh` runs the full
+CI-equivalent gate locally: lint, security scans, race-enabled tests with coverage floors,
+design-token conformance, and the Playwright end-to-end suite.
 
-## Operations, privacy & release
+## Licence and contributing
 
-- **`docs/ops/operator-runbook.md`** — roles, the ADR-002 v2 network kit for a meet day,
-  timing-agent setup, backup/restore, retention.
-- **`docs/ops/privacy.md`** — data-processing overview, template meet privacy notice, and
-  controller guidance (SYS-104), including the pseudonymization-vs-anonymization distinction
-  for athlete erasure (SYS-101).
-- **`docs/ops/support-matrix.md`** — supported OS/hardware and browsers (SYS-132), and the
-  measured public-results-viewer capacity (SYS-122's 2,000-viewer target is not yet met — see
-  `docs/requirements/open-questions-and-assumptions.md` OQ-066).
-- **`docs/ops/defect-policy.md`** — severity definitions and the regression-test requirement
-  (SYS-143).
-- **`docs/ops/release-process.md`** — versioning, changelog, artifact build
-  (`scripts/build-release.sh`), checksum/signing stance, container publication, support
-  window (SYS-146). See **`CHANGELOG.md`** for what shipped in each release.
-
-## Licence & contributing
-
-- Code: **AGPL-3.0-only** (`LICENSE`) — see
-  [ADR-001](docs/architecture/adr/ADR-001-license-agpl-3.0.md) for the rationale.
-- Documentation (`docs/`): **CC-BY-SA-4.0** (`docs/LICENSE`).
-- Contributions are welcome under the **DCO** (no CLA): see
-  [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and
-  [`GOVERNANCE.md`](GOVERNANCE.md). The project name and logo are held by the founder and
-  are not covered by the code licence.
+- Code: [AGPL-3.0-only](LICENSE) — the reasoning is in
+  [ADR-001](docs/architecture/adr/ADR-001-license-agpl-3.0.md).
+- Documentation (`docs/`): CC-BY-SA-4.0.
+- Contributions are welcome under the DCO (no CLA): see
+  [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and
+  [GOVERNANCE.md](GOVERNANCE.md). The project name and logo are held by the maintainer
+  and are not covered by the code licence.

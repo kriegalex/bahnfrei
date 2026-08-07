@@ -1,10 +1,11 @@
-# Release process (SYS-146)
+# Release process
 
-**Traces:** SYS-146, SYS-144 → STR-036, STR-038, STR-037. **Status:** effective at release 0.1.
+**Status:** effective at release 0.1.
 
-SYS-146 requires the repository to contain an OSI-approved LICENSE, a CONTRIBUTING guide, a code
-of conduct, maintainer/governance documentation, and a documented release process. The first four
-already exist and are not re-authored here — confirmed present: `LICENSE` (AGPL-3.0-only,
+An open-source release needs the repository to contain an OSI-approved LICENSE, a CONTRIBUTING
+guide, a code of conduct, maintainer/governance documentation, and a documented release process.
+The first four already exist and are not re-authored here — confirmed present: `LICENSE`
+(AGPL-3.0-only,
 [ADR-001](../architecture/adr/ADR-001-license-agpl-3.0.md)), `CONTRIBUTING.md`,
 `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, plus CI-enforced SPDX headers and DCO
 (`.github/workflows/governance.yml`). This page is the missing fifth item: the release process
@@ -12,9 +13,9 @@ itself.
 
 ## 1. Versioning scheme
 
-**Semantic versioning** (SYS-144: external interfaces, incl. the `omx/v1` schema and public URLs,
-follow a documented deprecation policy — this project-level scheme extends the same discipline to
-the whole release): `MAJOR.MINOR.PATCH`.
+**Semantic versioning**: external interfaces, including the `omx/v1` schema and public URLs,
+follow a documented deprecation policy, and this project-level scheme extends the same discipline
+to the whole release: `MAJOR.MINOR.PATCH`.
 
 - **MAJOR** — a breaking change to a stable external interface (the `omx/v1` schema's own
   versioning policy lives in `docs/schemas/omx-v1.md`; a project MAJOR bump follows if a breaking
@@ -35,8 +36,9 @@ by editing a checked-in version file).
 `CHANGELOG.md` at the repository root, in [Keep a Changelog](https://keepachangelog.com/) style: an
 `## [Unreleased]` section accumulates entries as work merges, cut into a dated
 `## [x.y.z] - YYYY-MM-DD` section at release time. Entries are grouped `Added`/`Changed`/`Fixed`/
-`Security`/`Deprecated`/`Removed` and reference the `TASK-###`/`SYS-###`/`UC-###` they trace to,
-consistent with how every other document in this repository cites IDs.
+`Security`/`Deprecated`/`Removed` and are written for users in plain language — internal
+requirement and work-item traceability lives in `docs/requirements/traceability-matrix.md`,
+not in the changelog.
 
 ## 3. Cutting a release
 
@@ -44,7 +46,7 @@ consistent with how every other document in this repository cites IDs.
    (`docs/ops/defect-policy.md` §2).
 2. Confirm the machine-checkable gate is green on the release commit: run
    `scripts/check-gate.sh` (build, vet, lint, gosec, `-race -shuffle=on` tests with the
-   SYS-140 coverage floors — ≥83% overall / ≥90% domain, licence-header, design-token and
+   coverage floors CI enforces — ≥83% overall / ≥90% domain, licence-header, design-token and
    `govulncheck` checks, TS-island freshness, and the Playwright E2E suite), and verify the
    CI run on the same commit is green.
 3. Move the `CHANGELOG.md` `[Unreleased]` section's entries under a new dated version heading.
@@ -56,7 +58,7 @@ consistent with how every other document in this repository cites IDs.
    (SHA-256), and builds the container image locally if Docker is available (never pushes it —
    see §4).
 6. First release only (v0.1.0): make the repository public before pushing the tag
-   (`gh repo edit --visibility public`, DEC-028) — the release workflow's GHCR publish and
+   (`gh repo edit --visibility public`) — the release workflow's GHCR publish and
    keyless cosign verification identities assume publicly reachable artifacts.
 7. Push the git tag (`git push origin vX.Y.Z`). Pushing a `vX.Y.Z` tag triggers
    `.github/workflows/release.yml`, which is the **sole publish path**: it rebuilds the binaries

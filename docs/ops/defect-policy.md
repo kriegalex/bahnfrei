@@ -1,19 +1,18 @@
-# Defect policy (SYS-143)
+# Defect policy
 
-**Traces:** SYS-143 → STR-038. **Status:** public policy, effective at release 0.1.
+**Status:** public policy, effective at release 0.1.
 
 ## 1. Severity definitions
 
 | Severity | Definition | Examples in this system |
 |---|---|---|
-| **Critical** | Data loss or corruption of confirmed data; a security or privacy vulnerability that exposes personal data or lets an unauthorized actor act as another role; the system cannot start or is unusable for its core purpose (meet setup, capture, results) | A crash-recovery gap that loses a confirmed result (SYS-081); an authorization bypass reachable without credentials; public exposure of data SYS-100 says must never be public (full birth date, licence number) |
+| **Critical** | Data loss or corruption of confirmed data; a security or privacy vulnerability that exposes personal data or lets an unauthorized actor act as another role; the system cannot start or is unusable for its core purpose (meet setup, capture, results) | A crash-recovery gap that loses a confirmed result; an authorization bypass reachable without credentials; public exposure of data that must never be public (full birth date, licence number) |
 | **High** | A core competition-management function produces an incorrect result, silently drops data, or is blocked with no workaround; a defect that would make a real meet unrunnable or untrustworthy | Wrong record/PB flagging; a rule-defined hand-timing conversion applied incorrectly; an import that silently skips rows instead of reporting rejections |
 | **Medium** | A function works but with a meaningful usability, accessibility, or correctness defect that has a workaround, or affects a non-core feature | A usability-audit finding short of critical (see `docs/requirements/usability-audit-checklist.md`); a non-primary export format with a formatting bug |
 | **Low** | Cosmetic, edge-case, or minor documentation issues with no functional impact | A localization string missing a placeholder in an unusual code path; a typo in a help tooltip |
 
-Severity is assigned by whoever triages the defect (maintainer or the reporting agent/tech lead in
-Phase B) against this table, not by reporter self-assessment; a report can be re-triaged if new
-evidence changes the picture.
+Severity is assigned by the maintainers who triage the defect, against this table, not by
+reporter self-assessment; a report can be re-triaged if new evidence changes the picture.
 
 ## 2. Release gate
 
@@ -28,14 +27,14 @@ work-breakdown backlog like any other work item.
 ## 3. Regression-test requirement
 
 **Every fixed defect gains a regression test before the fix is considered done.** This is the same
-closed-loop-verification discipline the whole project already runs under (`CLAUDE.md`: "nothing
-ships until its executable acceptance criteria pass"; every merged `TASK-###` in
-`docs/delivery/work-breakdown.md` closes with passing tests traced to a `SYS-###`). Concretely:
+closed-loop-verification discipline the project runs under everywhere: nothing ships until its
+automated acceptance tests pass, and every piece of merged work closes with passing tests.
+Concretely:
 
 - The test reproduces the defect's originally observed symptom and fails without the fix, on the
   commit immediately before it.
 - The test is named or commented so a later reader can find both the defect and the fix (this
-  project's convention: reference the relevant `OQ-###`/`SYS-###`/`UC-###` in the test name or a
+  project's convention: reference the relevant requirement or issue ID in the test name or a
   comment, as done throughout `internal/*_test.go`).
 - The test is added to the same package/suite the defect lives in, so it runs under the normal
   `go test ./...` gate (or the E2E suite for a browser-observable defect) — no defect fix merges
@@ -58,8 +57,8 @@ This is a defect (bug) policy, not a feature-request or roadmap process — see
 new work and open questions are tracked. A known **architectural limitation that is documented as
 such**, with a measured extent and an open question tracking how (or whether) it will close, is not
 a "known unfixed defect" under this policy in the sense that blocks a release — it is a disclosed
-limitation, not a silent bug (e.g. OQ-066 documented the SYS-122 public-viewer capacity gap while it
-was open, with the measured numbers in `docs/ops/support-matrix.md`, until DEC-015/TASK-035 closed
-it). The distinction matters: silence about a real limitation would violate this policy's intent
-even if no single defect report names it, which is why open questions like this are documented
-publicly rather than left implicit.
+limitation, not a silent bug (for example, the public-viewer capacity gap was documented as an
+open question while it was outstanding, with the measured numbers in
+`docs/ops/support-matrix.md`, until a fix closed it). The distinction matters: silence about a
+real limitation would violate this policy's intent even if no single defect report names it,
+which is why open questions like this are documented publicly rather than left implicit.

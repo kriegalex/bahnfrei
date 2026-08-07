@@ -1,6 +1,6 @@
 # Governance
 
-Bahnfrei is a founder-led open-source project (SYS-146).
+Bahnfrei is a founder-led open-source project.
 
 ## Roles
 

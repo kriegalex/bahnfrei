@@ -1,6 +1,5 @@
 # Quickstart — download to a working system in ≤30 minutes
 
-**Traces:** SYS-131, SYS-001/002/004/006 → STR-039, STR-035; UC-001.
 **Verified by:** `cmd/bahnfrei` `TestQuickstartFreshInstallE2E` (see "How this is verified" below).
 **Audience:** a first-time operator (a club volunteer), on a fresh machine, following this page
 verbatim. No configuration file is ever edited.
@@ -24,7 +23,10 @@ sha256sum -c checksums.txt --ignore-missing        # Linux/macOS (macOS: shasum 
 ```
 
 Make it executable (Linux/macOS) and run it — see step 2. There is nothing to install: the binary
-is the whole application (ADR-002/ADR-003 — embedded assets, pure-Go SQLite, no runtime to set up).
+is the whole application (see
+[ADR-002](../architecture/adr/ADR-002-deployment-and-application-model.md) and
+[ADR-003](../architecture/adr/ADR-003-technology-stack.md) — embedded assets, pure-Go SQLite, no
+runtime to set up).
 
 **Option B — container image.** Requires Docker (or Podman). Images publish to GHCR
 (`docs/ops/release-process.md` §5), signed keyless with cosign in CI — verify the image against
@@ -60,7 +62,7 @@ reports `dev`; that's fine for evaluation, just not for a release artifact.)
 ```
 
 Open **https://localhost:8443**. In the default venue mode, the TLS certificate is locally
-generated and self-signed — this works fully offline (SYS-093) — so your browser warns once;
+generated and self-signed — this works fully offline — so your browser warns once;
 accept it. For an internet-facing hub install, use
 `./bahnfrei serve --role hub --acme-domain your.domain --acme-email you@example.org` instead, for
 a publicly trusted certificate via ACME.
@@ -68,7 +70,7 @@ a publicly trusted certificate via ACME.
 ## 3. First-run setup — no config file
 
 You land on the **setup page** automatically (a fresh install has no admin account yet, so `GET /`
-redirects here — UC-001 #1). Create the admin account: username, display name, password
+redirects here). Create the admin account: username, display name, password
 (≥ 8 characters). This is the *only* configuration step, and it happens in the browser, not in a
 file.
 
@@ -76,14 +78,14 @@ file.
 
 Log in, then create a meet under **Wettkämpfe / Compétitions**: name, venue, competition days,
 sessions per day, and tier. Add events with round structure and entry deadlines. The system is now
-**ready for meet setup** — the SYS-131 bar this page is verified against.
+**ready for meet setup** — the target this page's automated check verifies (see below).
 
 Everything from here on (entries, seeding, competition-day capture, timing integration, public
 results) is covered by the **operator runbook** (`docs/ops/operator-runbook.md`), not this page.
 
 ## What "ready" means, and how it's verified
 
-SYS-131's bar is *"a working system ready for meet setup in ≤30 minutes wall-clock, no
+This page's bar is *"a working system ready for meet setup in ≤30 minutes wall-clock, no
 configuration file hand-edited"* — not a finished meet. The machine-checkable proxy for this page
 is `cmd/bahnfrei`'s `TestQuickstartFreshInstallE2E`: starting from an **empty data directory**, it
 drives exactly the steps above over real HTTPS against the real server (no mocks) — setup, login,
@@ -97,5 +99,4 @@ silently break.
 
 The data directory (`bahnfrei.db` plus the TLS certificate cache) is the entire meet. Back it up
 (`bahnfrei backup --data-dir ./data --out backup.bfbak`, or the office UI's **Backup** download at
-`/admin/backup`) and you have everything — see `docs/ops/operator-runbook.md` §"Backup & restore"
-(UC-020).
+`/admin/backup`) and you have everything — see `docs/ops/operator-runbook.md` §"Backup & restore".

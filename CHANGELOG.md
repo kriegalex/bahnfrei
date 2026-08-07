@@ -2,9 +2,7 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
-[Semantic Versioning](https://semver.org/) as documented in `docs/ops/release-process.md`. Entries
-reference the `TASK-###`/`SYS-###`/`UC-###` IDs used throughout this repository — see
-`docs/requirements/traceability-matrix.md` for the full trace.
+[Semantic Versioning](https://semver.org/) as documented in `docs/ops/release-process.md`.
 
 ## [Unreleased]
 
@@ -12,68 +10,63 @@ Nothing yet since 0.1.0.
 
 ## [0.1.0] — first public release
 
-The first end-to-end release: a complete athletics-meet lifecycle on one self-hosted, self-
-contained binary — online entries, seeding, competition-day capture (track/field/vertical/
-combined events), FinishLynx timing exchange, live public results, records, privacy controls,
-DE/FR i18n, and accessibility — hardened and documented for public use per SYS-146.
+The first end-to-end release: a complete athletics-meet lifecycle on one self-hosted,
+self-contained binary.
 
-### Added
+### Meet preparation
 
-- **Foundation (M0):** storage layer (`modernc.org/sqlite`, WAL, single-writer, optimistic
-  versioning, append-only audit log), domain core (categories, disciplines, seeding rules), server
-  shell with sessions/CSRF/security headers, CI gates (build, vet, race-tested tests, coverage,
-  license headers, style tokens).
-- **UBS Kids Cup PoC spine (M1):** meet/venue/timetable setup (UC-001), category schemes (UC-002),
-  entry import, seeding (TR20.4 lane draws), competition-day capture with offline-tolerant field
-  devices (UC-034, SYS-085–087), FinishLynx timing exchange (ADR-006), live public results (SSE),
-  printed capture sheets, the UBS Kids Cup scoring template, and the official series upload file.
-- **Full club-meet coverage (M2):** online entries (UC-003), entry import from file (UC-004),
-  check-in, all discipline families (track, horizontal/vertical field, combined events), records
-  and PB/SB flagging, team/relay handling, accounts/roles/privileged-action audit (UC-022),
-  privacy controls — subject-access export, erasure/pseudonymization, consent enforcement,
-  retention purge (SYS-100–105), DE/FR internationalization with a pseudo-locale CI check
-  (SYS-110), WCAG 2.2 AA accessibility work, and the `omx/v1` open exchange schema (ADR-005).
-- **Hardening & release 0.1 (M3):** OWASP ASVS L2 security review, a documented design system with
-  a CI style-conformance check and component gallery (SYS-116), keyboard-only operator efficiency
-  coverage (SYS-114), contextual help and inline field-validation errors (SYS-115/117),
-  destructive-action confirmation flows (OQ-074), performance/recovery drills (SYS-120/121/130),
-  per-OS release artifacts and a container image (`scripts/build-release.sh`, SYS-131/146), the
-  operator documentation set under `docs/ops/` (quickstart, runbook, privacy, support matrix,
-  defect policy, release process — SYS-104/131/132/143/146), and replacement of the remaining M0/M1
-  scaffolding placeholders (the hub landing page, the CLI's no-subcommand usage text).
-- **Founder-decision backlog (DEC-015…026):** pooled public read path meeting the SYS-122
-  2,000-viewer budget with a per-meet render cache (TASK-035, ADR-004 §9); official UKC
-  final-standings semantics — never-attempted unranked, no-valid-attempt 1-point floor,
-  out-of-competition participants (TASK-036, DEC-016); tag-triggered release publication to
-  GHCR with cosign keyless signing of image and checksums (TASK-037, DEC-017/018/019);
-  roster/bib search by name, bib or club (TASK-038, DEC-021); optional licence numbers on
-  online entries (TASK-039, DEC-023); field-event correction UI for horizontal and vertical
-  grids (TASK-040, DEC-024); bulk "mark remaining as DNS" on open track units (TASK-041,
-  DEC-025); a role-aware "my assignments" home for office, field officials and entry
-  submitters (TASK-042, DEC-025); an office-reachable, capability-filtered meet hub
-  (TASK-043); and rule-data verification against the Swiss Athletics WO 2026 and WA CR&TR
-  2026 primary sources (youth discipline limits, TR 39 combined-events ties, TR 20.4 lane
-  groups).
-- **Volunteer usability wave (M4, TASK-044…050, from the 2026-08 volunteer walkthrough):**
-  truthful capture-sync failure handling — per-operation rejections rendered at the cell with
-  correct-or-discard, session-expiry re-authentication with the queue preserved, and a status
-  indicator that can never contradict per-cell state (SYS-149, UC-040); phone-operable capture
-  for every discipline family — no horizontal scrolling at 360 px, ≥44 px touch targets,
-  numeric virtual keyboards with X/–/r quick-action marker buttons, visible pending/confirmed
-  save badges and live result/points cells (SYS-147/148, UC-039); task-first navigation with
-  localized, schedule-annotated assignments and a grouped meet hub (SYS-151, UC-041);
-  honest empty states and inapplicable-action gating with affected-row counts on bulk
-  confirmations (SYS-152); public find-your-athlete filtering and per-category jump
-  navigation (SYS-153, UC-042); audited, version-guarded participant identity correction
-  with automatic category re-derivation (SYS-150, UC-043); and a localization/hygiene pass
-  (localized discipline names on operator surfaces, local-time timestamps, favicon, clean
-  browser console).
-- **Release-audit polish (TASK-051, from the 0.1 audit run's Minor findings):** localized
-  check-in page heading (N1), honest "my entries" empty state when no entry forms render
-  (N2), singular/plural forms for the public filter's result count (N3), and a 24 px
-  min-height floor for chrome selects such as the header locale switcher (N4).
+- Meet, venue, event programme, and timetable setup entirely in the browser.
+- Online entries for individuals, clubs, and relays — entry windows, optional licence
+  numbers, per-event limits, fee summaries.
+- Entry import from CSV with mapping profiles and eligibility validation.
+- Category schemes and discipline catalogs as versioned data files; Swiss Athletics
+  categories and the UBS Kids Cup format built in.
+- Heat seeding with World Athletics TR 20.4 lane draws, and round progression.
 
-### Known limitations at 0.1.0
+### Competition day
 
-- Erasure is pseudonymization, not full anonymization, by spec design (SYS-101) — see
+- Result capture for all discipline families: track times, horizontal attempt series,
+  vertical height progression, and combined events with official scoring tables.
+- Phone-first capture for volunteer officials: fully usable at 360 px with no horizontal
+  scrolling, large touch targets, numeric keyboards with one-tap X/–/r markers, and
+  visible pending/confirmed save states with live result/points updates.
+- Offline-tolerant capture: a durable local queue replays in order after connectivity
+  loss; rejected saves are explained at the exact cell with a correct-or-discard choice
+  and never block other saves; an expired session prompts re-login with the queue intact.
+- Check-in with DNS handling, bulk "mark remaining as DNS", and keyboard-only operation
+  of every operator flow.
+- FinishLynx timing integration: start lists out (`.ppl`/`.sch`/`.evt`), results in
+  (`.lif`) with conflict resolution, plus a watched-folder agent mode for the timing PC.
+- Result corrections with mandatory reasons and a complete audit trail; participant
+  identity correction with automatic category re-derivation; records and PB/SB flagging.
+- Official UBS Kids Cup standings semantics, including the final-list convention for
+  athletes missing a discipline and out-of-competition participants.
+
+### Publication
+
+- Live public results over server-sent events with stable URLs, name/bib/club filtering,
+  and per-category jump navigation.
+- Printable capture sheets and result lists (PDF).
+- UBS Kids Cup series-upload export and the open `omx/v1` meet exchange format.
+
+### Operations, privacy, and security
+
+- Single-binary install with automatic TLS (self-signed for venue use, ACME for public
+  hubs), one-directory backup/restore, and a seeded demo meet (`bahnfrei demo`).
+- Privacy tooling for Swiss/EU law (nFADP, GDPR): data-minimized public pages, publication
+  consent enforcement, subject-access export, erasure, retention purge.
+- Accounts and roles (organizer, competition office, field official, entry submitter)
+  with per-event official scoping and a privileged-action audit log.
+- German and French user interface throughout; contextual help on non-obvious inputs;
+  inline validation errors that preserve input; confirmation pages for destructive and
+  bulk actions showing the affected count.
+- Security review against OWASP ASVS L2; release binaries for five OS/architecture
+  targets plus a container image on GHCR, with checksums and cosign signatures.
+- Operator documentation set: quickstart, runbook (including a meet-day network kit),
+  privacy guide, support matrix, defect policy, release process.
+
+### Known limitations
+
+- Relay results cannot be captured yet (relay entries, team composition, and bibs work).
+- Athlete erasure is pseudonymization, not full anonymization, by design — see
   `docs/ops/privacy.md` §1.5.
