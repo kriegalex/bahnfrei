@@ -68,11 +68,12 @@ DE/FR i18n, and accessibility — hardened and documented for public use per SYS
   with automatic category re-derivation (SYS-150, UC-043); and a localization/hygiene pass
   (localized discipline names on operator surfaces, local-time timestamps, favicon, clean
   browser console).
+- **Release-audit polish (TASK-051, from the 0.1 audit run's Minor findings):** localized
+  check-in page heading (N1), honest "my entries" empty state when no entry forms render
+  (N2), singular/plural forms for the public filter's result count (N3), and a 24 px
+  min-height floor for chrome selects such as the header locale switcher (N4).
 
 ### Known limitations at 0.1.0
 
 - Erasure is pseudonymization, not full anonymization, by spec design (SYS-101) — see
   `docs/ops/privacy.md` §1.5.
-- The requirements added from the 2026-08 volunteer walkthrough (STR-046, SYS-147–153) are
-  implemented and test-evidenced but remain marked *proposed* pending founder ratification —
-  see `docs/requirements/traceability-matrix.md`.
