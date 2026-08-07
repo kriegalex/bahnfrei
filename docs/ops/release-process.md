@@ -55,7 +55,10 @@ consistent with how every other document in this repository cites IDs.
    host-matching one by actually running `--version`, writes `dist/X.Y.Z/checksums.txt`
    (SHA-256), and builds the container image locally if Docker is available (never pushes it —
    see §4).
-6. Push the git tag (`git push origin vX.Y.Z`). Pushing a `vX.Y.Z` tag triggers
+6. First release only (v0.1.0): make the repository public before pushing the tag
+   (`gh repo edit --visibility public`, DEC-028) — the release workflow's GHCR publish and
+   keyless cosign verification identities assume publicly reachable artifacts.
+7. Push the git tag (`git push origin vX.Y.Z`). Pushing a `vX.Y.Z` tag triggers
    `.github/workflows/release.yml`, which is the **sole publish path**: it rebuilds the binaries
    and `checksums.txt` (`scripts/build-release.sh X.Y.Z --skip-image`, reproducing step 5 in CI),
    builds and pushes the container image to GHCR, cosign-signs the image and `checksums.txt` (see
@@ -63,7 +66,7 @@ consistent with how every other document in this repository cites IDs.
    the tag (creating it if it doesn't exist). Nothing in `scripts/build-release.sh` itself runs
    `docker push`, `cosign`, or `gh release` — every publish action is gated on this workflow, which
    only runs on a human deliberately pushing a tag.
-7. Announce per `GOVERNANCE.md`'s existing communication channel.
+8. Announce per `GOVERNANCE.md`'s existing communication channel.
 
 ## 4. Checksum / signing stance
 
