@@ -24,6 +24,15 @@ All notable changes to this project are documented here. The format follows
   in mark/points columns), a new browser-tab icon, and a styled "Bahnfrei" wordmark in
   the header. No behavior changes — the colors already used to show live/official status
   keep the same meaning.
+- Buttons, links, the header menu, and form fields now look like a deliberately designed
+  app instead of unstyled browser defaults: real button styles (including a clearly
+  marked style for destructive confirmations, such as erasing a participant or purging
+  retained data), colored links, a header menu that highlights which section you are on,
+  and consistently styled text fields and dropdowns. The sign-in page, the first-time
+  setup page, the change-password page, the "create account" form on the accounts page,
+  the create/edit-meet form, and the heat-seeding forms now lay their fields out one
+  above another instead of wrapping mid-row. Result-capture screens are unchanged — they
+  keep their compact, touch-friendly layout for entering marks quickly at the track.
 - The letter-marker quick buttons (X/–/r) on capture pages now appear only at phone
   widths, where there is no physical keyboard.
 
