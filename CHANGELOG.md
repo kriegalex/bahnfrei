@@ -27,6 +27,9 @@ All notable changes to this project are documented here. The format follows
 - Merging a timing-system result onto an existing status-only entry (for example a DNS)
   no longer silently discards the imported mark — the merge fills blank fields only, as
   documented.
+- Generating heats for a round with no confirmed or checked-in entries now explains on
+  the seeding page why nothing was generated, instead of silently returning to an
+  unchanged page.
 
 ## [0.1.0] — first public release
 
