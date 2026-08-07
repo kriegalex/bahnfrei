@@ -8,22 +8,34 @@
    nothing outside this file may declare a raw color, font-size, spacing or
    radius value (scripts/check-style-tokens.sh enforces this in CI).
 
-   Neutral default (OQ-061): no brand identity exists yet for Bahnfrei.
-   These are placeholder, accessibility-checked values chosen for contrast
-   and legibility only; rebranding later is a values-only change to this
-   file — no template or component touches a color/spacing literal
-   directly, so a future palette swap never requires a template edit. */
+   Brand identity (DEC-036, TASK-056): ratified 2026-08-07 on the evidence
+   in docs/research/visual-identity-trends.md — a teal accent (a hue
+   unclaimed across every surveyed market segment) on warm cream/warm
+   near-black neutrals, plus a self-hosted condensed display face (see
+   --font-family-display below). Still a values-only mechanism: the retint
+   itself touched no template or component, only these literals; the
+   display-face token additionally required base.css to grow @font-face
+   rules and consuming selectors (headings, result-grid numerals) — see
+   that file. Every foreground/background pair actually used in the shell
+   is contrast-checked against WCAG AA by
+   internal/web/tokens_contrast_test.go, which parses this file directly so
+   a future retint cannot silently regress contrast. */
 
 :root {
   color-scheme: light dark;
 
-  /* --- Color: base surface & text --- */
-  --color-bg: #fff;
-  --color-fg: #111;
-  --color-border: rgba(136, 136, 136, 0.27); /* was #8884 */
+  /* --- Color: base surface & text (warm cream / warm near-black) --- */
+  --color-bg: #faf6ee;
+  --color-fg: #1c1917;
+  --color-border: rgba(148, 128, 105, 0.32); /* warm-tinted hairline, was rgba(136,136,136,.27) */
 
-  /* --- Color: accent (links, focus ring, primary actions) --- */
-  --color-accent: #1a4d8f;
+  /* --- Color: accent (links, focus ring, primary actions) — teal,
+     DEC-036's #0f766e band. No separate hover/interactive-variant token:
+     every hover/active state in base.css is an opacity change applied to
+     the existing accent (button/link rules), not a color swap, so a
+     second accent value would be an unused token — see DEC-036 register
+     note and TASK-056 report for the "why not". --- */
+  --color-accent: #0f766e;
   --color-accent-fg: #fff;
 
   /* --- Color: semantic status (success/warning/info/danger) — the
@@ -42,8 +54,19 @@
 
   /* --- Typography --- */
   --font-family-base: system-ui, sans-serif;
+  /* Self-hosted display face (DEC-036, TASK-056): Barlow Semi Condensed
+     (OFL 1.1, internal/web/static/barlow-semi-condensed-LICENSE), latin
+     subset, vendored at internal/web/static/barlow-semi-condensed-{regular,
+     bold}.woff2 and embedded (static.go) — ADR-002/ADR-003, no runtime
+     fetch. Carries the `tnum` OpenType feature (verified with fonttools
+     before vendoring) so result-grid numerals in headers/marks/totals
+     align in fixed-width columns via `font-variant-numeric: tabular-nums`
+     (base.css). Scoped to headings and result grids only; body copy stays
+     the system stack above. */
+  --font-family-display: "Barlow Semi Condensed", var(--font-family-base);
   --font-size-base: 1rem;
   --font-size-sm: 0.9rem;
+  --font-size-lg: 1.5rem;
   --line-height-base: 1.4;
   --font-weight-bold: 700;
 
