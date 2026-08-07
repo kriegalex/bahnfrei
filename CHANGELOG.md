@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
 - Generating heats for a round with no confirmed or checked-in entries now explains on
   the seeding page why nothing was generated, instead of silently returning to an
   unchanged page.
+- The other seeding actions — manual lane override, round advancement, and manual
+  qualification — likewise now explain why a rejected action did not take effect (for
+  example an incomplete round, an invalid qualification code, or a concurrent edit)
+  instead of silently returning to an unchanged page.
 
 ## [0.1.0] — first public release
 
