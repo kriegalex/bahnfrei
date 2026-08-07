@@ -677,7 +677,7 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
    submitted validation error renders inline at the field, states what to fix, and
    preserves the user's input (T).
 
-## UC-039 Volunteer mobile capture — MVP *(proposed 2026-08-06, pending founder ratification)*
+## UC-039 Volunteer mobile capture — MVP *(ratified 2026-08-07, DEC-027)*
 
 **Actors:** field official (volunteer, own phone).
 **Traces:** SYS-147, SYS-148 → STR-046, STR-035, STR-041.
@@ -702,7 +702,7 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
    existing status region (SYS-087) reflects the queued count until reconnection sync
    confirms it.
 
-## UC-040 Truthful sync-failure handling & recovery — MVP *(proposed 2026-08-06, pending founder ratification)*
+## UC-040 Truthful sync-failure handling & recovery — MVP *(ratified 2026-08-07, DEC-027)*
 
 **Actors:** field official; competition office.
 **Traces:** SYS-149 → STR-046, STR-041, STR-020.
@@ -723,7 +723,7 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
 5. **Given** any point in time, **then** the connectivity/status region never simultaneously
    reports "all transferred" and a non-zero pending count.
 
-## UC-041 Task-first navigation & empty states — MVP *(proposed 2026-08-06, pending founder ratification)*
+## UC-041 Task-first navigation & empty states — MVP *(ratified 2026-08-07, DEC-027)*
 
 **Actors:** competition-office volunteer; field official.
 **Traces:** SYS-151, SYS-152 → STR-035, STR-046, STR-045.
@@ -744,7 +744,7 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
 5. **Given** an applicable bulk or destructive action, **then** its confirmation step states
    the number of rows it will affect.
 
-## UC-042 Public find-your-athlete — MVP *(proposed 2026-08-06, pending founder ratification)*
+## UC-042 Public find-your-athlete — MVP *(ratified 2026-08-07, DEC-027)*
 
 **Actors:** spectator/parent on a phone.
 **Traces:** SYS-153 → STR-022, STR-034.
@@ -759,7 +759,7 @@ The MVP answer to "small clubs cannot build field-wide Wi-Fi" (DEC-013, research
 3. **Given** the live results page with a filter applied, **then** a live update (SSE
    refresh) does not clear the filter.
 
-## UC-043 Participant data correction — MVP *(proposed 2026-08-06, pending founder ratification)*
+## UC-043 Participant data correction — MVP *(ratified 2026-08-07, DEC-027)*
 
 **Actors:** competition office.
 **Traces:** SYS-150 → STR-035, STR-031.
