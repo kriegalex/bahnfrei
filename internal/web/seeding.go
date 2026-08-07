@@ -4,6 +4,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -145,10 +146,51 @@ func (s *Server) handleSeedingGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	maxHeatSize, _ := strconv.Atoi(r.FormValue("max_heat_size"))
 	trackLanes, _ := strconv.Atoi(r.FormValue("track_lanes"))
-	_, _ = s.results.GenerateHeats(r.Context(), actor, meetID, eventID, roundID, app.GenerateHeatsRequest{
+	if _, err := s.results.GenerateHeats(r.Context(), actor, meetID, eventID, roundID, app.GenerateHeatsRequest{
 		MaxHeatSize: maxHeatSize, TrackLanes: trackLanes,
-	})
+	}); err != nil {
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		s.renderSeedingError(w, r, meetID, eventID, roundID, seedingGenerateFlashKey(err))
+		return
+	}
 	http.Redirect(w, r, seedingRedirect(meetID, eventID, roundID), http.StatusSeeOther)
+}
+
+// seedingGenerateFlashKey maps a GenerateHeats error onto the
+// "seeding.generate.error.*" key the seeding page's page-level alert
+// renders (TASK-054/OQ-140): the known empty/insufficient-pool rejection
+// (no confirmed/checked-in entries to seed) gets its own actionable
+// message telling the operator what to do — confirm or check in entries
+// first — matching SYS-117's "state what to fix"; anything else falls back
+// to a generic actionable message instead of stringifying the raw service
+// error into the UI (mirrors participantIdentityFlashKey's precedent in
+// standings.go).
+func seedingGenerateFlashKey(err error) string {
+	if errors.Is(err, app.ErrEmptySeedingPool) {
+		return "seeding.generate.error.empty_pool"
+	}
+	return "seeding.generate.error.failed"
+}
+
+// renderSeedingError re-renders the seeding page with a page-level flash
+// error (SYS-152: distinguishable from the unchanged "no heats yet" empty
+// state) instead of silently redirecting as if nothing happened
+// (TASK-054/OQ-140) — mirrors renderCaptureError's precedent in capture.go.
+func (s *Server) renderSeedingError(w http.ResponseWriter, r *http.Request, meetID, eventID, roundID, key string) {
+	actor, _ := sessionFromContext(r.Context())
+	p := basePageData(r, s.cats)
+	v, err := s.seedingView(r, p, actor, meetID, eventID, roundID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	p.Title = v.MeetName + " — " + p.T("seeding.title")
+	p.FlashError = p.T(key)
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = seedingPage(p, v).Render(r.Context(), w)
 }
 
 func (s *Server) handleSeedingOverride(w http.ResponseWriter, r *http.Request) {
