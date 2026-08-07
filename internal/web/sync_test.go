@@ -189,8 +189,11 @@ func TestUC034_ReconciliationApplyOverJSON(t *testing.T) {
 		t.Error("applied reconciliation item must land in standings")
 	}
 	recon = bodyString(t, mustGet(t, client, meetURL+"/reconciliation"))
-	if !strings.Contains(recon, "Keine offenen") { // "no pending" empty state (DE)
-		t.Errorf("reconciliation queue should be empty after apply: %s", recon)
+	// OQ-135/TASK-052 empty-state sweep: names why nothing is pending
+	// (offline capture reconciles automatically) rather than a bare "no
+	// pending cases" sentence.
+	if !strings.Contains(recon, "Keine offenen Abgleichsfälle") || !strings.Contains(recon, "gleicht selbstständig ab") {
+		t.Errorf("reconciliation queue should show the why-empty state after apply: %s", recon)
 	}
 }
 

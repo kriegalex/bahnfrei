@@ -331,6 +331,12 @@ func TestSeedingGenerateAndOverrideHTTPSYS026UC008(t *testing.T) {
 	if !strings.Contains(empty, "seeding") && !strings.Contains(empty, "Seeding") && !strings.Contains(empty, "Setzung") && !strings.Contains(empty, "Séries") {
 		t.Errorf("seeding page missing expected content before generation: %s", empty)
 	}
+	// OQ-135/TASK-052 empty-state sweep: the "no heats yet" state names why
+	// (not generated yet) and the same-page next step (the generate form
+	// directly above it), not a bare "no heats" sentence.
+	if !strings.Contains(empty, "Noch keine Läufe generiert") || !strings.Contains(empty, "über das Formular oben") {
+		t.Errorf("seeding empty state missing the why/next-step copy: %s", empty)
+	}
 
 	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{
 		"max_heat_size": {"4"}, "track_lanes": {"0"},

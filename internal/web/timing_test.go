@@ -136,6 +136,15 @@ func TestTimingExportImportResolveEndToEndWeb(t *testing.T) {
 	if !strings.Contains(indexBody, "lynx.ppl") {
 		t.Fatalf("timing page missing export links:\n%s", indexBody)
 	}
+	// OQ-135/TASK-052 empty-state sweep: before any import, both the batch
+	// history and the conflict queue name why they are empty and point at
+	// the upload form above them, rather than a bare "nothing here".
+	if !strings.Contains(indexBody, "Noch keine Dateien importiert") || !strings.Contains(indexBody, "über das Formular oben eine .lif- oder CSV-Datei hochladen") {
+		t.Errorf("timing batches empty state missing the why/next-step copy:\n%s", indexBody)
+	}
+	if !strings.Contains(indexBody, "Keine offenen Import-Konflikte") || !strings.Contains(indexBody, "entweder wurde noch keine Datei importiert") {
+		t.Errorf("timing conflicts empty state missing the why copy:\n%s", indexBody)
+	}
 
 	evtResp := mustGet(t, client, base+"/meets/"+meetID+"/timing/export/evt")
 	evtBody := []byte(bodyString(t, evtResp))

@@ -32,6 +32,13 @@ test("UC-040 #1/#2/#3: a rejected op renders at its cell, never blocks the queue
   await openUnit(page, fx.unitURL);
   await expect(offlineStatus(page)).toHaveAttribute("data-state", "online");
 
+  // OQ-133 (TASK-052): at this suite's desktop viewport (no test.use
+  // override — the "Desktop Chrome" project default), the letter-marker
+  // quick-action buttons are hidden above the phone breakpoint; a physical
+  // keyboard types X/–/r without them. mobile-capture-UC039.spec.ts (360px
+  // viewport) is the counterpart pinning them visible below it.
+  await expect(page.locator(".marker-actions").first()).toBeHidden();
+
   // Save an invalid mark while genuinely online (the F1 repro): the server
   // now answers 200 with a per-op "rejected" outcome instead of a
   // batch-wide 400.

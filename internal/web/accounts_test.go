@@ -191,6 +191,29 @@ func TestFieldOfficialEventScopeSYS090UC022_2(t *testing.T) {
 	}
 }
 
+// TestOfficialsAssignmentMatrixEmptyStatesSYS152OQ135 covers the OQ-135/
+// TASK-052 empty-state sweep on the officials assignment matrix: with no
+// field-official accounts provisioned on the instance yet, the page states
+// why (accounts are instance-wide, created through account management, not
+// per-meet) rather than a bare "no officials" sentence — distinct from the
+// separate "no capturable units" state (`capture.units_empty`, shared with
+// the capture index) which does NOT apply here since the UKC fixture has
+// capturable units.
+func TestOfficialsAssignmentMatrixEmptyStatesSYS152OQ135(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/officials"))
+	if !strings.Contains(body, "Keine Kampfrichter/in-Konten (Feld) vorhanden") || !strings.Contains(body, "über die Kontoverwaltung") {
+		t.Errorf("officials matrix missing the why-empty copy: %s", body)
+	}
+	if strings.Contains(body, "Keine erfassbaren Bewerbe vorhanden") {
+		t.Errorf("officials matrix should not show the units-empty state when the meet has capturable units: %s", body)
+	}
+}
+
 // TestAccountCreateRejectsMissingFieldsAndDuplicateUsername drives the two
 // error branches of handleAccountCreate that never reach AuthService.CreateAccount
 // at all (missing required fields, errBadInput -> "invalid" flash) and the one
