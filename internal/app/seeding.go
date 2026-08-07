@@ -28,6 +28,13 @@ const defaultMaxHeatSize = 8
 // requested event.
 var ErrRoundNotFound = errors.New("round not found for this event")
 
+// ErrEmptySeedingPool means GenerateHeats found no confirmed entries (first
+// round) or qualified/advanced entries (later rounds) to seed — TASK-054/
+// OQ-140: the web layer maps this to an actionable "confirm or check in
+// entries first" message instead of silently re-rendering the unchanged
+// empty state.
+var ErrEmptySeedingPool = errors.New("generate heats: no confirmed/qualified entries to seed")
+
 // HeatSheetRow is one entry's line in a generated/regenerated heat sheet
 // (UC-008): identity, seed rank/mark, drawn lane, and qualification code
 // once progression has run (UC-009). Consent carries the athlete's
@@ -224,7 +231,7 @@ func (s *ResultsService) GenerateHeats(ctx context.Context, actor Session, meetI
 		return HeatSheet{}, err
 	}
 	if len(pool) == 0 {
-		return HeatSheet{}, fmt.Errorf("generate heats: no confirmed/qualified entries to seed")
+		return HeatSheet{}, ErrEmptySeedingPool
 	}
 
 	rules, err := loadSeedingRules()
