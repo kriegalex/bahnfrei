@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Bahnfrei has a visual refresh: a teal accent color, warm cream page backgrounds, a
+  condensed display typeface for headings and result tables (with evenly aligned digits
+  in mark/points columns), a new browser-tab icon, and a styled "Bahnfrei" wordmark in
+  the header. No behavior changes — the colors already used to show live/official status
+  keep the same meaning.
 - The letter-marker quick buttons (X/–/r) on capture pages now appear only at phone
   widths, where there is no physical keyboard.
 

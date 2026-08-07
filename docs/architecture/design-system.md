@@ -8,11 +8,20 @@ component inventory, the CI mechanism) — the requirement itself lives in `syst
 (cross-cutting concerns), which this document extends with a design-layer baseline the same way
 `adr/ADR-003-technology-stack.md` set the SSR/HTMX/templ baseline it styles.
 
-**Neutral default (OQ-061):** no brand identity exists yet for Bahnfrei. Every value below is a
-placeholder chosen for contrast/legibility, not a brand decision. Because every stylesheet and
-template reads colors/spacing/typography/radius exclusively through the named custom properties in
-`internal/web/static/tokens.css`, a future rebrand is a values-only edit to that one file — no
-template, no component markup, and no Go handler needs to change.
+**Brand identity (DEC-036, TASK-056):** Bahnfrei's visual identity is ratified — a teal accent on
+warm cream/warm near-black neutrals, plus a self-hosted condensed display face for headings and
+result-grid numerals (`docs/research/visual-identity-trends.md` is the evidence base; the register
+entry is `open-questions-and-assumptions.md` §11). Because every stylesheet and template reads
+colors/spacing/typography/radius exclusively through the named custom properties in
+`internal/web/static/tokens.css`, the retint itself was a values-only edit to that one file — no
+template or component markup changed for it. The display-face addition needed one more layer:
+`base.css` grew `@font-face` rules (pointing at the vendored `barlow-semi-condensed-*.woff2` files,
+embedded in `static.go` like every other asset) and the selectors that *consume*
+`--font-family-display` (headings, `.results-table`); `layout.templ`'s header link grew a `.brand`
+class for the wordmark treatment. `internal/web/tokens_contrast_test.go` parses `tokens.css`
+directly and asserts every foreground/background pair actually in use meets WCAG AA, so a future
+retint cannot silently regress contrast. No designed logo exists yet — DEC-036 explicitly scoped
+that out; a future logo pass would follow the same values-only-plus-thin-consumption-layer shape.
 
 ## 1. Design tokens
 
@@ -26,7 +35,7 @@ that mechanically in CI.
 | Color — surface/text | `--color-bg`, `--color-fg`, `--color-border` | Base page colors; `--color-border` is a low-opacity neutral (rgba), used for hairline dividers (header nav underline). |
 | Color — accent | `--color-accent`, `--color-accent-fg` | Links, the focus ring, and any future primary-action styling. |
 | Color — semantic status | `--color-success-bg`/`-fg`, `--color-warning-bg`/`-fg`, `--color-warning-strong-bg`/`-fg`, `--color-info-bg`/`-fg`, `--color-danger-fg` | Back the offline-capture indicator's three states (SYS-087), the unofficial-results label (SYS-076), the office blip-tolerance banner (UC-034 #7), and inline/flash error text. |
-| Typography | `--font-family-base`, `--font-size-base`, `--font-size-sm`, `--line-height-base`, `--font-weight-bold` | One family (system-ui stack, no web-font fetch — ADR-002/ADR-003 offline-first), two sizes (body/hint), one weight beyond regular. |
+| Typography | `--font-family-base`, `--font-family-display`, `--font-size-base`, `--font-size-sm`, `--font-size-lg`, `--line-height-base`, `--font-weight-bold` | `--font-family-base` is the system-ui stack (body copy, no web-font fetch — ADR-002/ADR-003 offline-first). `--font-family-display` (DEC-036, TASK-056) is Barlow Semi Condensed, a self-hosted OFL latin-subset woff2 (`internal/web/static/barlow-semi-condensed-{regular,bold}.woff2` + `-LICENSE`, embedded in `static.go`, no runtime fetch either) — applied to headings and `.results-table` numerals (`font-variant-numeric: tabular-nums`, using the face's verified `tnum` OpenType feature). Three sizes (body/hint/wordmark), one weight beyond regular. |
 | Spacing | `--space-1` … `--space-6` (0.25rem–1.5rem, matching the values already in use across the shell) | A small scale, not a full ramp — extend it only when a new value is genuinely needed, not per-component. |
 | Radius | `--radius-sm` (0.4rem) | Badges and banners; nothing in this shell uses a second radius yet. |
 | Focus ring | `--focus-ring-color`, `--focus-ring-width`, `--focus-ring-offset` | Kept separate from the raw accent color/spacing tokens so SYS-114's keyboard-focus contract has one named, testable seam (`e2e/tests/design-gallery.spec.ts` asserts against the *rendered* outline, not these tokens directly, so a future value change is automatically re-verified). |
@@ -34,12 +43,12 @@ that mechanically in CI.
 | Chrome control floor | `--control-min-height-sm` (1.5rem/24px) | SYS-116 (N4/TASK-051): every `<select>` gets at least this height — WCAG 2.2 SC 2.5.8's own floor, named explicitly rather than left to a select's intrinsic (font-driven) height. Distinct from `--touch-target-min`: this is the comfort bar for small chrome controls (the header locale switcher, previously 21px), not a change to already-larger primary capture controls. |
 
 `color-scheme: light dark` is declared (browser chrome — scrollbars, form-control native
-rendering — adapts to the OS), but the token *values* are light-only for 0.1: STR-045/SYS-116
-require a coherent, documented system, not a dark theme, and no page currently ships dark-mode
-colors to pair with it. A dark palette is a values-only addition to `tokens.css` when wanted — same
-rebranding mechanism as OQ-061 — recorded as an assumption, not a new open question (nothing here
-blocks 0.1; see `open-questions-and-assumptions.md` A-### working-assumptions section for the
-pointer).
+rendering — adapts to the OS), but the token *values* stay light-only: STR-045/SYS-116 require a
+coherent, documented system, not a dark theme, no page ships dark-mode colors to pair with it, and
+DEC-036 explicitly keeps light the default register (SYS-113 outdoor legibility). A dark palette
+would be a values-only addition to `tokens.css` when wanted — the same mechanism the DEC-036 retint
+itself used — recorded as an assumption, not an open question (see
+`open-questions-and-assumptions.md` A-### working-assumptions section for the pointer).
 
 ## 2. Component inventory
 
@@ -52,6 +61,7 @@ have. The gallery fixture page (§4) renders one live instance of every row.
 |---|---|---|---|
 | Skip link | `.skip-link` | default (visually hidden), focus-visible (visible, positioned) | Every page (`layout.templ`) |
 | Header nav | `header nav` | default | Every page |
+| Header wordmark | `.brand` | default, hover/active (inherited opacity from the generic `a` rules), focus-visible (ring) | DEC-036, TASK-056: the header's home link ("Bahnfrei" — a proper noun, not localized), set in `--font-family-display` at `--font-size-lg`, colored `--color-accent`. A typographic treatment, not a designed logo (explicitly out of scope for this round). Every page (`layout.templ`) |
 | Button | `button` | default, hover (opacity), focus-visible (ring), active (opacity), disabled (opacity + `cursor:not-allowed`) | Forms across the app (login, meets, entries, capture, admin, …) |
 | Link | `a` | default, hover (underline weight), focus-visible (ring), disabled via `aria-disabled="true"` (n/a today — no disabled link exists yet, documented for completeness) | Nav, in-page references |
 | Text/number/date input | `input[type=text\|number\|date\|…]` | default, focus-visible (ring), disabled (opacity), invalid/error (`aria-invalid="true"` → red border, paired `.field-error` text) | Every form |
@@ -62,6 +72,7 @@ have. The gallery fixture page (§4) renders one live instance of every row.
 | Contextual-help icon + popup | `.help` wrapper: `.help-trigger` (button) + `.help-popup` (`role="tooltip"`) | trigger: default, hover, focus-visible (ring), active, `aria-expanded` open/close; popup: hidden (default), open | TASK-031 (SYS-115, UC-037): every input in the help registry (`internal/web/help.go`); markup `help.templ`, behavior `/static/help.js` (hover + focus + click/tap open; SC 1.4.13 Escape-dismiss/hoverable/persistent) — trigger uses `--color-accent`/`--color-accent-fg`, popup `--color-bg`/`--color-fg`/`--color-border` + `--radius-sm` per §5 |
 | Inline field error | `.field-error` + `input[aria-invalid="true"]`/`select[aria-invalid="true"]` | error only (n/a default/hover/active) | Adopted (TASK-034, OQ-075, UC-038 #4) via the reusable `FieldErrors` map + `fieldError`/`fieldErrorID` helpers (`internal/web/fielderrors.go`/`.templ`) on the three representative forms: meet setup (`meets.templ`), online entry (`entries.templ`), result correction (`capture.templ`, row-scoped ids via `rowFieldKey`). The gallery page remains the fixture instance the keyboard-walk e2e checks; extend to further forms by calling the same helper. |
 | Table + wide-table scroll wrapper | `table`, `.table-scroll` (`tabindex="0"`) | default, focus-visible (ring, on the scroll wrapper) | Timetables, start lists, results, standings, roster, audit log |
+| Result grid | `.results-table` (paired with a plain `table`) | default only | DEC-036, TASK-056: the two rank/bib/mark/points/total tables (`standingsPage` in `standings.templ`, `publicResultsFragment` in `public.templ`) render in `--font-family-display` with `font-variant-numeric: tabular-nums` so digit columns align — the face's `tnum` OpenType feature was verified (fonttools) before vendoring. Plain data tables (roster, start lists, audit log, timetables) are unaffected — they keep the system stack. |
 | Offline-capture status badge | `.offline-status[data-state]` | online/default, offline, syncing (three distinct colors) | Field capture (UC-034; SYS-087) |
 | Office blip-tolerance banner | `.offline-banner` | hidden (default) / visible+alert | Authenticated shell, all pages, while a connectivity blip is active (UC-034 #7) |
 | Unofficial-results label | `.unofficial-label` | visible only when results are unofficial | Public results page (SYS-076) |
