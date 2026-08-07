@@ -1,42 +1,44 @@
-# CLAUDE.md — Athletics Tournament System
+# CLAUDE.md — Bahnfrei
 
-This repository is an **open-source athletics tournament management system**, delivered as a
-**spec-driven, agent-built** engagement. Read `plan.md` for the full brief. These rules override
-default behavior and persist across context compaction.
+Open-source athletics (track & field) meet management, live since v0.1.0 and developed
+**spec-driven** with an agent team. `plan.md` is the historical founding brief. These rules
+override default behavior and persist across context compaction. Current working state
+(milestones, next tasks, bookkeeping counters) lives in the untracked
+`.claude/runbook/STATUS.md` — read it at session start, never commit it.
 
-## Prime directive
-This engagement runs in **two phases**, separated by a hard, human-ratified gate:
+## Change process (spec first, always)
 
-- **Phase A — Requirements baseline (implementation-free).** Produce rigorous, traceable
-  requirements. Do **NOT** write application code, choose a stack, or scaffold during Phase A.
-- **Phase B — Implementation (Fable-led).** Only after the requirements baseline is approved
-  **and** the foundational architecture ADRs are ratified by the human, build the system against
-  the specs.
+- **No code without a traced, testable spec.** Every change traces to a `SYS-###` (via a
+  `UC-###` acceptance criterion where user-visible) and ships with automated tests; the
+  traceability matrix is updated in the same change.
+- **One-way doors go through the human.** Stack, licence, data model, external
+  integrations, releases/tags, repo visibility, anything irreversible or costly: propose
+  as `ADR-###` (architecture) or an open question (`OQ-###`), the founder ratifies
+  (`DEC-###` in `docs/requirements/open-questions-and-assumptions.md`) before building.
+- **New requirements** follow the three-layer scheme below and enter as *(proposed)* until
+  founder ratification.
+- A security & privacy (nFADP/GDPR) review gates anything touching personal data.
 
-Never begin Phase B work before both gate conditions are met. When in doubt about which phase a
-task belongs to, treat it as Phase A.
+## Requirements layers (each traced to the one above)
 
-## Requirements as executable specs (the agentic layer)
-Two-layer 29148 requirements are the traceable, regulator-facing baseline — necessary but not
-directly agent-executable. Maintain **three** layers, each traced to the one above:
+- **StRS** — stakeholder needs, stakeholder language, implementation-free (`STR-###`).
+- **SyRS** — system requirements, testable, traced to StRS (`SYS-###`).
+- **Use-cases** — vertical slices with executable Given/When/Then acceptance criteria,
+  tracing up to `SYS/STR` and down to automated tests (`UC-###`). The unit of work.
 
-- **StRS** — stakeholder needs, in stakeholder language, **implementation-free** (`STR-###`).
-- **SyRS** — technical/system requirements, testable, traced to StRS (`SYS-###`).
-- **Use-cases / features** — vertical slices with **executable acceptance criteria**
-  (Given/When/Then), each tracing **up** to `SYS-###`/`STR-###` and **down** to automated tests
-  (`UC-###`). This is the unit of work Fable assigns and agents self-verify against.
+Requirements MUST be uniquely identified, atomic, unambiguous, verifiable, traceable;
+**SHALL** for mandatory; rationale and source per requirement. Convert vague language into
+measurable targets — no adjectives as requirements. Cite every external fact and verify
+named systems by exact name/spelling.
 
-Every requirement MUST be: uniquely identified, atomic, unambiguous, **verifiable/testable**, and
-traceable. Use **SHALL** for mandatory. Record **rationale** and **source** per requirement.
-Convert vague founder language ("state of the art", "bug free", "well tested") into **measurable**
-quality attributes with targets — no adjectives as requirements.
-
-**ID schemes (stable — never renumber; deprecate instead):** stakeholder `STR-###`, system
-`SYS-###`, use-case `UC-###`, architecture decision `ADR-###`, work item `TASK-###`.
+**IDs are stable — never renumber; deprecate instead:** `STR/SYS/UC/ADR/TASK/OQ/DEC-###`.
+Parallel workers get pre-assigned, non-overlapping OQ ranges and migration numbers in
+their briefs; unused reservations stay unused (gaps are fine).
 
 ## Operating model
-Work as a **multi-disciplinary team**, not a solo author. **Plan first**, keep a live task list,
-and work autonomously within a phase without pausing between sub-steps. Spin up sub-agents for
+
+Work as a multi-disciplinary team, not a solo author. Plan first, keep a live task list,
+work autonomously within a task without pausing between sub-steps. Fan sub-agents out for
 parallelizable work and reconcile their outputs.
 
 **Model tiering (match task to cheapest sufficient tier):**
@@ -44,97 +46,82 @@ parallelizable work and reconcile their outputs.
   Verify Haiku deliverables against the brief before merging.
 - **Sonnet** — the default for real work: the bulk of implementation, tests, refactoring, analysis —
   including most work that formerly warranted Opus.
-- **Opus** — escalation tier: the security/privacy review gate (pillar 7) and debugging that has
+- **Opus** — escalation tier: the security/privacy review gate and debugging that has
   genuinely stuck a Sonnet worker.
 - **Fable** — Tech Lead / long-horizon orchestration (see below). `fork` sub-agents inherit the
   parent model — do not rely on a `model` override to downgrade a fork.
 
-## Phase B — Fable as Tech Lead
-In Phase B, a **Fable-class agent is the Tech Lead and orchestrator**. It owns the architecture
-baseline and coordinates implementation of the use-cases; it does not personally write most code.
+Use the `task-worker` subagent definition (`.claude/agents/task-worker.md`) for TASK
+implementation workers — it carries the standing toolchain/convention brief so per-task
+briefs stay task-specific.
 
-Fable's responsibilities:
-- **Own architecture.** Propose the stack, data model, and external integrations as **ADRs**;
-  route every one-way-door decision through the human gate before building on it.
-- **Decompose & delegate.** Turn `UC-###` slices into `TASK-###` work items; assign to worker
-  agents at the right tier; keep its own context lean by pushing detail into sub-agents (workers
-  return results and diffs, not raw tool output).
-- **Reconcile.** Merge parallel slices, resolve conflicts, keep the traceability matrix current.
-- **Guard the verification gate.** Nothing is "done" until its acceptance tests pass and trace to a
-  `SYS-###`.
+## Fable as Tech Lead
 
-Best-practice pillars Fable enforces (2026 agentic norms, Opus/Fable-class):
-1. **Spec-driven.** Specs are the source of truth. No code without a traced, testable spec; nothing
-   ships until its executable acceptance criteria pass.
-2. **Orchestrator–worker.** Fable delegates; workers do narrow, well-scoped units and return
-   summaries + diffs. Fan out independent slices; reconcile via the traceability matrix.
-3. **Closed-loop verification.** Every slice ships with automated tests mapped to `SYS-###`;
-   typecheck + lint + tests green before "done". Definition of done is **machine-checkable**.
-4. **Human one-way-door gates.** Stack, license, data model, external integrations, and anything
-   irreversible/costly: Fable **proposes via ADR, human ratifies** before build.
-5. **Durable memory.** Architecture intent lives in ADRs so context compaction never loses it.
-6. **Small vertical slices.** PR-sized, independently verifiable, each traced end-to-end.
-7. **Guardrails.** Least privilege; no destructive or outbound actions without confirmation; a
-   security & privacy (nFADP/GDPR) review gate on anything touching personal data.
-8. **Context engineering.** Docs are ID-addressable and retrieval-friendly (tables, stable IDs) so
-   agents load only what a task needs.
+The Fable-class agent orchestrates; it does not personally write most code.
 
-## Quality bar (definition of done)
-- Zero orphan requirements — everything is traced in `traceability-matrix.md`
-  (`STR → SYS → UC → test → verification method`).
-- **Cite every external fact.** Verify named systems by exact name/spelling (Swiss Athletics;
-  "Seltec" — confirm, the seed wrote "setlec").
-- Make assumptions explicit; consolidate open questions in
-  `docs/requirements/open-questions-and-assumptions.md`.
-- State scope boundaries: prioritized **MVP vs. later**, plus explicit **out-of-scope** items.
-- In Phase B: each `TASK-###` is merged only with passing acceptance tests traced to a `SYS-###`,
-  and any architecture decision it relied on recorded as an `ADR-###`.
+- **Own architecture.** One-way doors as ADRs through the founder gate before building.
+- **Decompose & delegate.** `UC-###` → `TASK-###` work items; workers at the right tier;
+  keep own context lean (workers return summaries + diffs, not raw tool output).
+- **Reconcile.** Merge parallel slices, resolve conflicts, keep the matrix current.
+- **Guard the gate.** Nothing is "done" until acceptance tests pass and trace to a
+  `SYS-###`; typecheck + lint + tests green; definition of done is machine-checkable.
+- **Small vertical slices.** PR-sized, independently verifiable, traced end-to-end.
+- **Durable memory.** Architecture intent lives in ADRs; session state in the runbook.
+
+## Toolchain & gotchas (hard-won — trust these)
+
+- **Merge gate:** `mise x go@1.26.5 -- scripts/check-gate.sh` before every push to main.
+  A bare `scripts/check-gate.sh` without mise exits 0 with only a warning — a MISLEADING
+  success. Run gates in the foreground. Coverage floors live in `scripts/check-coverage.sh`
+  (ratchet them together with the requirement, never separately).
+- **Between releases the local gate is the only coverage/race enforcement** — CI runs its
+  coverage and macOS/Windows jobs on `v*` tag pushes only.
+- **templ:** regenerate with `go run github.com/a-h/templ/cmd/templ@<go.mod pin> generate`;
+  the PATH binary is older and rewrites unrelated files. Resolve `*_templ.go` conflicts by
+  fixing the `.templ` source and regenerating.
+- **Locales:** after locale JSON edits run `scripts/gen-pseudo-locale`; key-union merge on
+  conflicts. New static assets must be added to `internal/web/static/static.go`'s embed
+  list or they 404 silently.
+- **Git:** never `git add -A` (`.claude/worktrees/` gets staged as an embedded repo);
+  `git branch -D` and `git reset --hard` are user-denied — cherry-pick worker commits onto
+  main one at a time and re-run the full gate. After scripted conflict resolution, grep for
+  all three conflict-marker types before staging.
+- **Worktrees are cut from session-start main:** every worker first runs
+  `git merge-base main HEAD` and merges main if behind.
+- **Perf/load tests** only inside
+  `systemd-run --user --scope -p MemoryMax=12G -p MemorySwapMax=0` with `GOMEMLIMIT` —
+  an uncapped load test has OOM-killed the host. Measure ascending scales and extrapolate.
 
 ## Documentation audiences (hard rule)
+
 Every committed doc has exactly one audience; never mix them:
 
-1. **Human-facing** — `README.md`, `CHANGELOG.md`, `docs/ops/**`, GitHub release notes: written
-   for a meet organizer or operator deciding whether/how to use the software. Plain language;
-   **no internal ID citations** (`SYS/UC/STR/TASK/OQ/DEC-###`) — a human cannot resolve numbered
-   acronyms mid-sentence; say the thing in words instead. Linked `ADR-###` references are the
-   one exception (those are document names a reader can open). Timeless present-state prose:
-   no status headers, phase labels, dated updates, or process narration — history belongs in
-   git and the changelog.
-2. **Spec/engineering** — `docs/requirements/**`, `docs/architecture/**`, `docs/delivery/**`:
-   ID-addressable and traceable by design; that vocabulary lives here and only here. Still
-   product-facing: no agent-operations vocabulary (model tiers, worker assignment, orchestration
-   mechanics) in committed files.
-3. **Working state** — milestone progress, session notes, merge logs, "what's next": **never
-   committed**. It lives in the untracked, gitignored `.claude/runbook/` (and agent memory);
-   copy whatever a worker needs into its brief. If a doc reads like a status report, it is
-   working state and does not belong in git.
+1. **Human-facing** — `README.md`, `CHANGELOG.md`, `docs/ops/**`, GitHub release notes:
+   written for a meet organizer or operator. Plain language; **no internal ID citations**
+   (`SYS/UC/STR/TASK/OQ/DEC-###`) — a human cannot resolve numbered acronyms mid-sentence;
+   say the thing in words. Linked `ADR-###` references are the one exception (document
+   names a reader can open). Timeless present-state prose: no status headers, phase
+   labels, dated updates, or process narration — history belongs in git and the changelog.
+2. **Spec/engineering** — `docs/requirements/**`, `docs/architecture/**`,
+   `docs/delivery/**`: ID-addressable and traceable by design; that vocabulary lives here
+   and only here. Still product-facing: no agent-operations vocabulary (model tiers,
+   worker assignment, orchestration mechanics) in committed files.
+3. **Working state** — milestone progress, session notes, merge logs, "what's next":
+   **never committed**. It lives in the untracked, gitignored `.claude/runbook/` (and
+   agent memory); copy whatever a worker needs into its brief. If a doc reads like a
+   status report, it is working state and does not belong in git.
 
 Before committing any doc, decide its bucket and write for that audience only.
 
-## Deliverable layout
-```
-docs/research/domain-athletics.md
-docs/research/competitive-analysis.md
-docs/requirements/stakeholder-requirements.md      # StRS, STR-###
-docs/requirements/system-requirements.md           # SyRS, SYS-###
-docs/requirements/use-cases.md                     # UC-###, executable acceptance criteria
-docs/requirements/traceability-matrix.md           # STR → SYS → UC → test → verification
-docs/requirements/open-questions-and-assumptions.md
-docs/requirements/glossary.md
-docs/architecture/architecture.md                  # Phase B: baseline architecture
-docs/architecture/adr/ADR-###-*.md                 # Phase B: architecture decision records
-docs/delivery/work-breakdown.md                    # Phase B: TASK-### backlog Fable coordinates
-README.md
-# Application source is added in Phase B, after the gate.
-```
+## Domain & regulatory context
 
-## Domain context to keep in mind
-- Athletics/track & field competition management: events & disciplines, heats/rounds/seeding,
-  multi-day meets, timing & live results, records, age/gender categories, para classifications,
-  officiating, federation sanctioning.
-- Regulatory/locale context is **Swiss/EU**: privacy under **nFADP + GDPR**; multilingual CH
-  (**DE/FR/IT/EN**); interoperability with **World Athletics** data/competition standards and
-  timing providers; on-site/**offline venue operation** matters.
+Athletics competition management: events & disciplines, heats/rounds/seeding, multi-day
+meets, timing & live results, records, age/gender categories, para classifications,
+officiating, federation sanctioning. Swiss/EU context: **nFADP + GDPR** privacy,
+multilingual CH (**DE/FR** shipped), **World Athletics** data/competition standards,
+timing providers (FinishLynx), and tolerance to venue connectivity loss.
 
 ## Style
-- Rigorous and concise. No marketing fluff. Clean, reviewable Markdown.
+
+Rigorous and concise. No marketing fluff. Clean, reviewable Markdown. Conventional
+Commits.

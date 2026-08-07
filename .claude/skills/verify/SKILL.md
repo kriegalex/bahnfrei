@@ -1,6 +1,7 @@
 ---
 name: verify
 description: Build, launch and drive a real bahnfrei server for runtime verification of web-surface changes.
+when_to_use: Use after changing anything under internal/web, islands/, or templates when unit tests alone cannot prove the rendered behavior — e.g. verifying a page renders localized strings, a form round-trips, SSE fires, or a capture flow works end-to-end without writing a full Playwright spec.
 ---
 
 # Verifying bahnfrei changes against the running server
