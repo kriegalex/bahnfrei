@@ -75,13 +75,18 @@ func TestCapturePageWiresOfflineIsland(t *testing.T) {
 		`data-sw-scope="/meets/` + meetID + `/capture/"`,
 		`data-i18n-offline=`,
 		`data-i18n-pending=`,
-		`src="/static/capture-offline.js"`,
 		`data-athlete=`, // cell forms carry the op coordinates for the queue
 		`data-seq=`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("field capture page missing %s", want)
 		}
+	}
+	// The script src carries a content-fingerprint query parameter
+	// (DEC-039/TASK-059, assetURL); assert the prefix rather than the
+	// bare literal so this test survives asset-content changes.
+	if !strings.Contains(body, `src="/static/capture-offline.js?v=`) {
+		t.Error("field capture page missing the fingerprinted capture-offline.js script src")
 	}
 
 	// The track surface is not the offline island's scope (ADR-004 §8 covers
