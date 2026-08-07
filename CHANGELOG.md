@@ -35,6 +35,18 @@ All notable changes to this project are documented here. The format follows
   keep their compact, touch-friendly layout for entering marks quickly at the track.
 - The letter-marker quick buttons (X/–/r) on capture pages now appear only at phone
   widths, where there is no physical keyboard.
+- The meet page, the result-capture list and the public meet pages now show their
+  navigation and actions as clear, separated lists on their own card instead of runs of
+  links separated by dots. The main action on each page (creating a meet, publishing a
+  meet) now stands out as a solid button; secondary actions such as archiving a meet or
+  starting from a template are visibly less prominent. Meet status (draft, published,
+  live, archived, …) now shows as a small colored label with its name, matching a
+  familiar grey-then-live-then-green convention instead of plain bold text. The
+  discipline programme's category picker is now a set of checkboxes you can tick instead
+  of a scrolling multi-select list — it selects the same categories the old list did.
+  Several more office forms (entry registration, timing-file import, CSV entry import)
+  now lay their fields out one above another, matching the earlier sign-in/setup/meet
+  forms; the compact result-entry grids used at the track are unaffected.
 
 ### Fixed
 
