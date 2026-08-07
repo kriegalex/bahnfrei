@@ -157,3 +157,39 @@ func (s *Server) handleAccountRoleChange(w http.ResponseWriter, r *http.Request)
 	}
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
+
+// handleAccountResetPassword completes the TASK-053/DEC-030 admin-issued
+// password reset: the mutation half of the GET-confirm-sub-page flow
+// (handleAccountResetConfirm, confirm.go). A too-short password re-renders
+// the same confirm page with an inline field error (OQ-075's convention)
+// rather than a page-level flash, since it is directly attributable to the
+// one field the operator just typed into.
+func (s *Server) handleAccountResetPassword(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	accountID := r.PathValue("id")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	newPassword := r.FormValue("new_password")
+	if _, err := s.auth.ResetPassword(r.Context(), actor, accountID, newPassword, strings.TrimSpace(r.FormValue("reason"))); err != nil {
+		if errors.Is(err, app.ErrPasswordTooShort) {
+			username, ok, uerr := s.accountUsername(r, actor, accountID)
+			if uerr != nil {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			if !ok {
+				s.handleNotFound(w, r)
+				return
+			}
+			p := basePageData(r, s.cats)
+			v := s.accountResetConfirmView(p, accountID, username, p.T("accounts.reset.field_error.new_password.too_short"))
+			s.renderConfirm(w, r, p, v, http.StatusUnprocessableEntity)
+			return
+		}
+		redirectAccountsError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}

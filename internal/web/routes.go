@@ -26,6 +26,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLoginSubmit)
 	mux.HandleFunc("POST /logout", s.handleLogout)
+	// Forced change-password step (TASK-053, DEC-030, SYS-090/091): reached
+	// after an admin-issued reset. Any authenticated session may use it
+	// (not instance-admin gated) since it only ever changes the actor's own
+	// password; forcePasswordChangeGate (middleware.go) is what routes a
+	// forced session here from everywhere else.
+	mux.HandleFunc("GET /change-password", s.handleChangePasswordForm)
+	mux.HandleFunc("POST /change-password", s.handleChangePasswordSubmit)
 	mux.HandleFunc("GET /locale", s.handleLocaleSwitch)
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /events/{topic}", s.handleEvents)
@@ -74,6 +81,12 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /admin/accounts/{id}/disable/confirm", admin(s.handleAccountDisableConfirm))
 	mux.HandleFunc("POST /admin/accounts/{id}/disable", admin(s.handleAccountDisable))
 	mux.HandleFunc("POST /admin/accounts/{id}/role", admin(s.handleAccountRoleChange))
+	// TASK-053/DEC-030: admin-issued one-time password reset — the
+	// meet-morning-lockout fix, no email infrastructure. OQ-074-style GET
+	// confirm sub-page (the accounts page's existing mutation-confirmation
+	// pattern) in front of the POST.
+	mux.HandleFunc("GET /admin/accounts/{id}/reset/confirm", admin(s.handleAccountResetConfirm))
+	mux.HandleFunc("POST /admin/accounts/{id}/reset", admin(s.handleAccountResetPassword))
 
 	// Meet setup workspace (UC-001 #2–#5), organizer-gated (SYS-090).
 	organize := func(h http.HandlerFunc) http.HandlerFunc {
@@ -294,6 +307,10 @@ func (s *Server) routes() http.Handler {
 	h = csrfMiddleware()(h)
 	// Bound the request body before CSRF parses it (see limitRequestBody).
 	h = limitRequestBody(maxRequestBodyBytes)(h)
+	// TASK-053: must run after sessionMiddleware sets the context (so it can
+	// read MustChangePassword) but before the router, so it can intercept
+	// every route, not just a hand-picked set.
+	h = s.forcePasswordChangeGate(h)
 	h = sessionMiddleware(s.sess)(h)
 	h = localeMiddleware(s.cats)(h)
 	h = s.securityHeaders(h)

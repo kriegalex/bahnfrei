@@ -42,6 +42,15 @@ import (
 //     phishing-shaped UX. A typed string is also the industry-precedent
 //     pattern for irreversible actions (e.g. "type the repository name to
 //     delete it").
+//
+// TASK-053 (DEC-030) adds a fifth flow on the same GET-confirm-sub-page
+// shape: account password reset. It is reversible (the operator logs back
+// in with the temporary password and completes the forced change-password
+// step) so it takes the plain Confirm/Cancel friction level like disable —
+// but needs the admin to type the new temporary password inline, so
+// confirmView grows an optional PasswordField rather than repurposing
+// TypedConfirm (which means "type this exact value to prove intent", not
+// "enter arbitrary new data").
 
 // confirmField is one hidden <input> carried through a confirm sub-page's
 // POST form (e.g. an optimistic-concurrency version, a default reason).
@@ -74,6 +83,15 @@ type confirmView struct {
 	// a scope count, and confirmPage renders it with no form/confirm
 	// button — a real state, not a live action with nothing to confirm.
 	Inapplicable bool
+	// PasswordField, when set, renders a type="password" input on the
+	// confirm page (TASK-053's account password reset): the admin types
+	// the account's new temporary password inline, on the same
+	// GET-confirm-sub-page navigation every other account mutation on this
+	// surface already uses, rather than a further page. PasswordFieldErr
+	// mirrors FieldErr's re-render-with-inline-error shape for this field.
+	PasswordField      string
+	PasswordFieldLabel string
+	PasswordFieldErr   string
 }
 
 func (s *Server) renderConfirm(w http.ResponseWriter, r *http.Request, p PageData, v confirmView, status int) {
@@ -144,6 +162,40 @@ func (s *Server) handleAccountDisableConfirm(w http.ResponseWriter, r *http.Requ
 		ConfirmLabel: p.T("accounts.action.disable"),
 	}
 	s.renderConfirm(w, r, p, v, http.StatusOK)
+}
+
+// --- account password reset (TASK-053, DEC-030, SYS-090/091): the
+// meet-morning-lockout fix, no email infrastructure. ---
+
+// accountResetConfirmView builds the reset confirm page. fieldErr is set
+// only when re-rendering after the POST rejected a too-short password.
+func (s *Server) accountResetConfirmView(p PageData, accountID, username, fieldErr string) confirmView {
+	return confirmView{
+		Title:              p.T("accounts.reset.confirm.title"),
+		Description:        p.T("accounts.reset.confirm.description", "username", username),
+		FormAction:         "/admin/accounts/" + accountID + "/reset",
+		CancelHref:         "/admin",
+		ConfirmLabel:       p.T("accounts.action.reset"),
+		PasswordField:      "new_password",
+		PasswordFieldLabel: p.T("accounts.reset.confirm.password_label"),
+		PasswordFieldErr:   fieldErr,
+	}
+}
+
+func (s *Server) handleAccountResetConfirm(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	accountID := r.PathValue("id")
+	username, ok, err := s.accountUsername(r, actor, accountID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		s.handleNotFound(w, r)
+		return
+	}
+	p := basePageData(r, s.cats)
+	s.renderConfirm(w, r, p, s.accountResetConfirmView(p, accountID, username, ""), http.StatusOK)
 }
 
 // --- athlete erasure (SYS-101, UC-024 #2): typed-confirmation friction ---

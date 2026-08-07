@@ -58,6 +58,10 @@ templ accountsPage(p PageData, v accountsView) {
 											<button type="submit">{ p.T("accounts.action.enable") }</button>
 										</form>
 									}
+									// TASK-053/DEC-030: admin-issued one-time
+									// password reset, same GET-confirm-
+									// sub-page pattern as disable above.
+									<a href={ templ.URL("/admin/accounts/" + a.ID + "/reset/confirm") } class="button">{ p.T("accounts.action.reset") }</a>
 								</td>
 							</tr>
 						}

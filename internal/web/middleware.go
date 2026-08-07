@@ -90,6 +90,40 @@ func requireRole(min app.Role, cats i18n.Catalogs, next http.HandlerFunc) http.H
 	}
 }
 
+// forcePasswordChangeExemptPaths are the routes a session with
+// MustChangePassword=true may still reach (TASK-053): the change-password
+// step itself (GET renders the form, POST submits it), logout (an operator
+// who does not want to complete the step right now can still leave), and
+// the handful of asset/utility routes no page can function without
+// (static assets, favicon, the locale switcher, healthz).
+var forcePasswordChangeExemptPaths = map[string]bool{
+	"/change-password": true,
+	"/logout":          true,
+	"/locale":          true,
+	"/healthz":         true,
+	"/favicon.ico":     true,
+}
+
+// forcePasswordChangeGate redirects every request on an authenticated
+// session with MustChangePassword=true to the change-password step
+// (TASK-053, DEC-030, SYS-090/091), until that step clears the flag — an
+// admin-issued temporary password only ever grants access to setting a real
+// one. It must sit in the middleware chain after sessionMiddleware (so the
+// session is already on the context) and applies to state-changing POSTs
+// exactly like GETs, so a forced-change session cannot route around the
+// gate by acting on a route directly.
+func (s *Server) forcePasswordChangeGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sess, ok := sessionFromContext(r.Context()); ok && sess.MustChangePassword {
+			if !forcePasswordChangeExemptPaths[r.URL.Path] && !strings.HasPrefix(r.URL.Path, "/static/") {
+				http.Redirect(w, r, "/change-password", http.StatusSeeOther)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // renderForbidden serves the shared localized 403 page (SYS-090 least
 // privilege): the coarse role gate above and the per-event unit-scoping
 // gate (TASK-013, UC-022 #1) both end here so a denial always looks the

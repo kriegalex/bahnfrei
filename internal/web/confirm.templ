@@ -6,12 +6,13 @@ package web
 // confirmPage is the shared OQ-074 destructive-action confirmation
 // sub-page (see confirm.go's package doc for the CSP rationale and the
 // friction-level rationale). Every one of the four destructive actions
-// (athlete erasure, account disable, meet archive, retention purge) renders
-// through this one template so the pattern stays visually and structurally
-// identical across all of them. TASK-047/SYS-152/UC-041 #4: when the
-// action has gone stale — nothing left for it to apply to — Inapplicable
-// renders the explanation with no form or confirm button at all, so
-// navigating a now-inapplicable confirm URL never presents a live control.
+// (athlete erasure, account disable, meet archive, retention purge), plus
+// TASK-053's account password reset, renders through this one template so
+// the pattern stays visually and structurally identical across all of
+// them. TASK-047/SYS-152/UC-041 #4: when the action has gone stale —
+// nothing left for it to apply to — Inapplicable renders the explanation
+// with no form or confirm button at all, so navigating a now-inapplicable
+// confirm URL never presents a live control.
 templ confirmPage(p PageData, v confirmView) {
 	@layout(p) {
 		<h1>{ v.Title }</h1>
@@ -41,6 +42,25 @@ templ confirmPage(p PageData, v confirmView) {
 					</label>
 					if v.FieldErr != "" {
 						<p class="field-error" id={ fieldErrorID(v.TypedConfirmField) } role="alert">{ v.FieldErr }</p>
+					}
+				}
+				if v.PasswordField != "" {
+					<label>
+						{ v.PasswordFieldLabel }
+						<input
+							type="password"
+							name={ v.PasswordField }
+							autocomplete="new-password"
+							required?={ true }
+							minlength="8"
+							if v.PasswordFieldErr != "" {
+								aria-invalid="true"
+								aria-describedby={ fieldErrorID(v.PasswordField) }
+							}
+						/>
+					</label>
+					if v.PasswordFieldErr != "" {
+						<p class="field-error" id={ fieldErrorID(v.PasswordField) } role="alert">{ v.PasswordFieldErr }</p>
 					}
 				}
 				<button type="submit">{ v.ConfirmLabel }</button>
