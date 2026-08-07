@@ -55,13 +55,14 @@ body {
    --color-accent-hover (a real color shift — see that token's comment);
    visited stays the same color throughout, since these are app links
    (destinations inside Bahnfrei), not documents to track as "already
-   read". */
+   read" — the bare `a` rule already covers :visited (author rules beat
+   the UA's visited-purple at any specificity). Never add an `a:visited`
+   rule here: its (0,1,1) specificity out-competes single-class rules
+   like `.button-primary`/`.nav-link` and turns visited button anchors
+   accent-on-accent (invisible text). */
 a {
   color: var(--color-accent);
   text-decoration: underline;
-}
-a:visited {
-  color: var(--color-accent);
 }
 a:hover {
   color: var(--color-accent-hover);
@@ -73,6 +74,30 @@ a:hover {
    override needed here. */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-family-display);
+}
+
+/* Data tables (SYS-116): plain data tables (meets list, programme,
+   schedule, roster, audit log, …) get a consistent left-aligned,
+   breathing-room convention — browser defaults center-align headers over
+   left-aligned cells with ~1px padding, which reads cramped and
+   misaligned. Scoped away from `.stack-table` (the dense capture/seeding
+   grids), whose compact geometry and ≥44px touch floors are a documented
+   invariant (DEC-037/038) and must not inherit this padding. */
+table:not(.stack-table) {
+  border-collapse: collapse;
+}
+table:not(.stack-table) th,
+table:not(.stack-table) td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: middle;
+}
+table:not(.stack-table) thead th {
+  border-bottom: 1px solid var(--color-border);
+}
+table:not(.stack-table) tbody tr:not(:last-child) > th,
+table:not(.stack-table) tbody tr:not(:last-child) > td {
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* Result grids (DEC-036, TASK-056): the standings/results tables (rank,
@@ -161,6 +186,11 @@ header nav {
 /* Compact secondary button for the locale-apply control (`.nav-actions`) —
    same `.button` chrome as everywhere else, just visually small next to
    the section links since it sits in a one-line bar. */
+.locale-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .locale-switch button {
   padding: var(--space-1) var(--space-3);
 }
@@ -459,6 +489,9 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
+.form-panel > :first-child {
+  margin-top: 0;
+}
 
 /* --------------------------------------------------------------------
    Status chip (DEC-038, TASK-058, SYS-116/SYS-148): generalizes the
@@ -481,6 +514,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-fg);
+  vertical-align: middle;
 }
 .status-chip[data-tone="info"] {
   background: var(--color-info-bg);
