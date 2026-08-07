@@ -104,16 +104,23 @@ type publicStartListsView struct {
 	// redisplayed so a no-JS filtered page survives reload/bookmark like
 	// every other list filter in this app.
 	Query string
-	// FilterCountLabel is the localized "n results" line (UC-042 #1): the
-	// no-JS baseline the public-filter.ts island updates live as the
-	// visitor types, computed once here from whatever the current Query
-	// already filtered server-side.
+	// FilterCountLabel is the localized, pluralized "n results" line
+	// (UC-042 #1, N3/TASK-051): the no-JS baseline the public-filter.ts
+	// island updates live as the visitor types, computed once here from
+	// whatever the current Query already filtered server-side.
 	FilterCountLabel string
-	// FilterCountTemplate is the same message with "{n}" left
-	// unsubstituted — the raw template the island re-interpolates
-	// client-side after every filter keystroke (same data-attribute
-	// convention as capture-offline.ts's data-i18n-pending).
-	FilterCountTemplate string
+	// FilterCountTemplateOne/Other are the same message with "{n}" left
+	// unsubstituted, singular and plural form (N3/TASK-051 pluralization,
+	// e.g. "{n} Ergebnis" vs "{n} Ergebnisse") — the raw templates the
+	// island re-interpolates client-side after every filter keystroke
+	// (same data-attribute convention as capture-offline.ts's
+	// data-i18n-pending), picking between them via FilterCountSingularSet.
+	FilterCountTemplateOne   string
+	FilterCountTemplateOther string
+	// FilterCountSingularSet mirrors PageData.FilterCountSingularSet
+	// (baked in once at render time so the island needs no locale logic
+	// of its own).
+	FilterCountSingularSet string
 }
 
 // handlePublicStartLists serves the meet's participants (UC-017 #2):
@@ -219,13 +226,16 @@ func (s *Server) handlePublicStartLists(w http.ResponseWriter, r *http.Request) 
 // which carry no bib — DEC-021/TASK-038's app.MatchesParticipantSearch,
 // reused verbatim), dropping any heat unit/round/event left with no
 // matching rows (UC-042 #1: "matching rows and their categories remain
-// visible"). Always sets Query/FilterCountLabel/FilterCountTemplate, even
-// for an empty q, so the no-JS and JS-enhanced paths render from the same
-// fields. A no-op filter (q == "") still runs the copy/rebuild below —
-// cheap at this page's scale and it keeps one code path for both cases.
+// visible"). Always sets Query/FilterCountLabel/FilterCountTemplateOne/
+// FilterCountTemplateOther, even for an empty q, so the no-JS and
+// JS-enhanced paths render from the same fields. A no-op filter (q == "")
+// still runs the copy/rebuild below — cheap at this page's scale and it
+// keeps one code path for both cases.
 func filterPublicStartListsView(p PageData, v publicStartListsView, q string) publicStartListsView {
 	v.Query = q
-	v.FilterCountTemplate = p.T("public.filter.count")
+	v.FilterCountTemplateOne = p.T("public.filter.count.one")
+	v.FilterCountTemplateOther = p.T("public.filter.count.other")
+	v.FilterCountSingularSet = p.FilterCountSingularSet()
 
 	var rows []publicStartListRowView
 	for _, row := range v.Rows {
@@ -269,7 +279,7 @@ func filterPublicStartListsView(p PageData, v publicStartListsView, q string) pu
 
 	v.Rows = rows
 	v.HeatEvents = events
-	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(count))
+	v.FilterCountLabel = p.TPlural("public.filter.count", count)
 	return v
 }
 
@@ -292,12 +302,15 @@ type publicResultsView struct {
 	// filterPublicResultsView's doc comment for why a non-empty query never
 	// reaches the cache.
 	Query string
-	// FilterCountLabel/FilterCountTemplate mirror
-	// publicStartListsView's fields of the same name: the localized
-	// "n results" line and its raw "{n}"-templated form for
-	// public-filter.ts to re-interpolate client-side.
-	FilterCountLabel    string
-	FilterCountTemplate string
+	// FilterCountLabel/FilterCountTemplateOne/FilterCountTemplateOther/
+	// FilterCountSingularSet mirror publicStartListsView's fields of the
+	// same names: the localized, pluralized "n results" line and its raw
+	// "{n}"-templated singular/plural forms for public-filter.ts to
+	// re-interpolate client-side (N3/TASK-051).
+	FilterCountLabel         string
+	FilterCountTemplateOne   string
+	FilterCountTemplateOther string
+	FilterCountSingularSet   string
 }
 
 // buildPublicResultsView assembles the results view shared by the full
@@ -376,8 +389,10 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 		total += len(dv.Rows)
 		v.Divisions = append(v.Divisions, dv)
 	}
-	v.FilterCountTemplate = p.T("public.filter.count")
-	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(total))
+	v.FilterCountTemplateOne = p.T("public.filter.count.one")
+	v.FilterCountTemplateOther = p.T("public.filter.count.other")
+	v.FilterCountSingularSet = p.FilterCountSingularSet()
+	v.FilterCountLabel = p.TPlural("public.filter.count", total)
 	return v, nil
 }
 
@@ -386,7 +401,8 @@ func (s *Server) buildPublicResultsView(r *http.Request, meetID string) (publicR
 // app.MatchesParticipantSearch, reused verbatim) and drops any division
 // left with no matching rows (UC-042 #1: "only matching rows and their
 // categories remain visible"). Recomputes FilterCountLabel from the
-// filtered set; FilterCountTemplate is locale-only and untouched.
+// filtered set; FilterCountTemplateOne/Other/SingularSet are locale-only
+// and untouched.
 //
 // ADR-004 §9 cache-safety (SYS-153/UC-042, TASK-048): this is called ONLY
 // from handlePublicResults' q != "" branch, which builds its own,
@@ -422,7 +438,7 @@ func filterPublicResultsView(p PageData, v publicResultsView, q string) publicRe
 	}
 	v.Divisions = kept
 	v.Query = q
-	v.FilterCountLabel = p.T("public.filter.count", "n", strconv.Itoa(count))
+	v.FilterCountLabel = p.TPlural("public.filter.count", count)
 	return v
 }
 

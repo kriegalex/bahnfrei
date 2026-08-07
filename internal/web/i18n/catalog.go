@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -145,6 +146,30 @@ func (c Catalogs) Text(loc Locale, key string, args ...string) string {
 		msg = strings.ReplaceAll(msg, "{"+args[i]+"}", args[i+1])
 	}
 	return msg
+}
+
+// PluralOne reports whether n falls into loc's "one" (singular) plural
+// category — the minimal singular/plural rule the two launch languages
+// need (SYS-110, N3/TASK-051). German counts only exactly 1 as singular
+// ("1 Ergebnis" but "0 Ergebnisse"/"2 Ergebnisse"); French also counts 0 as
+// singular ("0/1 résultat" vs "2 résultats"). A future locale needing
+// CLDR's richer categories (few/many) would need this promoted beyond a
+// bool.
+func PluralOne(loc Locale, n int) bool {
+	if loc == FR {
+		return n <= 1
+	}
+	return n == 1
+}
+
+// TextPlural resolves base+".one" or base+".other" per PluralOne(loc, n)
+// and substitutes "{n}" with n, plus any extra name/value args (see Text).
+func (c Catalogs) TextPlural(loc Locale, base string, n int, args ...string) string {
+	key := base + ".other"
+	if PluralOne(loc, n) {
+		key = base + ".one"
+	}
+	return c.Text(loc, key, append([]string{"n", strconv.Itoa(n)}, args...)...)
 }
 
 // Has reports whether loc is a catalog this instance knows about.

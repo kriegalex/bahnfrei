@@ -22,12 +22,23 @@
     root: HTMLElement;
     input: HTMLInputElement;
     countEl: HTMLElement | null;
-    countTemplate: string;
+    countTemplateOne: string;
+    countTemplateOther: string;
+    countSingularSet: Set<string>;
     query: string;
   }
 
   function normalize(s: string): string {
     return s.trim().toLowerCase();
+  }
+
+  /** Picks the singular or plural "{n} results" template for n (N3/
+   *  TASK-051 pluralization): singularSet lists the exact counts that are
+   *  singular for the page's locale (server-baked from
+   *  PageData.FilterCountSingularSet — "1" for German, "0,1" for French),
+   *  so this stays locale-agnostic on the client. */
+  function countTemplateFor(state: FilterState, n: number): string {
+    return state.countSingularSet.has(String(n)) ? state.countTemplateOne : state.countTemplateOther;
   }
 
   function rowMatches(row: HTMLElement, q: string): boolean {
@@ -66,7 +77,7 @@
       section.hidden = !hasVisible;
     });
     if (state.countEl) {
-      state.countEl.textContent = state.countTemplate.replace("{n}", String(visible));
+      state.countEl.textContent = countTemplateFor(state, visible).replace("{n}", String(visible));
     }
   }
 
@@ -82,12 +93,20 @@
       return null;
     }
     const countEl = root.querySelector<HTMLElement>("[data-filter-count]");
-    const countTemplate = countEl ? countEl.dataset.filterCountTemplate || "" : "";
+    const countTemplateOne = countEl ? countEl.dataset.filterCountTemplateOne || "" : "";
+    const countTemplateOther = countEl ? countEl.dataset.filterCountTemplateOther || "" : "";
+    const countSingularSet = new Set(
+      (countEl ? countEl.dataset.filterCountSingularSet || "" : "").split(",").filter(function (s) {
+        return s !== "";
+      }),
+    );
     const state: FilterState = {
       root: root,
       input: input,
       countEl: countEl,
-      countTemplate: countTemplate,
+      countTemplateOne: countTemplateOne,
+      countTemplateOther: countTemplateOther,
+      countSingularSet: countSingularSet,
       query: initialQuery !== null ? initialQuery : input.value,
     };
     input.value = state.query;

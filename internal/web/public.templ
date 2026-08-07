@@ -48,7 +48,7 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 		@publicNav(p, v.MeetID)
 		<div id="public-startlists" data-public-filter>
 			@searchForm(p, "/m/"+v.MeetID+"/startlists", v.Query, "roster.search.label", "roster.search.submit", "roster.search.clear")
-			<p data-filter-count data-filter-count-template={ v.FilterCountTemplate }>{ v.FilterCountLabel }</p>
+			<p data-filter-count data-filter-count-template-one={ v.FilterCountTemplateOne } data-filter-count-template-other={ v.FilterCountTemplateOther } data-filter-count-singular-set={ v.FilterCountSingularSet }>{ v.FilterCountLabel }</p>
 			if len(v.HeatEvents) > 0 {
 				<h2>{ p.T("seeding.title") }</h2>
 				<nav aria-label={ p.T("public.jumpnav.title") }>
@@ -157,7 +157,7 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 templ publicResultsFragment(p PageData, v publicResultsView) {
 	<div data-public-filter>
 		@searchForm(p, "/m/"+v.MeetID+"/results", v.Query, "roster.search.label", "roster.search.submit", "roster.search.clear")
-		<p data-filter-count data-filter-count-template={ v.FilterCountTemplate }>{ v.FilterCountLabel }</p>
+		<p data-filter-count data-filter-count-template-one={ v.FilterCountTemplateOne } data-filter-count-template-other={ v.FilterCountTemplateOther } data-filter-count-singular-set={ v.FilterCountSingularSet }>{ v.FilterCountLabel }</p>
 		<p><strong>{ v.StatusLine }</strong></p>
 		if v.ShowUnofficialLabel {
 			<p class="unofficial-label" role="note">

@@ -43,6 +43,25 @@ func (p PageData) T(key string, args ...string) string {
 	return p.Cats.Text(p.Locale, key, args...)
 }
 
+// TPlural resolves base+".one" or base+".other" per i18n.PluralOne(p.Locale,
+// n) and substitutes "{n}" with n (SYS-110, N3/TASK-051 pluralization —
+// e.g. "1 Ergebnis" vs "0"/"2+" "Ergebnisse").
+func (p PageData) TPlural(base string, n int) string {
+	return p.Cats.TextPlural(p.Locale, base, n)
+}
+
+// FilterCountSingularSet lists, comma-separated, the small counts that
+// select the ".one" (singular) plural category for the page's locale per
+// i18n.PluralOne — "1" for German, "0,1" for French. public-filter.ts
+// reads this to pick the right client-side count template as the
+// live-filtered count changes (SYS-110, N3/TASK-051 pluralization).
+func (p PageData) FilterCountSingularSet() string {
+	if i18n.PluralOne(p.Locale, 0) {
+		return "0,1"
+	}
+	return "1"
+}
+
 // dateDisplayLayout/dateTimeDisplayLayout are the SYS-110 "documented
 // project convention" for rendering dates and timestamps to a person:
 // day.month.year (Swiss/DE/FR convention — both MVP launch languages share

@@ -546,8 +546,8 @@ func TestPublicResultsQueryFilterSYS153UC042_1(t *testing.T) {
 	if !strings.Contains(body, `value="Anna"`) {
 		t.Errorf("?q=Anna results page does not redisplay the query in the search box: %s", body)
 	}
-	if !strings.Contains(body, "1 Ergebnisse") {
-		t.Errorf("?q=Anna results page missing the updated \"1 Ergebnisse\" count: %s", body)
+	if !strings.Contains(body, "1 Ergebnis</p>") {
+		t.Errorf("?q=Anna results page missing the updated singular \"1 Ergebnis\" count (N3/TASK-051 pluralization): %s", body)
 	}
 
 	// Also matches by bib and by club (DEC-021/TASK-038's
@@ -641,8 +641,8 @@ func TestPublicResultsQueryFilterLocalizedSYS153UC042_1(t *testing.T) {
 		wantCount  string
 		wantNoHits string
 	}{
-		{"de", "1 Ergebnisse", "Keine Teilnehmenden gefunden"},
-		{"fr", "1 résultats", "Aucun·e participant·e trouvé·e"},
+		{"de", "1 Ergebnis</p>", "Keine Teilnehmenden gefunden"},
+		{"fr", "1 résultat</p>", "Aucun·e participant·e trouvé·e"},
 	}
 	for _, tc := range cases {
 		anon, _ := newTestClient(t, deps)
@@ -679,7 +679,74 @@ func TestPublicStartListsQueryFilterSYS153UC042_1(t *testing.T) {
 	if strings.Contains(body, "Anna Muster") {
 		t.Errorf("?q=Bea start-list page still shows the non-matching athlete: %s", body)
 	}
-	if !strings.Contains(body, "1 Ergebnisse") {
-		t.Errorf("?q=Bea start-list page missing the updated \"1 Ergebnisse\" count: %s", body)
+	if !strings.Contains(body, "1 Ergebnis</p>") {
+		t.Errorf("?q=Bea start-list page missing the updated singular \"1 Ergebnis\" count (N3/TASK-051 pluralization): %s", body)
+	}
+}
+
+// TestPublicFilterCountPluralizesSYS110TASK051N3 covers N3 (release-0.1
+// usability audit, TASK-051): the public filter's "n results" count used
+// one un-pluralized template regardless of count ("1 Ergebnisse", "1
+// résultats"). public.filter.count is now public.filter.count.one/.other,
+// selected by i18n.PluralOne(loc, n) via PageData.TPlural — German only
+// singular at exactly 1, French also at 0 — checked here for 0/1/2
+// matches in both launch languages on the start-lists page (needs no
+// seeded rounds, unlike results).
+func TestPublicFilterCountPluralizesSYS110TASK051N3(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	meetID, _ := ukcCaptureFixture(t, client, base)
+
+	cases := []struct {
+		loc   string
+		q     string
+		count string // exact "<count>…</p>" needle, anchored so "1 …" never matches inside "1 ….s"
+	}{
+		{"de", "zzznomatch", "0 Ergebnisse</p>"},
+		{"fr", "zzznomatch", "0 résultat</p>"},
+		{"de", "Bea", "1 Ergebnis</p>"},
+		{"fr", "Bea", "1 résultat</p>"},
+		{"de", "10", "2 Ergebnisse</p>"}, // bibs 101 and 102 both contain "10"
+		{"fr", "10", "2 résultats</p>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.loc+"/"+tc.q, func(t *testing.T) {
+			anon, _ := newTestClient(t, deps)
+			switchLocale(t, anon, base, tc.loc)
+			body := bodyString(t, mustGet(t, anon, base+"/m/"+meetID+"/startlists?q="+tc.q))
+			if !strings.Contains(body, tc.count) {
+				t.Errorf("[%s] ?q=%s start-list page missing count %q: %s", tc.loc, tc.q, tc.count, body)
+			}
+		})
+	}
+
+	// The client-side template/singular-set data attributes
+	// public-filter.ts reads to re-pluralize live are present and
+	// locale-correct, even on the unfiltered page.
+	deAnon, _ := newTestClient(t, deps)
+	switchLocale(t, deAnon, base, "de")
+	deBody := bodyString(t, mustGet(t, deAnon, base+"/m/"+meetID+"/startlists"))
+	for _, attr := range []string{
+		`data-filter-count-template-one="{n} Ergebnis"`,
+		`data-filter-count-template-other="{n} Ergebnisse"`,
+		`data-filter-count-singular-set="1"`,
+	} {
+		if !strings.Contains(deBody, attr) {
+			t.Errorf("[de] start-list page missing plural data attribute %q: %s", attr, deBody)
+		}
+	}
+
+	frAnon, _ := newTestClient(t, deps)
+	switchLocale(t, frAnon, base, "fr")
+	frBody := bodyString(t, mustGet(t, frAnon, base+"/m/"+meetID+"/startlists"))
+	for _, attr := range []string{
+		`data-filter-count-template-one="{n} résultat"`,
+		`data-filter-count-template-other="{n} résultats"`,
+		`data-filter-count-singular-set="0,1"`,
+	} {
+		if !strings.Contains(frBody, attr) {
+			t.Errorf("[fr] start-list page missing plural data attribute %q: %s", attr, frBody)
+		}
 	}
 }

@@ -21,6 +21,14 @@
     function normalize(s) {
         return s.trim().toLowerCase();
     }
+    /** Picks the singular or plural "{n} results" template for n (N3/
+     *  TASK-051 pluralization): singularSet lists the exact counts that are
+     *  singular for the page's locale (server-baked from
+     *  PageData.FilterCountSingularSet — "1" for German, "0,1" for French),
+     *  so this stays locale-agnostic on the client. */
+    function countTemplateFor(state, n) {
+        return state.countSingularSet.has(String(n)) ? state.countTemplateOne : state.countTemplateOther;
+    }
     function rowMatches(row, q) {
         if (q === "") {
             return true;
@@ -56,7 +64,7 @@
             section.hidden = !hasVisible;
         });
         if (state.countEl) {
-            state.countEl.textContent = state.countTemplate.replace("{n}", String(visible));
+            state.countEl.textContent = countTemplateFor(state, visible).replace("{n}", String(visible));
         }
     }
     /** Wires one [data-public-filter] root: finds its search input and count
@@ -71,12 +79,18 @@
             return null;
         }
         const countEl = root.querySelector("[data-filter-count]");
-        const countTemplate = countEl ? countEl.dataset.filterCountTemplate || "" : "";
+        const countTemplateOne = countEl ? countEl.dataset.filterCountTemplateOne || "" : "";
+        const countTemplateOther = countEl ? countEl.dataset.filterCountTemplateOther || "" : "";
+        const countSingularSet = new Set((countEl ? countEl.dataset.filterCountSingularSet || "" : "").split(",").filter(function (s) {
+            return s !== "";
+        }));
         const state = {
             root: root,
             input: input,
             countEl: countEl,
-            countTemplate: countTemplate,
+            countTemplateOne: countTemplateOne,
+            countTemplateOther: countTemplateOther,
+            countSingularSet: countSingularSet,
             query: initialQuery !== null ? initialQuery : input.value,
         };
         input.value = state.query;
