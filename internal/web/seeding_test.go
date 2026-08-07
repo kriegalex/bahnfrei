@@ -424,6 +424,52 @@ func TestSeedingGenerateEmptyPoolHTTPSYS026UC008(t *testing.T) {
 	}
 }
 
+// TestSeedingOverrideVersionConflictHTTPSYS026UC008 is a denial/edge-path
+// test (TASK-055, SYS-026/117): overriding a heat/lane assignment with a
+// stale version — another session already moved this entry — is rejected
+// with the "reload and retry" conflict wording shared with the roster/
+// standings/entries/bibs/fees/meet surfaces, at 422, rather than silently
+// discarding the operator's edit and redirecting as if it had applied.
+func TestSeedingOverrideVersionConflictHTTPSYS026UC008(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 4)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{
+		"max_heat_size": {"4"}, "track_lanes": {"0"},
+	})
+	_ = genResp.Body.Close()
+
+	sheet, err := deps.results.HeatSheetFor(context.Background(), webOffice, meetID, eventID, roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	target := sheet.Units[0].Rows[0]
+	staleVersion := target.Version + 1000
+
+	overrideResp := postForm(t, client, seedingPage, seedingPage+"/override", url.Values{
+		"entry_id": {target.EntryID}, "target_unit": {sheet.Units[0].UnitID}, "lane": {"2"},
+		"version": {strconv.FormatInt(staleVersion, 10)},
+	})
+	body := bodyString(t, overrideResp)
+	if overrideResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("override with a stale version = %d, want 422", overrideResp.StatusCode)
+	}
+	const wantMsg = "Konflikt: Der Datensatz wurde zwischenzeitlich geändert. Bitte neu laden und erneut versuchen."
+	if !strings.Contains(body, wantMsg) {
+		t.Errorf("expected the localized conflict error message, got: %s", body)
+	}
+
+	after, err := deps.results.HeatSheetFor(context.Background(), webOffice, meetID, eventID, roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor (after rejected override): %v", err)
+	}
+	if after.Units[0].Rows[0].Lane != target.Lane {
+		t.Errorf("lane after a rejected override = %d, want unchanged %d", after.Units[0].Rows[0].Lane, target.Lane)
+	}
+}
+
 // TestAdvanceRoundHTTPSYS029UC009 drives round progression over real HTTP:
 // settled track results feed AdvanceRound, and the qualifiers can seed the
 // next round.
@@ -482,6 +528,59 @@ func TestAdvanceRoundHTTPSYS029UC009(t *testing.T) {
 	}
 }
 
+// TestAdvanceRoundRejectionsHTTPSYS029UC009 covers handleAdvanceRound's two
+// known, operator-actionable rejections (TASK-055, SYS-029/117): a round
+// that was never seeded at all (app.ErrRoundNotSeeded — no "generate heats"
+// run yet) and a seeded round with a heat that has no settled results yet
+// (app.ErrRoundNotComplete). Both re-render the seeding page with their own
+// localized, actionable message at 422 instead of silently redirecting, and
+// neither writes any qualification code.
+func TestAdvanceRoundRejectionsHTTPSYS029UC009(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 4)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	advanceURL := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/advance"
+
+	// Never seeded: no heat generation has run for this round.
+	notSeededResp := postForm(t, client, seedingPage, advanceURL, url.Values{"top_n": {"2"}, "fastest_k": {"0"}})
+	notSeededBody := bodyString(t, notSeededResp)
+	if notSeededResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("advance an unseeded round = %d, want 422", notSeededResp.StatusCode)
+	}
+	const wantNotSeededMsg = "Für diese Runde wurden noch keine Läufe generiert — bitte zuerst über das Formular oben Läufe erzeugen."
+	if !strings.Contains(notSeededBody, wantNotSeededMsg) {
+		t.Errorf("expected the localized not-seeded error message, got: %s", notSeededBody)
+	}
+
+	// Seeded but incomplete: heats generated, no results saved.
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{"max_heat_size": {"4"}, "track_lanes": {"0"}})
+	_ = genResp.Body.Close()
+
+	incompleteResp := postForm(t, client, seedingPage, advanceURL, url.Values{"top_n": {"2"}, "fastest_k": {"0"}})
+	incompleteBody := bodyString(t, incompleteResp)
+	if incompleteResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("advance a round with no settled results = %d, want 422", incompleteResp.StatusCode)
+	}
+	const wantIncompleteMsg = "Nicht alle Läufe dieser Runde haben erfasste Resultate — bitte zuerst alle Resultate erfassen, bevor die Runde ausgewertet wird."
+	if !strings.Contains(incompleteBody, wantIncompleteMsg) {
+		t.Errorf("expected the localized incomplete-round error message, got: %s", incompleteBody)
+	}
+
+	sheet, err := deps.results.HeatSheetFor(context.Background(), webOffice, meetID, eventID, roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	for _, u := range sheet.Units {
+		for _, row := range u.Rows {
+			if row.Qualification != domain.StatusNone {
+				t.Errorf("entry %s carries qualification %q after a rejected advance, want none", row.EntryID, row.Qualification)
+			}
+		}
+	}
+}
+
 // TestPublicStartListShowsHeatsAndLanesSYS026SYS027 proves the public
 // start-list page reflects generated heats/lanes (TASK-018): once heats are
 // generated, the public page shows a lane/qualification breakdown per heat
@@ -513,10 +612,9 @@ func TestPublicStartListShowsHeatsAndLanesSYS026SYS027(t *testing.T) {
 // TestManualAdvanceRecordsCodeSYS029UC009_2Web drives handleManualAdvance
 // (0% baseline coverage) over real HTTP: an office operator's manual
 // referee/jury/draw decision (UC-009 #2) is recorded on the target entry's
-// assignment; an illegal code and an unknown entry id are both handled as
-// the fire-and-forget redirect the handler implements (it discards
-// ManualAdvance's error deliberately — see seeding.go) without ever
-// recording anything illegal or crashing.
+// assignment; an illegal code and an unknown entry id are both rejected with
+// a localized, actionable page-level error (TASK-055/SYS-117) rather than
+// silently discarded, and neither ever records anything illegal.
 func TestManualAdvanceRecordsCodeSYS029UC009_2Web(t *testing.T) {
 	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
 	client, base := newTestClient(t, deps)
@@ -561,25 +659,31 @@ func TestManualAdvanceRecordsCodeSYS029UC009_2Web(t *testing.T) {
 		t.Fatalf("qualification after manual advance = %q, want Q", got)
 	}
 
-	// An illegal code (not one of Q/q/qR/qJ/qD) is rejected by ManualAdvance,
-	// but the handler discards that error and still redirects — nothing
-	// illegal must ever land on the assignment.
+	// An illegal code (not one of Q/q/qR/qJ/qD) is rejected by ManualAdvance
+	// (app.ErrInvalidQualificationCode) and re-renders the seeding page with
+	// a localized, actionable error at 422 — nothing illegal ever lands on
+	// the assignment.
 	badResp := postForm(t, client, seedingPage, manualURL, url.Values{"entry_id": {otherEntry}, "code": {"DNS"}})
-	_ = badResp.Body.Close()
-	if badResp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("manual advance with an illegal code = %d, want 303", badResp.StatusCode)
+	badBody := bodyString(t, badResp)
+	if badResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("manual advance with an illegal code = %d, want 422", badResp.StatusCode)
+	}
+	if !strings.Contains(badBody, "Ungültiger Qualifikationscode — bitte eine der angebotenen Optionen wählen.") {
+		t.Errorf("expected the localized invalid-code error message, got: %s", badBody)
 	}
 	if got := qualificationOf(otherEntry); got != domain.StatusNone {
 		t.Errorf("illegal manual-advance code must not be recorded, got %q", got)
 	}
 
-	// An unknown entry id (never seeded in this round) is also a
-	// fire-and-forget 303 — the handler never surfaces ManualAdvance's
-	// "entry is not seeded" error to the operator.
+	// An unknown entry id (never seeded in this round) is rejected by
+	// ManualAdvance (app.ErrEntryNotInRound) with its own actionable error.
 	unknownResp := postForm(t, client, seedingPage, manualURL, url.Values{"entry_id": {"does-not-exist"}, "code": {"Q"}})
-	_ = unknownResp.Body.Close()
-	if unknownResp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("manual advance for an unknown entry = %d, want 303", unknownResp.StatusCode)
+	unknownBody := bodyString(t, unknownResp)
+	if unknownResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("manual advance for an unknown entry = %d, want 422", unknownResp.StatusCode)
+	}
+	if !strings.Contains(unknownBody, "Diese Meldung ist nicht (mehr) in dieser Runde gesetzt — bitte Läufe/Setzung prüfen und erneut versuchen.") {
+		t.Errorf("expected the localized entry-not-in-round error message, got: %s", unknownBody)
 	}
 }
 

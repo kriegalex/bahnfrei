@@ -204,8 +204,29 @@ func (s *Server) handleSeedingOverride(w http.ResponseWriter, r *http.Request) {
 	targetUnit := r.FormValue("target_unit")
 	lane, _ := strconv.Atoi(r.FormValue("lane"))
 	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
-	_ = s.results.OverrideAssignment(r.Context(), actor, meetID, eventID, roundID, entryID, targetUnit, lane, version)
+	if err := s.results.OverrideAssignment(r.Context(), actor, meetID, eventID, roundID, entryID, targetUnit, lane, version); err != nil {
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		s.renderSeedingError(w, r, meetID, eventID, roundID, seedingOverrideFlashKey(err))
+		return
+	}
 	http.Redirect(w, r, seedingRedirect(meetID, eventID, roundID), http.StatusSeeOther)
+}
+
+// seedingOverrideFlashKey maps an OverrideAssignment error onto the
+// "seeding.override.error.*" key the seeding page's page-level alert
+// renders (TASK-055): a stale expectedVersion — another session already
+// moved this entry — gets the same "reload and retry" conflict wording used
+// across the roster/standings/entries/bibs/fees/meet surfaces; anything else
+// falls back to one generic actionable message rather than stringifying the
+// raw service error into the UI.
+func seedingOverrideFlashKey(err error) string {
+	if errors.Is(err, app.ErrConflict) {
+		return "seeding.override.error.conflict"
+	}
+	return "seeding.override.error.failed"
 }
 
 func (s *Server) handleAdvanceRound(w http.ResponseWriter, r *http.Request) {
@@ -223,13 +244,39 @@ func (s *Server) handleAdvanceRound(w http.ResponseWriter, r *http.Request) {
 		Standard: strings.TrimSpace(r.FormValue("standard")), BetterDirection: r.FormValue("better_direction"),
 		FinalsCapacity: capacity,
 	})
+	if err != nil {
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		s.renderSeedingError(w, r, meetID, eventID, roundID, seedingAdvanceFlashKey(err))
+		return
+	}
 	dest := seedingRedirect(meetID, eventID, roundID)
-	if err == nil && outcome.Tie != nil {
+	if outcome.Tie != nil {
 		dest += "?tie_mark=" + outcome.Tie.Mark +
 			"&tie_entries=" + strings.Join(outcome.Tie.EntryIDs, ",") +
 			"&tie_slots=" + strconv.Itoa(outcome.Tie.RemainingSlots)
 	}
 	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+// seedingAdvanceFlashKey maps an AdvanceRound error onto the
+// "seeding.advance.error.*" key the seeding page's page-level alert renders
+// (TASK-055): the two known, operator-actionable rejections — a track round
+// with a heat that has no settled results yet (ErrRoundNotComplete) and a
+// round that was never seeded at all (ErrRoundNotSeeded) — each get their
+// own message telling the operator what to do first; anything else falls
+// back to one generic actionable message.
+func seedingAdvanceFlashKey(err error) string {
+	switch {
+	case errors.Is(err, app.ErrRoundNotComplete):
+		return "seeding.advance.error.incomplete"
+	case errors.Is(err, app.ErrRoundNotSeeded):
+		return "seeding.advance.error.not_seeded"
+	default:
+		return "seeding.advance.error.failed"
+	}
 }
 
 func (s *Server) handleManualAdvance(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +288,30 @@ func (s *Server) handleManualAdvance(w http.ResponseWriter, r *http.Request) {
 	}
 	entryID := r.FormValue("entry_id")
 	code := r.FormValue("code")
-	_ = s.results.ManualAdvance(r.Context(), actor, meetID, eventID, roundID, entryID, domain.QualificationStatus(code))
+	if err := s.results.ManualAdvance(r.Context(), actor, meetID, eventID, roundID, entryID, domain.QualificationStatus(code)); err != nil {
+		if _, forbidden := err.(app.ErrForbidden); forbidden {
+			renderForbidden(w, r, s.cats)
+			return
+		}
+		s.renderSeedingError(w, r, meetID, eventID, roundID, seedingManualAdvanceFlashKey(err))
+		return
+	}
 	http.Redirect(w, r, seedingRedirect(meetID, eventID, roundID), http.StatusSeeOther)
+}
+
+// seedingManualAdvanceFlashKey maps a ManualAdvance error onto the
+// "seeding.manual_advance.error.*" key the seeding page's page-level alert
+// renders (TASK-055): an illegal manual-qualification code (not one of
+// Q/q/qR/qJ/qD) and an entry that is no longer seeded in this round (the
+// round changed since the tie panel was rendered) each get their own
+// actionable message; anything else falls back to one generic message.
+func seedingManualAdvanceFlashKey(err error) string {
+	switch {
+	case errors.Is(err, app.ErrInvalidQualificationCode):
+		return "seeding.manual_advance.error.invalid_code"
+	case errors.Is(err, app.ErrEntryNotInRound):
+		return "seeding.manual_advance.error.entry_not_in_round"
+	default:
+		return "seeding.manual_advance.error.failed"
+	}
 }
