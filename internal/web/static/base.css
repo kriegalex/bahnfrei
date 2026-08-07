@@ -356,6 +356,17 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   font-weight: var(--font-weight-bold);
 }
 
+/* OQ-133 (TASK-052): above the phone breakpoint a physical keyboard
+   already types X/–/r/o without friction, so the quick-action buttons are
+   redundant density on an already-dense operator/desktop table — hidden
+   here rather than at capture time, so the ≤480px behavior above (and the
+   markup/behavior capture-markers.js drives) is completely unchanged. */
+@media (min-width: 481px) {
+  .marker-actions {
+    display: none;
+  }
+}
+
 /* Per-cell save-state feedback (SYS-148, UC-039 #4/#5): styles the
    data-pending/data-state attributes islands/src/capture-offline.ts
    already sets on `.cell-form` — never a parallel attribute — with a
