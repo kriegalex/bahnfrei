@@ -21,7 +21,7 @@ git commit -s -m "feat(domain): add category resolver"
 ```
 
 CI rejects pull requests containing unsigned commits. To fix a branch retroactively:
-`git rebase --signoff origin/main && git push --force-with-lease`.
+`git rebase --signoff origin/develop && git push --force-with-lease`.
 
 ### SPDX headers (required)
 

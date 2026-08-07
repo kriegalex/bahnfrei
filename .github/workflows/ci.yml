@@ -15,18 +15,18 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
 
-# Superseded runs on the same ref are cancelled (except on main, where every
-# push must produce a complete gate record).
+# Superseded runs on the same ref are cancelled (except on main and develop,
+# where every push must produce a complete gate record).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/main", "refs/heads/develop"]'), github.ref) }}
 
 jobs:
   build-test:

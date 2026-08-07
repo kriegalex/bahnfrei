@@ -6,6 +6,13 @@ override default behavior and persist across context compaction. Current working
 (milestones, next tasks, bookkeeping counters) lives in the untracked
 `.claude/runbook/STATUS.md` — read it at session start, never commit it.
 
+## Branch model
+
+`develop` is the integration branch — all work lands there (workers' commits are
+cherry-picked onto it, gate green per push). `main` holds released state only: it advances
+by merging develop at release time, immediately before the version tag. Never commit
+directly to main.
+
 ## Change process (spec first, always)
 
 - **No code without a traced, testable spec.** Every change traces to a `SYS-###` (via a
@@ -70,7 +77,7 @@ The Fable-class agent orchestrates; it does not personally write most code.
 
 ## Toolchain & gotchas (hard-won — trust these)
 
-- **Merge gate:** `mise x go@1.26.5 -- scripts/check-gate.sh` before every push to main.
+- **Merge gate:** `mise x go@1.26.5 -- scripts/check-gate.sh` before every push to develop.
   A bare `scripts/check-gate.sh` without mise exits 0 with only a warning — a MISLEADING
   success. Run gates in the foreground. Coverage floors live in `scripts/check-coverage.sh`
   (ratchet them together with the requirement, never separately).
@@ -84,10 +91,10 @@ The Fable-class agent orchestrates; it does not personally write most code.
   list or they 404 silently.
 - **Git:** never `git add -A` (`.claude/worktrees/` gets staged as an embedded repo);
   `git branch -D` and `git reset --hard` are user-denied — cherry-pick worker commits onto
-  main one at a time and re-run the full gate. After scripted conflict resolution, grep for
+  develop one at a time and re-run the full gate. After scripted conflict resolution, grep for
   all three conflict-marker types before staging.
-- **Worktrees are cut from session-start main:** every worker first runs
-  `git merge-base main HEAD` and merges main if behind.
+- **Worktrees are cut from a possibly stale base:** every worker first runs
+  `git merge-base develop HEAD` and merges develop if behind.
 - **Perf/load tests** only inside
   `systemd-run --user --scope -p MemoryMax=12G -p MemorySwapMax=0` with `GOMEMLIMIT` —
   an uncapped load test has OOM-killed the host. Measure ascending scales and extrapolate.

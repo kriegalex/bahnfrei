@@ -42,24 +42,23 @@ not in the changelog.
 
 ## 3. Cutting a release
 
-1. Confirm the defect-policy gate: no known, unfixed Critical/High-severity defect
+1. Merge `develop` into `main` (releases are the only time `main` advances; day-to-day
+   work lands on `develop`).
+2. Confirm the defect-policy gate: no known, unfixed Critical/High-severity defect
    (`docs/ops/defect-policy.md` §2).
-2. Confirm the machine-checkable gate is green on the release commit: run
+3. Confirm the machine-checkable gate is green on the release commit: run
    `scripts/check-gate.sh` (build, vet, lint, gosec, `-race -shuffle=on` tests with the
    coverage floors CI enforces — ≥83% overall / ≥90% domain, licence-header, design-token and
    `govulncheck` checks, TS-island freshness, and the Playwright E2E suite), and verify the
    CI run on the same commit is green.
-3. Move the `CHANGELOG.md` `[Unreleased]` section's entries under a new dated version heading.
-4. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` (annotated, signed if the maintainer's key setup
+4. Move the `CHANGELOG.md` `[Unreleased]` section's entries under a new dated version heading.
+5. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z"` (annotated, signed if the maintainer's key setup
    supports it — see §4 for the current unsigned-artifact stance either way).
-5. Build artifacts: `scripts/build-release.sh X.Y.Z` — cross-compiles all five per-OS binaries
+6. Build artifacts: `scripts/build-release.sh X.Y.Z` — cross-compiles all five per-OS binaries
    (`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`), smoke-tests the
    host-matching one by actually running `--version`, writes `dist/X.Y.Z/checksums.txt`
    (SHA-256), and builds the container image locally if Docker is available (never pushes it —
    see §4).
-6. First release only (v0.1.0): make the repository public before pushing the tag
-   (`gh repo edit --visibility public`) — the release workflow's GHCR publish and
-   keyless cosign verification identities assume publicly reachable artifacts.
 7. Push the git tag (`git push origin vX.Y.Z`). Pushing a `vX.Y.Z` tag triggers
    `.github/workflows/release.yml`, which is the **sole publish path**: it rebuilds the binaries
    and `checksums.txt` (`scripts/build-release.sh X.Y.Z --skip-image`, reproducing step 5 in CI),

@@ -11,8 +11,8 @@ ONLY inside your assigned worktree. Return a summary + commit SHAs, never raw to
 
 ## First: base freshness
 
-Run `git merge-base main HEAD`; your worktree may be cut from a stale main. If behind,
-`git merge main` before starting, and re-read any file your brief quotes.
+Run `git merge-base develop HEAD`; your worktree may be cut from a stale base. If
+behind, `git merge develop` before starting, and re-read any file your brief quotes.
 
 ## Toolchain (this host has no global go)
 
