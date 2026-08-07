@@ -561,3 +561,274 @@ func TestChangeAccountRoleAudits(t *testing.T) {
 		t.Fatal("expected an account.role_change audit row")
 	}
 }
+
+// --- TASK-053/DEC-030: admin-issued one-time password reset ---
+
+// TestResetPasswordRequiresCapability mirrors
+// TestSetAccountEnabledRequiresCapability: only an instance-admin session
+// (CapManageAccounts) may reset another account's password.
+func TestResetPasswordRequiresCapability(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	target, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nonAdmin := Session{AccountID: "someone-else", Role: RoleMeetOrganizer}
+	var forbidden ErrForbidden
+	if _, err := auth.ResetPassword(ctx, nonAdmin, target.ID, "new-temp-passphrase", "test"); !errors.As(err, &forbidden) {
+		t.Errorf("ResetPassword by a non-admin = %v, want ErrForbidden", err)
+	}
+}
+
+// TestResetPasswordRejectsShortPassword covers the shared setup-page policy
+// (MinPasswordLength) applied to the admin-typed temporary password.
+func TestResetPasswordRejectsShortPassword(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	target, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.ResetPassword(ctx, adminSession, target.ID, "short", "test"); !errors.Is(err, ErrPasswordTooShort) {
+		t.Errorf("ResetPassword(short password) = %v, want ErrPasswordTooShort", err)
+	}
+}
+
+// TestResetPasswordRevokesSessionSetsMustChangeAndAudits is the full
+// meet-morning-lockout repro: an instance admin resets a locked-out
+// operator's password. The operator's live session dies immediately (like
+// SetAccountEnabled(false)'s revocation), the account is marked
+// must-change-password, the reset lands an account.password_reset audit
+// row, and the temp password logs the operator back in with
+// MustChangePassword=true on the fresh session (the forced-change gate's
+// signal).
+func TestResetPasswordRevokesSessionSetsMustChangeAndAudits(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	if _, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, err := auth.Login(ctx, "office1", "p4ssword-here")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if _, err := auth.CurrentSession(sess.Token); err != nil {
+		t.Fatalf("live session before reset: %v", err)
+	}
+
+	reset, err := auth.ResetPassword(ctx, adminSession, sess.AccountID, "temp-passphrase-1", "locked out")
+	if err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+	if !reset.MustChangePassword {
+		t.Error("MustChangePassword = false after reset, want true")
+	}
+
+	// The old session is dead immediately, and the old password no longer
+	// works.
+	if _, err := auth.CurrentSession(sess.Token); !errors.Is(err, ErrSessionNotFound) {
+		t.Errorf("CurrentSession after reset = %v, want ErrSessionNotFound (immediate revocation)", err)
+	}
+	if _, err := auth.Login(ctx, "office1", "p4ssword-here"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("Login with the old password after reset = %v, want ErrInvalidCredentials", err)
+	}
+
+	// The temporary password logs the operator back in, and the new
+	// session already carries MustChangePassword=true.
+	newSess, err := auth.Login(ctx, "office1", "temp-passphrase-1")
+	if err != nil {
+		t.Fatalf("Login with the temporary password: %v", err)
+	}
+	if !newSess.MustChangePassword {
+		t.Error("new session MustChangePassword = false, want true after an admin reset")
+	}
+
+	trail, err := storeAuditTrail(ctx, auth, sess.AccountID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range trail {
+		if e.Action == "account.password_reset" {
+			found = true
+			if e.Reason != "locked out" {
+				t.Errorf("reset audit Reason = %q, want %q", e.Reason, "locked out")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("audit trail = %+v, want an account.password_reset entry", trail)
+	}
+}
+
+// TestResetPasswordUnknownAccount mirrors
+// TestSetAccountEnabledUnknownAccount: an accountID that does not exist is
+// refused, not silently ignored.
+func TestResetPasswordUnknownAccount(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	if _, err := auth.ResetPassword(ctx, adminSession, "does-not-exist", "new-temp-passphrase", "test"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("ResetPassword on unknown account = %v, want store.ErrNotFound", err)
+	}
+}
+
+// --- TASK-053/DEC-030: forced change-password step ---
+
+// TestChangePasswordRequiresCorrectCurrentPassword covers the
+// re-verification ChangePassword performs before accepting a new password —
+// the same credential check as Login, deliberately, so web callers can
+// subject it to the same brute-force throttle.
+func TestChangePasswordRequiresCorrectCurrentPassword(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	if _, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, err := auth.Login(ctx, "office1", "p4ssword-here")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if _, err := auth.ChangePassword(ctx, sess, "wrong-current-password", "new-passphrase-2"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("ChangePassword with the wrong current password = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+// TestChangePasswordRejectsShortPassword covers the shared setup-page
+// policy applied to the new password on the forced-change step.
+func TestChangePasswordRejectsShortPassword(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	if _, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := auth.Login(ctx, "office1", "p4ssword-here")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if _, err := auth.ChangePassword(ctx, sess, "p4ssword-here", "short"); !errors.Is(err, ErrPasswordTooShort) {
+		t.Errorf("ChangePassword(short new password) = %v, want ErrPasswordTooShort", err)
+	}
+}
+
+// TestChangePasswordCompletesForcedFlowAndAudits is the second half of the
+// meet-morning-lockout repro (see
+// TestResetPasswordRevokesSessionSetsMustChangeAndAudits for the first): the
+// operator, now logged in on the temporary password with
+// MustChangePassword=true, completes the forced change. It clears the flag
+// on both the stored account and the live session (without requiring a
+// fresh login), lands an account.password_change audit row, and the new
+// password (not the temporary one) is what logs the operator in afterwards.
+func TestChangePasswordCompletesForcedFlowAndAudits(t *testing.T) {
+	auth := newTestAuth(t)
+	ctx := context.Background()
+	admin, err := auth.Bootstrap(ctx, "admin", "Administrator", "s3cret-passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminSession := Session{AccountID: admin.ID, Role: RoleInstanceAdmin}
+	target, err := auth.CreateAccount(ctx, adminSession, CreateAccountRequest{
+		Username: "office1", DisplayName: "Office One", Password: "p4ssword-here", Role: RoleCompetitionOffice,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.ResetPassword(ctx, adminSession, target.ID, "temp-passphrase-1", "locked out"); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, err := auth.Login(ctx, "office1", "temp-passphrase-1")
+	if err != nil {
+		t.Fatalf("Login with the temporary password: %v", err)
+	}
+	if !sess.MustChangePassword {
+		t.Fatal("sanity: session must start MustChangePassword=true after a reset")
+	}
+
+	acct, err := auth.ChangePassword(ctx, sess, "temp-passphrase-1", "durable-passphrase-2")
+	if err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if acct.MustChangePassword {
+		t.Error("account MustChangePassword = true after ChangePassword, want false")
+	}
+
+	// The flag is cleared on the live session in place — no fresh login
+	// needed for the forced-change gate to stop redirecting this session.
+	live, err := auth.CurrentSession(sess.Token)
+	if err != nil {
+		t.Fatalf("CurrentSession after ChangePassword: %v", err)
+	}
+	if live.MustChangePassword {
+		t.Error("live session MustChangePassword = true after ChangePassword, want false")
+	}
+
+	// The temporary password no longer works; the new one does.
+	if _, err := auth.Login(ctx, "office1", "temp-passphrase-1"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("Login with the old temporary password after change = %v, want ErrInvalidCredentials", err)
+	}
+	finalSess, err := auth.Login(ctx, "office1", "durable-passphrase-2")
+	if err != nil {
+		t.Fatalf("Login with the new password: %v", err)
+	}
+	if finalSess.MustChangePassword {
+		t.Error("session after the completed change should not carry MustChangePassword=true")
+	}
+
+	trail, err := storeAuditTrail(ctx, auth, sess.AccountID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range trail {
+		if e.Action == "account.password_change" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("audit trail = %+v, want an account.password_change entry", trail)
+	}
+}

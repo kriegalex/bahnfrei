@@ -94,7 +94,7 @@ func (a *AuthService) Login(ctx context.Context, username, password string) (Ses
 		}
 	}
 
-	return a.sessions.Create(acct.ID, acct.Username, role)
+	return a.sessions.Create(acct.ID, acct.Username, role, acct.MustChangePassword)
 }
 
 // Logout revokes the session identified by token. Revoking an unknown or
@@ -360,4 +360,101 @@ func (a *AuthService) ChangeAccountRole(ctx context.Context, actor Session, acco
 		return store.Account{}, fmt.Errorf("change account role: %w", err)
 	}
 	return store.GetAccountByID(ctx, a.db, accountID)
+}
+
+// ResetPassword issues an admin-set temporary password for any account
+// (TASK-053, DEC-030, SYS-090/091): the offline-venue-friendly answer to a
+// meet-morning lockout, needing no email infrastructure. It marks the
+// account must-change-password so the temporary password only ever grants
+// access to the forced change-password step (ChangePassword), and revokes
+// every one of the account's live sessions immediately — a session issued
+// on the old password must not keep working past the reset, the same
+// posture SetAccountEnabled(false) takes. The action is written to the
+// audit trail (SYS-046) like every other account mutation.
+func (a *AuthService) ResetPassword(ctx context.Context, actor Session, accountID, newPassword, reason string) (store.Account, error) {
+	if err := Authorize(actor.Role, CapManageAccounts); err != nil {
+		return store.Account{}, err
+	}
+	if err := ValidatePasswordPolicy(newPassword); err != nil {
+		return store.Account{}, err
+	}
+	acct, err := store.GetAccountByID(ctx, a.db, accountID)
+	if err != nil {
+		return store.Account{}, err
+	}
+	hash, err := HashPassword(newPassword, a.params)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("reset password %q: %w", accountID, err)
+	}
+
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("reset password %q: %w", accountID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.ResetAccountPassword(ctx, tx, accountID, hash, acct.Version); err != nil {
+		return store.Account{}, err
+	}
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "account.password_reset",
+		EntityType: "account", EntityID: accountID, Reason: reason,
+	}); err != nil {
+		return store.Account{}, fmt.Errorf("audit account.password_reset: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.Account{}, fmt.Errorf("reset password %q: %w", accountID, err)
+	}
+	a.sessions.RevokeAccount(accountID)
+	return store.GetAccountByID(ctx, a.db, accountID)
+}
+
+// ChangePassword completes the forced change-password step (TASK-053,
+// SYS-091): actor sets their own new password after an admin-issued reset,
+// re-proving the current (temporary) password first — the same
+// credential-verification surface as Login, so callers MUST subject it to
+// the same brute-force throttle (internal/web/ratelimit.go's loginLimiter)
+// rather than assuming the /login route alone covers it. On success it
+// clears must-change-password (both on the stored account and, via
+// SessionManager.ClearMustChangePassword, on actor's own live session, so
+// the forced-change gate stops redirecting immediately, without requiring a
+// fresh login) and audits the change like every other account mutation.
+// Unlike ResetPassword this needs no CapManageAccounts — an operator may
+// always change their own password.
+func (a *AuthService) ChangePassword(ctx context.Context, actor Session, currentPassword, newPassword string) (store.Account, error) {
+	acct, err := store.GetAccountByID(ctx, a.db, actor.AccountID)
+	if err != nil {
+		return store.Account{}, err
+	}
+	if err := VerifyPassword(currentPassword, acct.PasswordHash); err != nil {
+		return store.Account{}, ErrInvalidCredentials
+	}
+	if err := ValidatePasswordPolicy(newPassword); err != nil {
+		return store.Account{}, err
+	}
+	hash, err := HashPassword(newPassword, a.params)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("change password %q: %w", actor.AccountID, err)
+	}
+
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Account{}, fmt.Errorf("change password %q: %w", actor.AccountID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := store.CompletePasswordChange(ctx, tx, actor.AccountID, hash, acct.Version); err != nil {
+		return store.Account{}, err
+	}
+	if _, err := store.AppendAudit(ctx, tx, store.AuditEntry{
+		Actor: actor.AccountID, Action: "account.password_change",
+		EntityType: "account", EntityID: actor.AccountID,
+	}); err != nil {
+		return store.Account{}, fmt.Errorf("audit account.password_change: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.Account{}, fmt.Errorf("change password %q: %w", actor.AccountID, err)
+	}
+	a.sessions.ClearMustChangePassword(actor.Token)
+	return store.GetAccountByID(ctx, a.db, actor.AccountID)
 }

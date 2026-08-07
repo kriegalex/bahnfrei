@@ -25,6 +25,13 @@ type Session struct {
 	Role      Role
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	// MustChangePassword mirrors the account's flag at the moment this
+	// session was issued (TASK-053, SYS-091): while true, the web layer's
+	// forced-change gate redirects every other authenticated route to the
+	// change-password step. ChangePassword clears it in place via
+	// ClearMustChangePassword so completing the step takes effect
+	// immediately, without requiring a fresh login.
+	MustChangePassword bool
 }
 
 // ErrSessionNotFound means the token is unknown or has expired.
@@ -62,20 +69,23 @@ func (m *SessionManager) WithClock(now Clock) *SessionManager {
 
 // Create issues a new session for the given account/role and returns its
 // opaque bearer token (32 random bytes, base64url-encoded — 256 bits of
-// entropy, unguessable per OWASP session-ID guidance).
-func (m *SessionManager) Create(accountID, username string, role Role) (Session, error) {
+// entropy, unguessable per OWASP session-ID guidance). mustChangePassword
+// carries the account's current flag (TASK-053) so a session issued right
+// after an admin reset starts out forced into the change-password step.
+func (m *SessionManager) Create(accountID, username string, role Role, mustChangePassword bool) (Session, error) {
 	tok, err := newSessionToken()
 	if err != nil {
 		return Session{}, err
 	}
 	now := m.now()
 	s := Session{
-		Token:     tok,
-		AccountID: accountID,
-		Username:  username,
-		Role:      role,
-		CreatedAt: now,
-		ExpiresAt: now.Add(m.ttl),
+		Token:              tok,
+		AccountID:          accountID,
+		Username:           username,
+		Role:               role,
+		CreatedAt:          now,
+		ExpiresAt:          now.Add(m.ttl),
+		MustChangePassword: mustChangePassword,
 	}
 	m.mu.Lock()
 	m.sessions[tok] = s
@@ -117,6 +127,20 @@ func (m *SessionManager) RevokeAccount(accountID string) {
 		}
 	}
 	m.mu.Unlock()
+}
+
+// ClearMustChangePassword unsets the must-change-password flag on the live
+// session identified by token, if any (TASK-053): called once
+// ChangePassword has completed, so the forced-change gate stops redirecting
+// this session without requiring a fresh login. A no-op for an unknown or
+// already-expired token.
+func (m *SessionManager) ClearMustChangePassword(token string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[token]; ok {
+		s.MustChangePassword = false
+		m.sessions[token] = s
+	}
 }
 
 // Sweep evicts every expired session and returns how many were removed.

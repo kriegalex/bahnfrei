@@ -11,7 +11,7 @@ import (
 
 func TestSessionCreateAndLookup(t *testing.T) {
 	m := NewSessionManager(time.Hour)
-	s, err := m.Create("acct-1", "alice", RoleMeetOrganizer)
+	s, err := m.Create("acct-1", "alice", RoleMeetOrganizer, false)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestSessionTokensAreUnique(t *testing.T) {
 	m := NewSessionManager(time.Hour)
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		s, err := m.Create("acct", "u", RolePublic)
+		s, err := m.Create("acct", "u", RolePublic, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -53,7 +53,7 @@ func TestSessionExpiry(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m := NewSessionManager(time.Minute).WithClock(func() time.Time { return now })
 
-	s, err := m.Create("acct", "u", RolePublic)
+	s, err := m.Create("acct", "u", RolePublic, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestSessionExpiry(t *testing.T) {
 
 func TestSessionRevoke(t *testing.T) {
 	m := NewSessionManager(time.Hour)
-	s, err := m.Create("acct", "u", RolePublic)
+	s, err := m.Create("acct", "u", RolePublic, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,11 +89,11 @@ func TestSessionSweep(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m := NewSessionManager(time.Minute).WithClock(func() time.Time { return now })
 
-	if _, err := m.Create("a", "u1", RolePublic); err != nil {
+	if _, err := m.Create("a", "u1", RolePublic, false); err != nil {
 		t.Fatal(err)
 	}
 	now = now.Add(2 * time.Minute)
-	if _, err := m.Create("b", "u2", RolePublic); err != nil {
+	if _, err := m.Create("b", "u2", RolePublic, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := m.Count(); got != 2 {
@@ -108,6 +108,40 @@ func TestSessionSweep(t *testing.T) {
 	}
 }
 
+// TestSessionCreateMustChangePasswordAndClear covers the TASK-053 session
+// fields Login/ChangePassword rely on: Create carries the account's
+// must-change-password flag onto the new session, and
+// ClearMustChangePassword flips it in place (a no-op on an unknown token)
+// so a just-completed forced change takes effect without a fresh login.
+func TestSessionCreateMustChangePasswordAndClear(t *testing.T) {
+	m := NewSessionManager(time.Hour)
+	s, err := m.Create("acct-1", "alice", RoleMeetOrganizer, true)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !s.MustChangePassword {
+		t.Fatal("Create(mustChangePassword=true) session should carry MustChangePassword=true")
+	}
+	got, err := m.Lookup(s.Token)
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if !got.MustChangePassword {
+		t.Error("Lookup before clearing should still report MustChangePassword=true")
+	}
+
+	m.ClearMustChangePassword("never-existed") // no-op, must not panic
+
+	m.ClearMustChangePassword(s.Token)
+	got, err = m.Lookup(s.Token)
+	if err != nil {
+		t.Fatalf("Lookup after clear: %v", err)
+	}
+	if got.MustChangePassword {
+		t.Error("Lookup after ClearMustChangePassword should report MustChangePassword=false")
+	}
+}
+
 func TestSessionManagerConcurrentAccess(t *testing.T) {
 	m := NewSessionManager(time.Hour)
 	var wg sync.WaitGroup
@@ -115,7 +149,7 @@ func TestSessionManagerConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := m.Create("acct", "u", RolePublic)
+			s, err := m.Create("acct", "u", RolePublic, false)
 			if err != nil {
 				t.Error(err)
 				return

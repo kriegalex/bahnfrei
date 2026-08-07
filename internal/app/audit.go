@@ -43,6 +43,8 @@ var privilegedAuditActions = map[string]bool{
 	"account.disable":                       true,
 	"account.enable":                        true,
 	"account.role_change":                   true,
+	"account.password_reset":                true,
+	"account.password_change":               true,
 	"field_official.assign":                 true,
 	"field_official.unassign":               true,
 	"checkout.override":                     true,

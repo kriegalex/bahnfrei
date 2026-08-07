@@ -49,6 +49,27 @@ var ErrMalformedHash = errors.New("malformed password hash")
 // ErrPasswordMismatch means the password did not match the stored hash.
 var ErrPasswordMismatch = errors.New("password does not match")
 
+// MinPasswordLength is the shared minimum-length policy (SYS-091) for every
+// password a human types into this system: first-run bootstrap and account
+// creation (internal/web/meets.go's setup flow), an admin-issued temporary
+// password (TASK-053's ResetPassword), and the forced change-password step
+// that follows one (ChangePassword) — "the existing setup-page policy",
+// applied everywhere a new password is set rather than re-derived per form.
+const MinPasswordLength = 8
+
+// ErrPasswordTooShort means a submitted password is under MinPasswordLength.
+var ErrPasswordTooShort = errors.New("password must be at least 8 characters")
+
+// ValidatePasswordPolicy checks password against MinPasswordLength. It does
+// not check emptiness separately: any password under 8 characters is also
+// non-empty-invalid, so ErrPasswordTooShort already covers "".
+func ValidatePasswordPolicy(password string) error {
+	if len(password) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
+	return nil
+}
+
 const hashFormatVersion = 19 // argon2.Version, embedded for forward compatibility
 
 // HashPassword encodes an argon2id hash in the PHC-like string format
