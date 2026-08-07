@@ -12,6 +12,21 @@ All notable changes to this project are documented here. The format follows
   for any locked-out account from the accounts page. It signs that account out of every
   active session, and the next login is forced through a change-password step before
   reaching anything else — no email or outside network access required.
+- Out-of-competition toggle on the roster page: mark a participant as competing outside
+  the standings without removing them from capture.
+- Empty operator lists (seeding, reconciliation, officials, timing import) now say why
+  they are empty and what to do next.
+
+### Changed
+
+- The letter-marker quick buttons (X/–/r) on capture pages now appear only at phone
+  widths, where there is no physical keyboard.
+
+### Fixed
+
+- Merging a timing-system result onto an existing status-only entry (for example a DNS)
+  no longer silently discards the imported mark — the merge fills blank fields only, as
+  documented.
 
 ## [0.1.0] — first public release
 
