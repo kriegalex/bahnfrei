@@ -71,10 +71,10 @@ templ capturePage(p PageData, v captureView) {
 		>
 			@captureStandings(p, v)
 		</section>
-		<script src="/static/capture.js"></script>
+		<script src={ assetURL("/static/capture.js") }></script>
 		if v.IsField {
-			<script src="/static/capture-markers.js"></script>
-			<script src="/static/capture-offline.js"></script>
+			<script src={ assetURL("/static/capture-markers.js") }></script>
+			<script src={ assetURL("/static/capture-offline.js") }></script>
 		}
 	}
 }

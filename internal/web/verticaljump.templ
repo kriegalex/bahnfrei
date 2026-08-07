@@ -33,7 +33,7 @@ templ verticalCapturePage(p PageData, v verticalCaptureView) {
 				<p class="capture-correction-notice">{ p.T("capture.correct.notice") }</p>
 			}
 			@verticalGrid(p, v)
-			<script src="/static/capture-markers.js"></script>
+			<script src={ assetURL("/static/capture-markers.js") }></script>
 		}
 		<section
 			id="capture-standings"

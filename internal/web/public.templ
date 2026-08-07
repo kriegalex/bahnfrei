@@ -132,7 +132,7 @@ templ publicStartListsPage(p PageData, v publicStartListsView) {
 				}
 			</div>
 		</div>
-		<script src="/static/public-filter.js"></script>
+		<script src={ assetURL("/static/public-filter.js") }></script>
 	}
 }
 
@@ -267,7 +267,7 @@ templ publicResultsPage(p PageData, v publicResultsView, resultsSection templ.Co
 		>
 			@resultsSection
 		</section>
-		<script src="/static/public-live.js"></script>
-		<script src="/static/public-filter.js"></script>
+		<script src={ assetURL("/static/public-live.js") }></script>
+		<script src={ assetURL("/static/public-filter.js") }></script>
 	}
 }

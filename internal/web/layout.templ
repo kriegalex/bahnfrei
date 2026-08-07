@@ -29,9 +29,9 @@ templ layout(p PageData) {
 			// documented meta-config hook is a clean no-op for the UI rather
 			// than loosening the CSP.
 			<meta name="htmx-config" content='{"includeIndicatorStyles": false}'/>
-			<script src="/static/htmx.min.js"></script>
-			<link rel="stylesheet" href="/static/tokens.css"/>
-			<link rel="stylesheet" href="/static/base.css"/>
+			<script src={ assetURL("/static/htmx.min.js") }></script>
+			<link rel="stylesheet" href={ assetURL("/static/tokens.css") }/>
+			<link rel="stylesheet" href={ assetURL("/static/base.css") }/>
 		</head>
 		<body>
 			<a class="skip-link" href="#main">{ p.T("nav.home") }</a>
@@ -96,12 +96,12 @@ templ layout(p PageData) {
 				{ children... }
 			</main>
 			if p.LoggedIn {
-				<script src="/static/office-banner.js"></script>
+				<script src={ assetURL("/static/office-banner.js") }></script>
 			}
 			// Contextual-help island (TASK-031, SYS-115): loaded on every
 			// page — help icons appear on operator, entry and fixture
 			// surfaces, and the script is inert when a page renders none.
-			<script src="/static/help.js"></script>
+			<script src={ assetURL("/static/help.js") }></script>
 		</body>
 	</html>
 }
