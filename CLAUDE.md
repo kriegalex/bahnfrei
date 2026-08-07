@@ -90,6 +90,27 @@ Best-practice pillars Fable enforces (2026 agentic norms, Opus/Fable-class):
 - In Phase B: each `TASK-###` is merged only with passing acceptance tests traced to a `SYS-###`,
   and any architecture decision it relied on recorded as an `ADR-###`.
 
+## Documentation audiences (hard rule)
+Every committed doc has exactly one audience; never mix them:
+
+1. **Human-facing** — `README.md`, `CHANGELOG.md`, `docs/ops/**`, GitHub release notes: written
+   for a meet organizer or operator deciding whether/how to use the software. Plain language;
+   **no internal ID citations** (`SYS/UC/STR/TASK/OQ/DEC-###`) — a human cannot resolve numbered
+   acronyms mid-sentence; say the thing in words instead. Linked `ADR-###` references are the
+   one exception (those are document names a reader can open). Timeless present-state prose:
+   no status headers, phase labels, dated updates, or process narration — history belongs in
+   git and the changelog.
+2. **Spec/engineering** — `docs/requirements/**`, `docs/architecture/**`, `docs/delivery/**`:
+   ID-addressable and traceable by design; that vocabulary lives here and only here. Still
+   product-facing: no agent-operations vocabulary (model tiers, worker assignment, orchestration
+   mechanics) in committed files.
+3. **Working state** — milestone progress, session notes, merge logs, "what's next": **never
+   committed**. It lives in the untracked, gitignored `.claude/runbook/` (and agent memory);
+   copy whatever a worker needs into its brief. If a doc reads like a status report, it is
+   working state and does not belong in git.
+
+Before committing any doc, decide its bucket and write for that audience only.
+
 ## Deliverable layout
 ```
 docs/research/domain-athletics.md

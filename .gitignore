@@ -31,3 +31,5 @@ node_modules/
 # claude code session artifacts
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+# agent working state (milestones, session notes) — never committed, see CLAUDE.md
+.claude/runbook/
