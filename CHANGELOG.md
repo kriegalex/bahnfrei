@@ -60,6 +60,10 @@ All notable changes to this project are documented here. The format follows
   qualification — likewise now explain why a rejected action did not take effect (for
   example an incomplete round, an invalid qualification code, or a concurrent edit)
   instead of silently returning to an unchanged page.
+- After an upgrade, browsers now pick up the new styling and scripts immediately instead
+  of sometimes continuing to show the previous version until a manual hard refresh.
+  Repeat visits on a slow venue connection also load faster, since unchanged styling and
+  scripts can now be cached for longer.
 
 ## [0.1.0] — first public release
 
