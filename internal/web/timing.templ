@@ -24,17 +24,21 @@ templ timingPage(p PageData, v timingView) {
 		</section>
 		<section>
 			<h2>{ p.T("timing.import.title") }</h2>
-			<form action={ templ.URL("/meets/" + v.MeetID + "/timing/import") } method="post" enctype="multipart/form-data">
+			<form action={ templ.URL("/meets/" + v.MeetID + "/timing/import") } method="post" enctype="multipart/form-data" class="form-grid">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<label>
-					{ p.T("timing.import.format") }
-					<select name="format">
-						<option value="lif">.lif (FinishLynx)</option>
-						<option value="csv">{ p.T("timing.export.csv") }</option>
-					</select>
-				</label>
-				<label>{ p.T("timing.import.file") } <input type="file" name="file" required?={ true }/></label>
-				<button type="submit">{ p.T("timing.import.submit") }</button>
+				<div class="field">
+					<label>
+						{ p.T("timing.import.format") }
+						<select name="format">
+							<option value="lif">.lif (FinishLynx)</option>
+							<option value="csv">{ p.T("timing.export.csv") }</option>
+						</select>
+					</label>
+				</div>
+				<div class="field">
+					<label>{ p.T("timing.import.file") } <input type="file" name="file" required?={ true }/></label>
+				</div>
+				<button type="submit" class="button-primary">{ p.T("timing.import.submit") }</button>
 			</form>
 			if v.ImportError != "" {
 				<p class="flash-error" role="alert">{ v.ImportError }</p>

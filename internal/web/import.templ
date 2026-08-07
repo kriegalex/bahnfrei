@@ -15,19 +15,25 @@ templ entriesImportPage(p PageData, v entriesImportView) {
 			<a href={ templ.URL("/meets/" + v.MeetID + "/entries") }>{ p.T("entries.title") }</a> ·
 			<a href={ templ.URL("/meets/" + v.MeetID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a>
 		</p>
-		<form action={ templ.URL("/meets/" + v.MeetID + "/entries/import") } method="post" enctype="multipart/form-data">
+		<form action={ templ.URL("/meets/" + v.MeetID + "/entries/import") } method="post" enctype="multipart/form-data" class="form-grid">
 			<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-			<label>
-				{ p.T("import.profile") }
-				<select name="profile">
-					for _, prof := range v.Profiles {
-						<option value={ prof.ID }>{ prof.Name }</option>
-					}
-				</select>
-			</label>
-			<label>{ p.T("import.file") } <input type="file" name="file" accept=".csv,text/csv" required?={ true }/></label>
-			<button type="submit" name="action" value="preview">{ p.T("import.preview") }</button>
-			<button type="submit" name="action" value="commit">{ p.T("import.commit") }</button>
+			<div class="field">
+				<label>
+					{ p.T("import.profile") }
+					<select name="profile">
+						for _, prof := range v.Profiles {
+							<option value={ prof.ID }>{ prof.Name }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<div class="field">
+				<label>{ p.T("import.file") } <input type="file" name="file" accept=".csv,text/csv" required?={ true }/></label>
+			</div>
+			<div class="button-row">
+				<button type="submit" name="action" value="preview" class="button-secondary">{ p.T("import.preview") }</button>
+				<button type="submit" name="action" value="commit" class="button-primary">{ p.T("import.commit") }</button>
+			</div>
 		</form>
 		if v.Report != nil {
 			<h2>

@@ -17,118 +17,147 @@ templ entriesPage(p PageData, v entriesView) {
 		}
 		if len(v.Events) > 0 {
 			<h2>{ p.T("entries.individual.title") }</h2>
-			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/individual") } method="post">
+			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/individual") } method="post" class="form-grid">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<label>
-					{ p.T("entries.event") }
-					<select name="event">
-						for _, ev := range v.Events {
-							<option value={ ev.ID } selected?={ ev.ID == v.IndividualForm.Event }>{ ev.Label }</option>
-						}
-					</select>
-				</label>
-				<label>
-					{ p.T("roster.first_name") }
-					<input
-						type="text"
-						name="first_name"
-						value={ v.IndividualForm.FirstName }
-						required?={ true }
-						if v.IndividualForm.Errors.Has("first_name") {
-							aria-invalid="true"
-							aria-describedby={ fieldErrorID("first_name") }
-						}
-					/>
-				</label>
-				@fieldError("first_name", v.IndividualForm.Errors)
-				<label>
-					{ p.T("roster.last_name") }
-					<input
-						type="text"
-						name="last_name"
-						value={ v.IndividualForm.LastName }
-						required?={ true }
-						if v.IndividualForm.Errors.Has("last_name") {
-							aria-invalid="true"
-							aria-describedby={ fieldErrorID("last_name") }
-						}
-					/>
-				</label>
-				@fieldError("last_name", v.IndividualForm.Errors)
-				<label>
-					{ p.T("roster.birth_year") }
-					<input
-						type="number"
-						name="birth_year"
-						min="1900"
-						value={ v.IndividualForm.BirthYear }
-						required?={ true }
-						if v.IndividualForm.Errors.Has("birth_year") {
-							aria-invalid="true"
-							aria-describedby={ "entries-birth-year-hint " + fieldErrorID("birth_year") }
-						} else {
-							aria-describedby="entries-birth-year-hint"
-						}
-					/>
-				</label>
-				<p class="hint" id="entries-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
-				@fieldError("birth_year", v.IndividualForm.Errors)
-				<label>
-					{ p.T("roster.sex") }
-					<select name="sex">
-						<option value="W" selected?={ v.IndividualForm.Sex == "W" }>{ p.T("roster.sex") } W</option>
-						<option value="M" selected?={ v.IndividualForm.Sex == "M" }>{ p.T("roster.sex") } M</option>
-					</select>
-				</label>
-				<label>{ p.T("roster.club") } <input type="text" name="club" value={ v.IndividualForm.Club }/></label>
-				<label>
-					{ p.T("entries.seed") }
-					<input
-						type="text"
-						name="seed"
-						value={ v.IndividualForm.Seed }
-						required?={ true }
-						if v.IndividualForm.Errors.Has("seed") {
-							aria-invalid="true"
-							aria-describedby={ "entries-seed-hint " + fieldErrorID("seed") }
-						} else {
-							aria-describedby="entries-seed-hint"
-						}
-					/>
-				</label>
-				@helpIcon(p, "entries.seed")
-				<p class="hint" id="entries-seed-hint">{ p.T("entries.hint.seed") }</p>
-				@fieldError("seed", v.IndividualForm.Errors)
-				<label>
-					{ p.T("entries.licence") }
-					<input
-						type="text"
-						name="licence"
-						value={ v.IndividualForm.Licence }
-						if v.IndividualForm.Errors.Has("licence") {
-							aria-invalid="true"
-							aria-describedby={ "entries-licence-hint " + fieldErrorID("licence") }
-						} else {
-							aria-describedby="entries-licence-hint"
-						}
-					/>
-				</label>
-				@helpIcon(p, "entries.licence")
-				<p class="hint" id="entries-licence-hint">{ p.T("entries.hint.licence") }</p>
-				@fieldError("licence", v.IndividualForm.Errors)
+				<div class="field">
+					<label>
+						{ p.T("entries.event") }
+						<select name="event">
+							for _, ev := range v.Events {
+								<option value={ ev.ID } selected?={ ev.ID == v.IndividualForm.Event }>{ ev.Label }</option>
+							}
+						</select>
+					</label>
+				</div>
+				<div class="form-row">
+					<div class="field">
+						<label>
+							{ p.T("roster.first_name") }
+							<input
+								type="text"
+								name="first_name"
+								value={ v.IndividualForm.FirstName }
+								required?={ true }
+								if v.IndividualForm.Errors.Has("first_name") {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID("first_name") }
+								}
+							/>
+						</label>
+						@fieldError("first_name", v.IndividualForm.Errors)
+					</div>
+					<div class="field">
+						<label>
+							{ p.T("roster.last_name") }
+							<input
+								type="text"
+								name="last_name"
+								value={ v.IndividualForm.LastName }
+								required?={ true }
+								if v.IndividualForm.Errors.Has("last_name") {
+									aria-invalid="true"
+									aria-describedby={ fieldErrorID("last_name") }
+								}
+							/>
+						</label>
+						@fieldError("last_name", v.IndividualForm.Errors)
+					</div>
+				</div>
+				<div class="form-row">
+					<div class="field">
+						<label>
+							{ p.T("roster.birth_year") }
+							<input
+								type="number"
+								name="birth_year"
+								min="1900"
+								value={ v.IndividualForm.BirthYear }
+								required?={ true }
+								if v.IndividualForm.Errors.Has("birth_year") {
+									aria-invalid="true"
+									aria-describedby={ "entries-birth-year-hint " + fieldErrorID("birth_year") }
+								} else {
+									aria-describedby="entries-birth-year-hint"
+								}
+							/>
+						</label>
+						<p class="hint" id="entries-birth-year-hint">{ p.T("entries.hint.birth_year") }</p>
+						@fieldError("birth_year", v.IndividualForm.Errors)
+					</div>
+					<div class="field">
+						<label>
+							{ p.T("roster.sex") }
+							<select name="sex">
+								<option value="W" selected?={ v.IndividualForm.Sex == "W" }>{ p.T("roster.sex") } W</option>
+								<option value="M" selected?={ v.IndividualForm.Sex == "M" }>{ p.T("roster.sex") } M</option>
+							</select>
+						</label>
+					</div>
+				</div>
+				<div class="field">
+					<label>{ p.T("roster.club") } <input type="text" name="club" value={ v.IndividualForm.Club }/></label>
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("entries.seed") }
+						<input
+							type="text"
+							name="seed"
+							value={ v.IndividualForm.Seed }
+							required?={ true }
+							if v.IndividualForm.Errors.Has("seed") {
+								aria-invalid="true"
+								aria-describedby={ "entries-seed-hint " + fieldErrorID("seed") }
+							} else {
+								aria-describedby="entries-seed-hint"
+							}
+						/>
+					</label>
+					@helpIcon(p, "entries.seed")
+					<p class="hint" id="entries-seed-hint">{ p.T("entries.hint.seed") }</p>
+					@fieldError("seed", v.IndividualForm.Errors)
+				</div>
+				<div class="field">
+					<label>
+						{ p.T("entries.licence") }
+						<input
+							type="text"
+							name="licence"
+							value={ v.IndividualForm.Licence }
+							if v.IndividualForm.Errors.Has("licence") {
+								aria-invalid="true"
+								aria-describedby={ "entries-licence-hint " + fieldErrorID("licence") }
+							} else {
+								aria-describedby="entries-licence-hint"
+							}
+						/>
+					</label>
+					@helpIcon(p, "entries.licence")
+					<p class="hint" id="entries-licence-hint">{ p.T("entries.hint.licence") }</p>
+					@fieldError("licence", v.IndividualForm.Errors)
+				</div>
 				<label>
 					<input type="checkbox" name="publication_withdrawn" value="true" checked?={ v.IndividualForm.PublicationWithdrawn }/>
 					{ p.T("roster.publication_withdrawn") }
 				</label>
 				@helpIcon(p, "publication_withdrawn")
-				<button type="submit">{ p.T("entries.individual.submit") }</button>
+				<button type="submit" class="button-primary">{ p.T("entries.individual.submit") }</button>
 			</form>
 
 			<h2>{ p.T("entries.bulk.title") }</h2>
 			<p>{ p.T("entries.bulk.hint") }</p>
 			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/bulk") } method="post">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<label>{ p.T("roster.club") } <input type="text" name="club" required?={ true }/></label>
+				<div class="field">
+					<label>{ p.T("roster.club") } <input type="text" name="club" required?={ true }/></label>
+				</div>
+				// The per-participant grid below stays a dense table (like
+				// the point-of-competition capture grids DEC-037 excluded
+				// from the stacked .field layout): stacking each cell's
+				// label above its input would turn a scannable multi-row
+				// bulk upload into a very tall column, defeating the
+				// table's purpose. It already inherits the token-driven
+				// input/select chrome (DEC-037).
 				<div class="table-scroll">
 					<table>
 						<thead>
@@ -170,37 +199,49 @@ templ entriesPage(p PageData, v entriesView) {
 						</tbody>
 					</table>
 				</div>
-				<button type="submit">{ p.T("entries.bulk.submit") }</button>
+				<button type="submit" class="button-primary">{ p.T("entries.bulk.submit") }</button>
 			</form>
 		}
 
 		if len(v.RelayEvents) > 0 {
 			<h2>{ p.T("entries.relay.title") }</h2>
-			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/relay") } method="post">
+			<form action={ templ.URL("/meets/" + v.MeetID + "/entries/relay") } method="post" class="form-grid">
 				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<label>
-					{ p.T("entries.event") }
-					<select name="relay_event">
-						for _, ev := range v.RelayEvents {
-							<option value={ ev.ID }>{ ev.Label }</option>
-						}
-					</select>
-				</label>
-				<label>{ p.T("roster.club") } <input type="text" name="relay_club" required?={ true }/></label>
+				<div class="field">
+					<label>
+						{ p.T("entries.event") }
+						<select name="relay_event">
+							for _, ev := range v.RelayEvents {
+								<option value={ ev.ID }>{ ev.Label }</option>
+							}
+						</select>
+					</label>
+				</div>
+				<div class="field">
+					<label>{ p.T("roster.club") } <input type="text" name="relay_club" required?={ true }/></label>
+				</div>
 				<fieldset>
 					<legend>{ p.T("entries.relay.composition") }</legend>
 					for _, i := range v.RelayLegRows {
-						<div class="session-row">
-							<label>{ p.T("roster.first_name") } <input type="text" name={ "leg_first_name_" + intToStr(int64(i)) }/></label>
-							<label>{ p.T("roster.last_name") } <input type="text" name={ "leg_last_name_" + intToStr(int64(i)) }/></label>
-							<label>{ p.T("roster.birth_year") } <input type="number" name={ "leg_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
-							<label>
-								{ p.T("roster.sex") }
-								<select name={ "leg_sex_" + intToStr(int64(i)) }>
-									<option value="W">W</option>
-									<option value="M">M</option>
-								</select>
-							</label>
+						<div class="session-row form-row">
+							<div class="field">
+								<label>{ p.T("roster.first_name") } <input type="text" name={ "leg_first_name_" + intToStr(int64(i)) }/></label>
+							</div>
+							<div class="field">
+								<label>{ p.T("roster.last_name") } <input type="text" name={ "leg_last_name_" + intToStr(int64(i)) }/></label>
+							</div>
+							<div class="field">
+								<label>{ p.T("roster.birth_year") } <input type="number" name={ "leg_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
+							</div>
+							<div class="field">
+								<label>
+									{ p.T("roster.sex") }
+									<select name={ "leg_sex_" + intToStr(int64(i)) }>
+										<option value="W">W</option>
+										<option value="M">M</option>
+									</select>
+								</label>
+							</div>
 							<label>
 								<input type="checkbox" name={ "leg_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
 								{ p.T("privacy.withdrawn_col") }
@@ -211,17 +252,25 @@ templ entriesPage(p PageData, v entriesView) {
 				<fieldset>
 					<legend>{ p.T("entries.relay.reserves") }</legend>
 					for _, i := range v.RelayReserveRow {
-						<div class="session-row">
-							<label>{ p.T("roster.first_name") } <input type="text" name={ "reserve_first_name_" + intToStr(int64(i)) }/></label>
-							<label>{ p.T("roster.last_name") } <input type="text" name={ "reserve_last_name_" + intToStr(int64(i)) }/></label>
-							<label>{ p.T("roster.birth_year") } <input type="number" name={ "reserve_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
-							<label>
-								{ p.T("roster.sex") }
-								<select name={ "reserve_sex_" + intToStr(int64(i)) }>
-									<option value="W">W</option>
-									<option value="M">M</option>
-								</select>
-							</label>
+						<div class="session-row form-row">
+							<div class="field">
+								<label>{ p.T("roster.first_name") } <input type="text" name={ "reserve_first_name_" + intToStr(int64(i)) }/></label>
+							</div>
+							<div class="field">
+								<label>{ p.T("roster.last_name") } <input type="text" name={ "reserve_last_name_" + intToStr(int64(i)) }/></label>
+							</div>
+							<div class="field">
+								<label>{ p.T("roster.birth_year") } <input type="number" name={ "reserve_birth_year_" + intToStr(int64(i)) } min="1900"/></label>
+							</div>
+							<div class="field">
+								<label>
+									{ p.T("roster.sex") }
+									<select name={ "reserve_sex_" + intToStr(int64(i)) }>
+										<option value="W">W</option>
+										<option value="M">M</option>
+									</select>
+								</label>
+							</div>
 							<label>
 								<input type="checkbox" name={ "reserve_publication_withdrawn_" + intToStr(int64(i)) } value="true"/>
 								{ p.T("privacy.withdrawn_col") }
@@ -229,7 +278,7 @@ templ entriesPage(p PageData, v entriesView) {
 						</div>
 					}
 				</fieldset>
-				<button type="submit">{ p.T("entries.relay.submit") }</button>
+				<button type="submit" class="button-primary">{ p.T("entries.relay.submit") }</button>
 			</form>
 		}
 
