@@ -579,6 +579,8 @@
   "seeding.advance.title": "Rundenaufstieg",
   "seeding.advance.top_n": "Platzierte pro Lauf (Q)",
   "seeding.empty": "Noch keine Läufe generiert — über das Formular oben Läufe für diese Runde erzeugen (mindestens eine bestätigte oder eingecheckte Meldung nötig).",
+  "seeding.generate.error.empty_pool": "Keine bestätigten oder eingecheckten Meldungen für diese Runde — bitte zuerst Meldungen bestätigen oder einchecken.",
+  "seeding.generate.error.failed": "Läufe konnten nicht generiert werden — bitte erneut versuchen.",
   "seeding.generate.submit": "Läufe generieren",
   "seeding.generate.title": "Läufe generieren",
   "seeding.heat": "Lauf",

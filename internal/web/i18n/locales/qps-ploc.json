@@ -579,6 +579,8 @@
   "seeding.advance.title": "[Rúndénáúfstíég ~~~]",
   "seeding.advance.top_n": "[Plátzíérté pró Láúf (Q) ~~~]",
   "seeding.empty": "[Nóch kéíné Läúfé généríért — übér dás Fórmúlár óbén Läúfé für díésé Rúndé érzéúgén (míndésténs éíné béstätígté ódér éíngéchéckté Méldúng nötíg). ~~~]",
+  "seeding.generate.error.empty_pool": "[Kéíné béstätígtén ódér éíngéchécktén Méldúngén für díésé Rúndé — bítté zúérst Méldúngén béstätígén ódér éínchéckén. ~~~]",
+  "seeding.generate.error.failed": "[Läúfé kónntén nícht généríért wérdén — bítté érnéút vérsúchén. ~~~]",
   "seeding.generate.submit": "[Läúfé généríérén ~~~]",
   "seeding.generate.title": "[Läúfé généríérén ~~~]",
   "seeding.heat": "[Láúf ~~~]",
