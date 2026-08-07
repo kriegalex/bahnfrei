@@ -33,8 +33,7 @@ Phase B — implementation:
 - Implementation Engineers (Sonnet) — the bulk of coding and tests, one vertical slice at a time.
 - Research/Scaffolding (Haiku) — search, extraction, boilerplate, status checks.
 - Deep-reasoning specialist (Opus) — tricky debugging and security/privacy analysis on demand.
-Assign, parallelize, and reconcile. Use fast/cheap models for research and mechanical work; reserve
-deep reasoning for synthesis, architecture, and conflict resolution.
+Assign, parallelize, and reconcile. Model-tier selection follows `CLAUDE.md` §Model tiering.
 
 METHOD & STANDARD
 Follow ISO/IEC/IEEE 29148:2018 practice with three traced layers:

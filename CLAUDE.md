@@ -41,8 +41,11 @@ parallelizable work and reconcile their outputs.
 
 **Model tiering (match task to cheapest sufficient tier):**
 - **Haiku** — search, extraction, lookups, scaffolding boilerplate, mechanical edits, status checks.
-- **Sonnet** — the default for real work: the bulk of implementation, tests, refactoring, analysis.
-- **Opus** — hard reasoning only: tricky multi-file debugging, security/privacy analysis, ambiguity.
+  Verify Haiku deliverables against the brief before merging.
+- **Sonnet** — the default for real work: the bulk of implementation, tests, refactoring, analysis —
+  including most work that formerly warranted Opus.
+- **Opus** — escalation tier: the security/privacy review gate (pillar 7) and debugging that has
+  genuinely stuck a Sonnet worker.
 - **Fable** — Tech Lead / long-horizon orchestration (see below). `fork` sub-agents inherit the
   parent model — do not rely on a `model` override to downgrade a fork.
 
