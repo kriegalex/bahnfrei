@@ -50,7 +50,10 @@ func (s *Server) checkInView(r *http.Request, p PageData, actor app.Session, mee
 	if err != nil {
 		return checkInView{}, err
 	}
-	label := ev.DisciplineName
+	label := s.localizedDisciplineName(p, ev.DisciplineCode)
+	if label == "" {
+		label = ev.DisciplineName
+	}
 	if label == "" {
 		label = ev.DisciplineCode
 	}

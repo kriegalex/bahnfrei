@@ -199,3 +199,34 @@ func TestFaviconServedSYS116TASK050(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckInPageLocalizedDisciplineNameSYS111TASK051 covers N1 (release-0.1
+// usability audit, TASK-051): the check-in page's context line and <title>
+// previously rendered the catalog's canonical English discipline name
+// (checkInView built EventLabel from app.ProgrammeEvent.DisciplineName
+// directly) even under the DE/FR locales — the TASK-050 sweep localized the
+// capture index/unit pages, assignments dashboard and hub programme via
+// localizedDisciplineName but missed this surface. checkInView now reuses
+// the same helper.
+func TestCheckInPageLocalizedDisciplineNameSYS111TASK051(t *testing.T) {
+	for _, loc := range []string{"de", "fr"} {
+		t.Run(loc, func(t *testing.T) {
+			deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+			client, base := newTestClient(t, deps)
+			setupAndLogin(t, client, base)
+			switchLocale(t, client, base, loc)
+
+			meetID, _ := ukcCaptureFixture(t, client, base)
+			eventID := mustEventID(t, deps, meetID, "ZoneLJ")
+			body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/events/"+eventID+"/checkin"))
+
+			want := discLocalized[loc]
+			if !strings.Contains(body, want.zoneLJ) {
+				t.Errorf("[%s] check-in page missing localized discipline %q: %s", loc, want.zoneLJ, body)
+			}
+			if strings.Contains(body, englishZoneLJ) {
+				t.Errorf("[%s] check-in page still renders the English catalog name %q", loc, englishZoneLJ)
+			}
+		})
+	}
+}
