@@ -290,7 +290,9 @@ a, button, input, select, textarea {
    -------------------------------------------------------------------- */
 button,
 .button,
-.button-secondary {
+.button-secondary,
+.button-primary,
+.button-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -335,7 +337,10 @@ button:hover:not(:disabled),
   color: var(--color-warning-strong-fg);
 }
 button:active:not(:disabled),
-.button:active:not([aria-disabled="true"]) {
+.button:active:not([aria-disabled="true"]),
+.button-secondary:active:not(:disabled),
+.button-primary:active:not(:disabled),
+.button-danger:active:not(:disabled) {
   filter: brightness(0.92);
 }
 
