@@ -235,7 +235,16 @@ templ entriesPage(p PageData, v entriesView) {
 
 		<h2>{ p.T("entries.mine.title") }</h2>
 		if len(v.MyEntries) == 0 {
-			<p>{ p.T("entries.mine.empty") }</p>
+			// N2/SYS-152 (TASK-051): "über eines der Formulare oben melden"
+			// only holds when a form actually renders above. When the entry
+			// window is closed (no Events/RelayEvents, so entries.no_open_events
+			// already fired above), point at that instead of forms that
+			// aren't there — mirrors TASK-047's why-empty convention.
+			if len(v.Events) == 0 && len(v.RelayEvents) == 0 {
+				<p>{ p.T("entries.mine.empty_no_open_events") }</p>
+			} else {
+				<p>{ p.T("entries.mine.empty") }</p>
+			}
 		} else {
 			<div class="table-scroll">
 				<table>

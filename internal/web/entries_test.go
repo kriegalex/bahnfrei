@@ -1021,3 +1021,43 @@ func TestBibBulkAssignNonPositiveStartRejectedWeb(t *testing.T) {
 		t.Errorf("redirect location = %q, want err=invalid", resp.Header.Get("Location"))
 	}
 }
+
+// TestEntriesMineEmptyStateDoesNotReferenceFormsWhenWindowClosedSYS152TASK051
+// covers N2 (release-0.1 usability audit, TASK-051): on a published meet
+// with no open entry events, the page-level empty state correctly says no
+// events are open (entries.no_open_events), but the "Meine Meldungen"
+// empty state below previously always said to use "one of the forms
+// above" (entries.mine.empty) even though no form renders when there is
+// nothing open. It now switches to entries.mine.empty_no_open_events,
+// which doesn't point at forms, whenever no Events/RelayEvents render —
+// mirroring TASK-047's why-empty convention. Checked in both DE and FR.
+func TestEntriesMineEmptyStateDoesNotReferenceFormsWhenWindowClosedSYS152TASK051(t *testing.T) {
+	for _, loc := range []string{"de", "fr"} {
+		t.Run(loc, func(t *testing.T) {
+			deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+			client, base := newTestClient(t, deps)
+			setupAndLogin(t, client, base)
+			switchLocale(t, client, base, loc)
+			meetID := createUCMeet(t, client, base)
+			publishMeetWeb(t, client, base, meetID)
+
+			body := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/entries"))
+
+			forbidden := map[string]string{
+				"de": "über eines der Formulare oben",
+				"fr": "utiliser l'un des formulaires ci-dessus",
+			}[loc]
+			if strings.Contains(body, forbidden) {
+				t.Errorf("[%s] my-entries empty state still points at forms above when none render: %s", loc, body)
+			}
+
+			want := map[string]string{
+				"de": "sind aktuell keine Bewerbe offen für Online-Meldungen",
+				"fr": "actuellement ouverte aux inscriptions en ligne",
+			}[loc]
+			if n := strings.Count(body, want); n < 2 {
+				t.Errorf("[%s] expected the closed-window explanation in both the page-level and my-entries empty states, found %d occurrences: %s", loc, n, body)
+			}
+		})
+	}
+}

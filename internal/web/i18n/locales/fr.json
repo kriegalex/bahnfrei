@@ -236,6 +236,7 @@
   "entries.individual.title": "Inscription individuelle",
   "entries.licence": "Numéro de licence",
   "entries.mine.empty": "Aucune inscription pour l'instant — utiliser l'un des formulaires ci-dessus.",
+  "entries.mine.empty_no_open_events": "Aucune inscription pour l'instant. Aucune épreuve n'est actuellement ouverte aux inscriptions en ligne pour ce meeting.",
   "entries.mine.title": "Mes inscriptions",
   "entries.no_open_events": "Aucune épreuve n'est actuellement ouverte aux inscriptions en ligne pour ce meeting.",
   "entries.relay.composition": "Composition du relais",

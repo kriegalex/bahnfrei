@@ -236,6 +236,7 @@
   "entries.individual.title": "Einzelmeldung",
   "entries.licence": "Lizenznummer",
   "entries.mine.empty": "Noch keine eigenen Meldungen — über eines der Formulare oben melden.",
+  "entries.mine.empty_no_open_events": "Noch keine eigenen Meldungen. Für diesen Wettkampf sind aktuell keine Bewerbe offen für Online-Meldungen.",
   "entries.mine.title": "Meine Meldungen",
   "entries.no_open_events": "Für diesen Wettkampf sind aktuell keine Bewerbe offen für Online-Meldungen.",
   "entries.relay.composition": "Staffel-Aufstellung",
