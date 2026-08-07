@@ -455,6 +455,120 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   border-radius: var(--radius-sm);
 }
 
+/* --------------------------------------------------------------------
+   Status chip (DEC-038, TASK-058, SYS-116/SYS-148): generalizes the
+   offline-status "colored pill" pattern (above) to any lifecycle or
+   publication state — meet status (draft/live/published/closed/archived)
+   today. `data-tone` selects the color register only; the chip's text
+   content is always the real localized status label, so meaning never
+   rests on color alone. Reuses the existing semantic tokens rather than
+   adding new ones: "neutral" (the default, unqualified chip) reads like a
+   quiet badge on --color-surface — the market's grey "not started yet"
+   register; "info" is the live/in-progress highlight; "success" is the
+   settled/official green; "muted" dims the neutral chip further for a
+   closed chapter (archived). -------------------------------------------------------------------- */
+.status-chip {
+  display: inline-block;
+  padding: var(--space-1) 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg);
+}
+.status-chip[data-tone="info"] {
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
+  border-color: var(--color-info-bg);
+}
+.status-chip[data-tone="success"] {
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  border-color: var(--color-success-bg);
+}
+.status-chip[data-tone="muted"] {
+  opacity: 0.7;
+}
+
+/* --------------------------------------------------------------------
+   Structured action lists/cards (DEC-038, TASK-058, SYS-116/STR-045):
+   replaces middot-separated prose-link paragraphs (the meet hub, the
+   results-capture index, the public meet pages) with a bounded panel on
+   --color-surface holding a vertical list of clearly separated entries —
+   navigation grouped apart from consequential page actions.
+   `.action-list-nav` is the lighter-weight sibling for a short, unboxed
+   wayfinding row (e.g. "back to meet" links) that doesn't warrant a full
+   card. `.button-row` lays out a page's primary/secondary action buttons
+   side by side (SYS-116 action hierarchy: `.button-primary` for the
+   consequential action, `.button-secondary` for the alternate path).
+   -------------------------------------------------------------------- */
+.action-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+}
+.action-panel h2 {
+  margin-top: 0;
+}
+.action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.action-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.action-list > li:last-child {
+  border-bottom: none;
+}
+.action-list-secondary {
+  font-size: var(--font-size-sm);
+}
+.action-list-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+/* Category checkbox grid (DEC-038, TASK-058): replaces the discipline-add
+   form's <select multiple> category listbox with one checkbox per
+   category, wrapping compactly instead of stacking one per line. Every
+   checkbox shares the SAME name="categories" the listbox submitted under
+   — Go's r.Form["categories"] reads a checkbox group and a multi-select
+   identically, so the handler and its validation (including the
+   zero-selected case) are unchanged. */
+.checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+.checkbox-grid label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: normal;
+  white-space: nowrap;
+}
+
 /* Contextual-help icon + popup (TASK-031, SYS-115, UC-037; component
    markup in help.templ, behavior in /static/help.js). The popup is a DOM
    child of the .help wrapper so the pointer can travel from the trigger
