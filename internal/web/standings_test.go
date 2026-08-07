@@ -301,6 +301,118 @@ func TestRosterAndStandingsRequireOfficeRole(t *testing.T) {
 	}
 }
 
+// TestRosterOutOfCompetitionToggleWeb covers TASK-052/OQ-091's roster-page
+// operator control over TASK-036's ausser-Konkurrenz/hors-concours flag,
+// over real HTTP: marking a fully-competed participant out of competition
+// drops her from the standings ranking (marks stay visible, no numeric
+// rank, the "n.a." unranked marker per DEC-016/OQ-020) while a rival stays
+// ranked normally, and unmarking her restores the ranking — pinned against
+// the localized DE strings the page actually renders.
+func TestRosterOutOfCompetitionToggleWeb(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	setupAndLogin(t, client, base)
+	ctx := context.Background()
+
+	resp := postForm(t, client, base+"/meets/from-template", base+"/meets/from-template", url.Values{
+		"template": {"ubs-kids-cup"}, "date": {"2026-08-15"}, "venue": {"Le Mouret"},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	meetID := strings.TrimPrefix(loc, "/meets/")
+
+	officeActor := app.Session{AccountID: "01TEST", Username: "office", Role: app.RoleCompetitionOffice}
+	ooc, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, app.ParticipantInput{
+		FirstName: "Thome", LastName: "Lauriane", BirthYear: 2015, Sex: domain.SexFemale, Bib: "1",
+	})
+	if err != nil {
+		t.Fatalf("RegisterParticipant ooc: %v", err)
+	}
+	rival, err := deps.results.RegisterParticipant(ctx, officeActor, meetID, app.ParticipantInput{
+		FirstName: "Other", LastName: "Athlete", BirthYear: 2015, Sex: domain.SexFemale, Bib: "2",
+	})
+	if err != nil {
+		t.Fatalf("RegisterParticipant rival: %v", err)
+	}
+	for _, in := range []app.ResultInput{
+		{AthleteID: ooc.AthleteID, DisciplineCode: "60m", Mark: "8.79", Timing: domain.TimingElectronic},
+		{AthleteID: ooc.AthleteID, DisciplineCode: "ZoneLJ", Mark: "4.38"},
+		{AthleteID: ooc.AthleteID, DisciplineCode: "BallThrow200g", Mark: "26.60"},
+		{AthleteID: rival.AthleteID, DisciplineCode: "60m", Mark: "10.00", Timing: domain.TimingElectronic},
+		{AthleteID: rival.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"},
+		{AthleteID: rival.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"},
+	} {
+		if _, err := deps.results.SaveResult(ctx, officeActor, meetID, in); err != nil {
+			t.Fatalf("SaveResult(%s, %s): %v", in.AthleteID, in.DisciplineCode, err)
+		}
+	}
+	rosterURL := base + "/meets/" + meetID + "/roster"
+	toggleURL := rosterURL + "/" + ooc.ID + "/out-of-competition"
+
+	// Before toggling: the roster offers the "mark" control, no badge yet;
+	// standings rank her normally alongside the rival.
+	body := bodyString(t, mustGet(t, client, rosterURL))
+	if !strings.Contains(body, "Als ausser Konkurrenz markieren") {
+		t.Errorf("roster missing the out-of-competition mark control: %s", body)
+	}
+	if strings.Contains(body, `class="badge">Ausser Konkurrenz<`) {
+		t.Errorf("roster shows the out-of-competition badge before toggling: %s", body)
+	}
+	standingsBody := bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/standings"))
+	if strings.Contains(standingsBody, "n.a.") {
+		t.Errorf("standings show the unranked marker before toggling: %s", standingsBody)
+	}
+
+	// Toggle on: office marks her out of competition (version 1, her
+	// as-registered version).
+	resp = postForm(t, client, rosterURL, toggleURL, url.Values{"version": {"1"}, "value": {"true"}})
+	toggleBody := bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("POST toggle on = %d, want 303 (body: %s)", resp.StatusCode, toggleBody)
+	}
+	if got := resp.Header.Get("Location"); got != "/meets/"+meetID+"/roster" {
+		t.Errorf("redirect location = %q, want the roster page", got)
+	}
+
+	// Roster now shows the badge and offers the "unmark" control.
+	body = bodyString(t, mustGet(t, client, rosterURL))
+	if !strings.Contains(body, `class="badge">Ausser Konkurrenz<`) {
+		t.Errorf("roster missing the out-of-competition badge after toggling on: %s", body)
+	}
+	if !strings.Contains(body, "Nicht mehr ausser Konkurrenz") {
+		t.Errorf("roster missing the unmark control after toggling on: %s", body)
+	}
+
+	// Standings exclusion: she keeps her marks (Complete) but holds no rank
+	// (the "n.a." DEC-016/OQ-020 marker); the rival is unaffected.
+	standingsBody = bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/standings"))
+	if !strings.Contains(standingsBody, "n.a.") {
+		t.Errorf("standings missing the unranked-out-of-competition marker after toggling: %s", standingsBody)
+	}
+	if !strings.Contains(standingsBody, "8.79") {
+		t.Errorf("standings dropped the out-of-competition athlete's marks: %s", standingsBody)
+	}
+
+	// Toggle back off (version bumped to 2 by the first toggle).
+	resp = postForm(t, client, rosterURL, toggleURL, url.Values{"version": {"2"}, "value": {"false"}})
+	toggleBody = bodyString(t, resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("POST toggle off = %d, want 303 (body: %s)", resp.StatusCode, toggleBody)
+	}
+
+	body = bodyString(t, mustGet(t, client, rosterURL))
+	if strings.Contains(body, `class="badge">Ausser Konkurrenz<`) {
+		t.Errorf("roster still shows the out-of-competition badge after toggling off: %s", body)
+	}
+	if !strings.Contains(body, "Als ausser Konkurrenz markieren") {
+		t.Errorf("roster missing the mark control again after toggling off: %s", body)
+	}
+	standingsBody = bodyString(t, mustGet(t, client, base+"/meets/"+meetID+"/standings"))
+	if strings.Contains(standingsBody, "n.a.") {
+		t.Errorf("standings still show the unranked marker after toggling off: %s", standingsBody)
+	}
+}
+
 // TestSeriesUploadDownloadSYS077UC035_1 covers the office-UI half of UC-035
 // #1 (SYS-077): the standings page offers a download link for a meet whose
 // template has a series-upload template, and the export route serves a

@@ -159,6 +159,11 @@ func (s *Server) routes() http.Handler {
 	// GET-form/POST-submit shape as the meet-edit form (meets.go).
 	mux.HandleFunc("GET /meets/{id}/roster/{participant}/edit", office(s.handleParticipantEditForm))
 	mux.HandleFunc("POST /meets/{id}/roster/{participant}/edit", office(s.handleParticipantEditSubmit))
+	// Out-of-competition roster toggle (TASK-052, OQ-091): the
+	// ausser-Konkurrenz/hors-concours flag standings already respect
+	// (TASK-036) gets its operator control here, same office gate and
+	// version-guard shape as the identity-correction form above.
+	mux.HandleFunc("POST /meets/{id}/roster/{participant}/out-of-competition", office(s.handleRosterOutOfCompetitionToggle))
 	mux.HandleFunc("GET /meets/{id}/standings", office(s.handleStandings))
 	mux.HandleFunc("GET /meets/{id}/export/ukc-series", office(s.handleSeriesUploadExport))
 

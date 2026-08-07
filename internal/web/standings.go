@@ -93,6 +93,10 @@ type rosterRowView struct {
 	// an erased participant renders with no edit link at all, rather than
 	// one that errors on click.
 	Anonymized bool
+	// OutOfCompetition mirrors store.Participant.OutOfCompetition
+	// (TASK-036/OQ-091): drives the roster-row toggle's current label and
+	// the submitted "value" it flips to.
+	OutOfCompetition bool
 }
 
 type rosterView struct {
@@ -129,13 +133,14 @@ func (s *Server) rosterView(r *http.Request, meetID string) (rosterView, error) 
 			continue
 		}
 		v.Rows = append(v.Rows, rosterRowView{
-			ParticipantID: p.ID,
-			Version:       intToStr(p.Version),
-			Bib:           p.Bib,
-			Name:          p.Athlete.FirstName + " " + p.Athlete.LastName,
-			BirthYear:     strconv.Itoa(p.Athlete.BirthYear),
-			Club:          club,
-			Anonymized:    p.Athlete.Anonymized,
+			ParticipantID:    p.ID,
+			Version:          intToStr(p.Version),
+			Bib:              p.Bib,
+			Name:             p.Athlete.FirstName + " " + p.Athlete.LastName,
+			BirthYear:        strconv.Itoa(p.Athlete.BirthYear),
+			Club:             club,
+			Anonymized:       p.Athlete.Anonymized,
+			OutOfCompetition: p.OutOfCompetition,
 		})
 	}
 	return v, nil
@@ -188,6 +193,64 @@ func (s *Server) handleRosterAdd(w http.ResponseWriter, r *http.Request) {
 			p.FlashError = p.T("roster.error.invalid")
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = rosterPage(p, v).Render(r.Context(), w)
+		return
+	}
+	http.Redirect(w, r, "/meets/"+meetID+"/roster", http.StatusSeeOther)
+}
+
+// handleRosterOutOfCompetitionToggle flips a participant's ausser
+// Konkurrenz/hors concours flag (TASK-052, OQ-091, over TASK-036's
+// `ResultsService.SetOutOfCompetition`): one same-page POST per roster row,
+// version-guarded from the roster row's own rendered version like the
+// identity-correction form's bib field, audited by SetOutOfCompetition
+// itself. The web layer resolves the participant id from the roster path
+// (never a store type, architecture.md §3) to the athlete id
+// SetOutOfCompetition takes.
+func (s *Server) handleRosterOutOfCompetitionToggle(w http.ResponseWriter, r *http.Request) {
+	actor, _ := sessionFromContext(r.Context())
+	meetID := r.PathValue("id")
+	participantID := r.PathValue("participant")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	version, _ := strconv.ParseInt(r.FormValue("version"), 10, 64)
+	value := r.FormValue("value") == "true"
+
+	participants, err := s.results.Participants(r.Context(), meetID)
+	if err != nil {
+		s.renderMeetError(w, r, err)
+		return
+	}
+	athleteID := ""
+	for _, p := range participants {
+		if p.ID == participantID {
+			athleteID = p.AthleteID
+			break
+		}
+	}
+	if athleteID == "" {
+		s.handleNotFound(w, r)
+		return
+	}
+
+	if err := s.results.SetOutOfCompetition(r.Context(), actor, meetID, athleteID, version, value); err != nil {
+		v, verr := s.rosterView(r, meetID)
+		if verr != nil {
+			s.renderMeetError(w, r, verr)
+			return
+		}
+		p := basePageData(r, s.cats)
+		p.Title = v.MeetName + " — " + p.T("roster.title")
+		status := http.StatusUnprocessableEntity
+		flashKey := "roster.out_of_competition.flash.invalid"
+		if errors.Is(err, app.ErrConflict) {
+			status = http.StatusConflict
+			flashKey = "roster.out_of_competition.flash.conflict"
+		}
+		p.FlashError = p.T(flashKey)
+		w.WriteHeader(status)
 		_ = rosterPage(p, v).Render(r.Context(), w)
 		return
 	}

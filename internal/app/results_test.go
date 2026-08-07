@@ -477,10 +477,10 @@ func TestSetOutOfCompetition(t *testing.T) {
 	save(t, results, rec.ID, ResultInput{AthleteID: rival.AthleteID, DisciplineCode: "ZoneLJ", Mark: "3.00"})
 	save(t, results, rec.ID, ResultInput{AthleteID: rival.AthleteID, DisciplineCode: "BallThrow200g", Mark: "20.00"})
 
-	if err := results.SetOutOfCompetition(ctx, fieldOfficial, rec.ID, ooc.AthleteID, true); err == nil {
+	if err := results.SetOutOfCompetition(ctx, fieldOfficial, rec.ID, ooc.AthleteID, ooc.Version, true); err == nil {
 		t.Error("SetOutOfCompetition as a field official: want authorization error (office capability required)")
 	}
-	if err := results.SetOutOfCompetition(ctx, office, rec.ID, ooc.AthleteID, true); err != nil {
+	if err := results.SetOutOfCompetition(ctx, office, rec.ID, ooc.AthleteID, ooc.Version, true); err != nil {
 		t.Fatalf("SetOutOfCompetition: %v", err)
 	}
 
@@ -509,6 +509,30 @@ func TestSetOutOfCompetition(t *testing.T) {
 	}
 	if row := findRow(t, final, "W11", "2"); row.Rank != 1 {
 		t.Errorf("final rival rank = %d, want 1", row.Rank)
+	}
+}
+
+// TestSetOutOfCompetitionVersionConflict pins the OQ-091 roster-toggle
+// concurrency guard: a stale expectedVersion (e.g. a roster page rendered
+// before another office session's edit landed) is refused as ErrConflict,
+// never silently applied on top of the newer row — mirroring
+// TestUpdateParticipantIdentityVersionConflictSYS150UC043_1's pattern.
+func TestSetOutOfCompetitionVersionConflict(t *testing.T) {
+	meets, results, _ := newTestResults(t)
+	ctx := context.Background()
+	rec := createUKCMeet(t, meets)
+	p := register(t, results, rec.ID, ParticipantInput{
+		FirstName: "Anna", LastName: "Muster", BirthYear: 2014, Sex: domain.SexFemale, Bib: "1",
+	})
+
+	if err := results.SetOutOfCompetition(ctx, office, rec.ID, p.AthleteID, p.Version, true); err != nil {
+		t.Fatalf("first SetOutOfCompetition: %v", err)
+	}
+	// p.Version is now stale (the update above bumped it) — a second call
+	// against the pre-update version must be refused.
+	err := results.SetOutOfCompetition(ctx, office, rec.ID, p.AthleteID, p.Version, false)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale-version SetOutOfCompetition err = %v, want ErrConflict", err)
 	}
 }
 

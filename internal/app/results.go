@@ -295,11 +295,11 @@ func (s *ResultsService) SetConsent(ctx context.Context, actor Session, meetID, 
 // visible, but Standings/FinalStandings never assign them a numeric rank
 // while the flag is set. Office level and above (CapOfficeActions,
 // matching RegisterParticipant/bib assignment); audited with the new flag
-// value. There is deliberately no dedicated operator-UI toggle yet
-// (OQ-091) — this is the callable capability the flag needed to exist and
-// be correctly interpreted by standings; wiring a roster-page control is
-// left to a follow-up.
-func (s *ResultsService) SetOutOfCompetition(ctx context.Context, actor Session, meetID, athleteID string, outOfCompetition bool) error {
+// value; expectedVersion guards the write against a concurrent edit the
+// same way UpdateParticipantIdentity's bib update does — a stale version
+// is refused as ErrConflict rather than silently applied. The roster-page
+// toggle (TASK-052, OQ-091) is this capability's operator-UI entry point.
+func (s *ResultsService) SetOutOfCompetition(ctx context.Context, actor Session, meetID, athleteID string, expectedVersion int64, outOfCompetition bool) error {
 	if err := Authorize(actor.Role, CapOfficeActions); err != nil {
 		return err
 	}
@@ -314,7 +314,7 @@ func (s *ResultsService) SetOutOfCompetition(ctx context.Context, actor Session,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := store.UpdateParticipantOutOfCompetition(ctx, tx, p.ID, p.Version, outOfCompetition); err != nil {
+	if _, err := store.UpdateParticipantOutOfCompetition(ctx, tx, p.ID, expectedVersion, outOfCompetition); err != nil {
 		return err
 	}
 	after, _ := json.Marshal(map[string]bool{"out_of_competition": outOfCompetition})

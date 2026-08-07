@@ -57,6 +57,7 @@ templ rosterPage(p PageData, v rosterView) {
 						<th scope="col">{ p.T("roster.name") }</th>
 						<th scope="col">{ p.T("roster.birth_year") }</th>
 						<th scope="col">{ p.T("roster.club") }</th>
+						<th scope="col">{ p.T("roster.out_of_competition.column") }</th>
 						<th scope="col"></th>
 					</tr>
 				</thead>
@@ -67,6 +68,24 @@ templ rosterPage(p PageData, v rosterView) {
 							<td>{ row.Name }</td>
 							<td>{ row.BirthYear }</td>
 							<td>{ row.Club }</td>
+							<td>
+								if !row.Anonymized {
+									if row.OutOfCompetition {
+										<span class="badge">{ p.T("roster.out_of_competition.badge") }</span>
+									}
+									<form action={ templ.URL("/meets/" + v.MeetID + "/roster/" + row.ParticipantID + "/out-of-competition") } method="post">
+										<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+										<input type="hidden" name="version" value={ row.Version }/>
+										if row.OutOfCompetition {
+											<input type="hidden" name="value" value="false"/>
+											<button type="submit">{ p.T("roster.out_of_competition.unmark") }</button>
+										} else {
+											<input type="hidden" name="value" value="true"/>
+											<button type="submit">{ p.T("roster.out_of_competition.mark") }</button>
+										}
+									</form>
+								}
+							</td>
 							<td>
 								if !row.Anonymized {
 									<a href={ templ.URL("/meets/" + v.MeetID + "/roster/" + row.ParticipantID + "/edit") }>{ p.T("roster.edit.link") }</a>
