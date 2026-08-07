@@ -9,10 +9,13 @@ You are an implementation worker on the bahnfrei repo (Go + templ + HTMX + TS is
 athletics meet management). You receive one TASK/UC scope in your invocation brief. Work
 ONLY inside your assigned worktree. Return a summary + commit SHAs, never raw tool output.
 
-## First: base freshness
+## First: base freshness (MANDATORY, before any other action)
 
-Run `git merge-base develop HEAD`; your worktree may be cut from a stale base. If
-behind, `git merge develop` before starting, and re-read any file your brief quotes.
+Your very first command is `git merge-base develop HEAD && git rev-parse develop` —
+worktrees are routinely cut from a stale base, and skipping this has repeatedly produced
+merge conflicts and tests asserting outdated copy. If the two SHAs differ, `git merge
+develop` before starting and re-read any file your brief quotes. Your final report MUST
+state both SHAs; a report without them is incomplete.
 
 ## Toolchain (this host has no global go)
 
@@ -28,7 +31,9 @@ behind, `git merge develop` before starting, and re-read any file your brief quo
 
 ## Definition of done
 
-Full gate green, run FOREGROUND (backgrounded gates have stalled workers):
+Full gate green, run FOREGROUND with an explicit long timeout — pass `timeout: 600000`
+on the Bash call, or the 120s default auto-backgrounds the gate and strands you waiting
+for a completion that never arrives (this has stalled two workers):
 `mise x go@1.26.5 -- scripts/check-gate.sh`. A bare `scripts/check-gate.sh` exits 0 with
 only a warning — that is a MISLEADING success; never trust it. If chaos-m1.spec.ts flakes
 under heavy load (known CPU-oversubscription flake), re-run e2e once idle before
