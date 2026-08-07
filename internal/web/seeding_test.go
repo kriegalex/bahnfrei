@@ -387,6 +387,43 @@ func TestSeedingGenerateAndOverrideHTTPSYS026UC008(t *testing.T) {
 	}
 }
 
+// TestSeedingGenerateEmptyPoolHTTPSYS026UC008 is a denial/edge-path test
+// (TASK-054/OQ-140, SYS-026/117/152): clicking "generate heats" on a round
+// with no confirmed/checked-in entries must not silently redirect to the
+// unchanged empty state — it re-renders the seeding page with an
+// actionable, localized error telling the operator to confirm or check in
+// entries first, at 422, and the page's normal content (including the
+// still-empty heat list) still renders underneath.
+func TestSeedingGenerateEmptyPoolHTTPSYS026UC008(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+	meetID, eventID, roundID := seededMeetFixture(t, deps, client, base, 0)
+
+	seedingPage := base + "/meets/" + meetID + "/events/" + eventID + "/rounds/" + roundID + "/seeding"
+	genResp := postForm(t, client, seedingPage, seedingPage+"/generate", url.Values{
+		"max_heat_size": {"4"}, "track_lanes": {"0"},
+	})
+	body := bodyString(t, genResp)
+	if genResp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("generate heats (empty pool) = %d, want 422", genResp.StatusCode)
+	}
+	const wantMsg = "Keine bestätigten oder eingecheckten Meldungen für diese Runde — bitte zuerst Meldungen bestätigen oder einchecken."
+	if !strings.Contains(body, wantMsg) {
+		t.Errorf("expected the localized empty-pool error message, got: %s", body)
+	}
+	if !strings.Contains(body, "Noch keine Läufe generiert — über das Formular oben") {
+		t.Error("expected the seeding page's normal (still-empty) content to render alongside the error")
+	}
+
+	sheet, err := deps.results.HeatSheetFor(context.Background(), webOffice, meetID, eventID, roundID)
+	if err != nil {
+		t.Fatalf("HeatSheetFor: %v", err)
+	}
+	if len(sheet.Units) != 0 {
+		t.Errorf("expected no heats to have been generated, got %d units", len(sheet.Units))
+	}
+}
+
 // TestAdvanceRoundHTTPSYS029UC009 drives round progression over real HTTP:
 // settled track results feed AdvanceRound, and the qualifiers can seed the
 // next round.
