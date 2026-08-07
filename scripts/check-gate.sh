@@ -9,6 +9,9 @@
 # The coverage profile is ALWAYS regenerated (never reuses a stale
 # coverage.out — stale profiles have produced phantom readings), with CI's
 # exact flags: -race -shuffle=on -covermode=atomic -coverpkg=./...
+# Between releases this script is the ONLY enforcement of the coverage and
+# race-detector gate (SYS-140): CI runs its coverage job on release tags
+# only. Never skip this stage before pushing to main.
 #
 # Usage: scripts/check-gate.sh          (from the repo root)
 #   SKIP_E2E=1  skips the Playwright suite (CI still runs it).

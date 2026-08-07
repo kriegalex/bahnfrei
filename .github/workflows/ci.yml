@@ -2,11 +2,12 @@
 # Copyright (c) 2026 Bahnfrei contributors
 #
 # TASK-002 CI gates (SYS-140, SYS-141, ADR-001 §3–4): build+test (Linux on
-# every push/PR; the macOS/Windows legs run only on release tags — hosted
-# minutes for those OSes bill at 10×/2× and per-push cross-OS coverage adds
-# little between releases), lint, TS typecheck, tests + coverage thresholds,
-# dependency licence scan, vulnerability scan. Governance gates (SPDX/DCO)
-# live in governance.yml. style-conformance (TASK-032, SYS-116) is the
+# every push/PR; the macOS/Windows legs and the coverage+race job run only on
+# release tags — hosted minutes for those OSes bill at 10×/2×, coverage is
+# the longest job by far, and both are enforced elsewhere between releases:
+# coverage via the mandatory local gate, cross-OS at the next tag), lint,
+# TS typecheck, dependency licence scan, vulnerability scan. Governance
+# gates (SPDX/DCO) live in governance.yml. style-conformance (TASK-032, SYS-116) is the
 # design-token gate; sast (gosec, SYS-092, OQ-078) is the own-code security
 # scan. scripts/check-gate.sh reproduces this workflow locally — keep them
 # in sync.
@@ -60,7 +61,12 @@ jobs:
       - run: go vet ./...
       - run: go test -shuffle=on ./...
 
+  # Coverage + race detector runs in CI at release points only: it is by far
+  # the longest job (~9 min vs ≤2.5 min for every other leg). Between
+  # releases the same check is mandatory locally — scripts/check-gate.sh runs
+  # the identical command before every push to main.
   coverage:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
