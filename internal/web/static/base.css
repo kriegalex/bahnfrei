@@ -141,13 +141,22 @@ table:not(.stack-table) tbody tr:not(:last-child) > td {
    `margin-left: auto` rather than a second `justify-content` axis, so it
    still wraps sanely at narrow widths). Deliberately no mega-menu/dropdown
    — the section count is small enough that a flat bar stays legible. */
+/* The bar's background/border span the full viewport, but its CONTENT is
+   constrained to the same centered column as `main` (same max-width, same
+   horizontal padding) — the wordmark and the page heading share a left
+   edge, so header and body read as one aligned layout instead of an
+   edge-to-edge bar over an inset column. */
+header {
+  border-bottom: 1px solid var(--color-border);
+}
 header nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
+  max-width: 60rem;
+  margin: 0 auto;
   padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
 }
 .nav-links,
 .nav-actions {
@@ -183,15 +192,16 @@ header nav {
   border-bottom-color: var(--color-accent);
 }
 
-/* Compact secondary button for the locale-apply control (`.nav-actions`) —
-   same `.button` chrome as everywhere else, just visually small next to
-   the section links since it sits in a one-line bar. */
+/* Compact buttons in the header bar (`.nav-actions`: logout, locale
+   apply) — same `.button` chrome as everywhere else, just uniformly
+   small so the one-line bar stays low-profile and its buttons all share
+   one height. */
 .locale-switch {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
 }
-.locale-switch button {
+.nav-actions button {
   padding: var(--space-1) var(--space-3);
 }
 
