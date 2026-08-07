@@ -31,6 +31,7 @@ that mechanically in CI.
 | Radius | `--radius-sm` (0.4rem) | Badges and banners; nothing in this shell uses a second radius yet. |
 | Focus ring | `--focus-ring-color`, `--focus-ring-width`, `--focus-ring-offset` | Kept separate from the raw accent color/spacing tokens so SYS-114's keyboard-focus contract has one named, testable seam (`e2e/tests/design-gallery.spec.ts` asserts against the *rendered* outline, not these tokens directly, so a future value change is automatically re-verified). |
 | Touch target | `--touch-target-min` (2.75rem/44px) | SYS-147/UC-039 #2: the minimum hit-target size for a primary point-of-competition control operated by touch, outdoors, under time pressure — the Apple HIG (44x44 pt)/Material Design (48x48 dp) floor, well above WCAG 2.2 SC 2.5.8's 24x24 px minimum. Applied at the ≤480px phone breakpoint (TASK-045); desktop/office density is unaffected. |
+| Chrome control floor | `--control-min-height-sm` (1.5rem/24px) | SYS-116 (N4/TASK-051): every `<select>` gets at least this height — WCAG 2.2 SC 2.5.8's own floor, named explicitly rather than left to a select's intrinsic (font-driven) height. Distinct from `--touch-target-min`: this is the comfort bar for small chrome controls (the header locale switcher, previously 21px), not a change to already-larger primary capture controls. |
 
 `color-scheme: light dark` is declared (browser chrome — scrollbars, form-control native
 rendering — adapts to the OS), but the token *values* are light-only for 0.1: STR-045/SYS-116

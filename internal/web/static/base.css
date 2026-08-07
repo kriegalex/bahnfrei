@@ -152,6 +152,16 @@ a, button, input, select {
   font-size: var(--font-size-base);
 }
 
+/* Chrome control comfort floor (SYS-116, N4/TASK-051): every <select> gets
+   at least --control-min-height-sm (24px) — closes the header locale
+   switcher's 21px-tall finding without touching the ≥44px capture-control
+   floor above (.cell-form/.stack-table selects there are already larger
+   via --touch-target-min at the phone breakpoint, and win on specificity
+   regardless of viewport). */
+select {
+  min-height: var(--control-min-height-sm);
+}
+
 /* Disabled state (SYS-116: every interactive component documents a
    disabled state, even where no current screen triggers one yet). */
 a[aria-disabled="true"], button:disabled, input:disabled, select:disabled {

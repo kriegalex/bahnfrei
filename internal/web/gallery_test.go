@@ -68,6 +68,31 @@ func TestDesignGalleryRendersEveryInventoriedComponentSYS116UC038_2(t *testing.T
 	}
 }
 
+// TestSelectMinHeightTokenSYS116TASK051N4 covers N4 (release-0.1 usability
+// audit, TASK-051): the header locale <select> measured 109×21px —
+// WCAG-conformant via the 2.5.8 spacing exception, but below the
+// checklist's 24px comfort bar. tokens.css now defines
+// --control-min-height-sm (24px) and base.css applies it to every
+// <select>; scripts/check-style-tokens.sh enforces that the value itself
+// lives only in tokens.css. This Go test is the CSS-presence half N4's
+// finding calls for (an e2e pixel measurement duplicating
+// mobile-capture-UC039.spec.ts's pattern is unnecessary — the rule is
+// unconditional CSS, not viewport- or state-dependent).
+func TestSelectMinHeightTokenSYS116TASK051N4(t *testing.T) {
+	deps := newTestServer(t, TLSConfig{Mode: TLSModeLocal})
+	client, base := newTestClient(t, deps)
+
+	tokens := bodyString(t, mustGet(t, client, base+"/static/tokens.css"))
+	if !strings.Contains(tokens, "--control-min-height-sm:") {
+		t.Errorf("tokens.css missing --control-min-height-sm: %s", tokens)
+	}
+
+	css := bodyString(t, mustGet(t, client, base+"/static/base.css"))
+	if !strings.Contains(css, "select {\n  min-height: var(--control-min-height-sm);\n}") {
+		t.Errorf("base.css missing the select min-height rule wired to --control-min-height-sm: %s", css)
+	}
+}
+
 // TestDesignGalleryNotLinkedFromShellNavSYS116UC038_2 pins the "not public
 // nav" scope constraint: the gallery route exists, but the authenticated
 // shell nav (layout.templ) never links to it.
