@@ -44,6 +44,29 @@ body {
   line-height: var(--line-height-base);
 }
 
+/* Link color/underline convention (DEC-037, TASK-057, SYS-116/SYS-148):
+   every `a` gets the accent color. Underline convention — in-prose links
+   (the default here) stay underlined, since color alone is never the sole
+   cue (SYS-148); navigation and table-of-controls links (`.nav-link`,
+   `.button`/`a.button`, `.brand`) opt OUT of the underline in their own,
+   more specific rules below and carry a different non-color cue instead
+   (a background/border for `.button`, a bottom border + bold weight for
+   the current `.nav-link`, hover-only underline for both). Hover swaps to
+   --color-accent-hover (a real color shift — see that token's comment);
+   visited stays the same color throughout, since these are app links
+   (destinations inside Bahnfrei), not documents to track as "already
+   read". */
+a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+a:visited {
+  color: var(--color-accent);
+}
+a:hover {
+  color: var(--color-accent-hover);
+}
+
 /* Headings (DEC-036, TASK-056): the condensed display face, body copy
    stays the system stack. Browser UA styling already renders headings
    bold, which matches the vendored 700-weight face above — no weight
@@ -87,6 +110,12 @@ h1, h2, h3, h4, h5, h6 {
   padding: var(--space-2) var(--space-4);
 }
 
+/* Header nav (DEC-037, TASK-057): a modest single bar — wordmark left,
+   section links (`.nav-links`) next to it, the logged-in/login state and
+   locale switcher grouped right (`.nav-actions`, pushed there by
+   `margin-left: auto` rather than a second `justify-content` axis, so it
+   still wraps sanely at narrow widths). Deliberately no mega-menu/dropdown
+   — the section count is small enough that a flat bar stays legible. */
 header nav {
   display: flex;
   flex-wrap: wrap;
@@ -94,6 +123,46 @@ header nav {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
+}
+.nav-links,
+.nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.nav-actions {
+  margin-left: auto;
+  gap: var(--space-3);
+}
+
+/* Nav section link (`.nav-links` items — Meets/Audit/Accounts): opts out
+   of the prose underline convention (see the `a` rule above) in favor of
+   a hover underline and an `aria-current="page"` indicator that is never
+   color-alone (SYS-148) — bold weight AND a bottom border accompany the
+   accent color swap, so the current section reads without relying on
+   color perception. */
+.nav-link {
+  color: var(--color-fg);
+  text-decoration: none;
+  padding-bottom: var(--space-1);
+  border-bottom: 2px solid transparent;
+}
+.nav-link:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+.nav-link[aria-current="page"] {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-bold);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Compact secondary button for the locale-apply control (`.nav-actions`) —
+   same `.button` chrome as everywhere else, just visually small next to
+   the section links since it sits in a one-line bar. */
+.locale-switch button {
+  padding: var(--space-1) var(--space-3);
 }
 
 .inline-form { display: inline; }
@@ -201,8 +270,73 @@ main {
   border-radius: var(--radius-sm);
 }
 
-a, button, input, select {
+a, button, input, select, textarea {
   font-size: var(--font-size-base);
+}
+
+/* --------------------------------------------------------------------
+   Buttons (DEC-037, TASK-057, SYS-116): three documented, token-driven
+   styles. `.button-secondary` is also the UNCLASSED default — a bare
+   `<button>` (and an `<a class="button">`, the existing "link styled as
+   a button" convention for GET-confirm navigation) renders this look, so
+   nothing regresses to stock browser chrome even where no template was
+   touched this round. `.button-primary` is the main submit of a form;
+   `.button-danger` is reserved for a destructive confirm page's actual
+   commit action (confirm.templ, gated by confirmView.Danger — see
+   confirm.go). Hover is a real color-token swap on every variant
+   (replacing the old opacity-fade); active adds `filter: brightness()` on
+   top, a distinct, non-opacity third state, so no variant needs its own
+   dedicated "active" color token.
+   -------------------------------------------------------------------- */
+button,
+.button,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  cursor: pointer;
+}
+.button-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+.button-danger {
+  background: var(--color-warning-strong-bg);
+  border-color: var(--color-warning-strong-bg);
+  color: var(--color-warning-strong-fg);
+}
+button:hover:not(:disabled),
+.button:hover:not([aria-disabled="true"]),
+.button-secondary:hover:not(:disabled) {
+  color: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+.button-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-fg);
+}
+.button-danger:hover:not(:disabled) {
+  /* Escalates toward the danger token on hover — reuses the existing
+     warning-strong (default) and danger (hover) tokens rather than adding
+     a fourth color, and reads as "this gets more serious as you commit"
+     for a destructive confirm's submit button. */
+  background: var(--color-danger-fg);
+  border-color: var(--color-danger-fg);
+  color: var(--color-warning-strong-fg);
+}
+button:active:not(:disabled),
+.button:active:not([aria-disabled="true"]) {
+  filter: brightness(0.92);
 }
 
 /* Chrome control comfort floor (SYS-116, N4/TASK-051): every <select> gets
@@ -215,20 +349,32 @@ select {
   min-height: var(--control-min-height-sm);
 }
 
+/* Text-like inputs, selects and textareas (DEC-037, TASK-057): consistent
+   token-driven border/radius/background/padding so every field reads as a
+   deliberately designed control rather than stock browser chrome. Scoped
+   to text-entry types only — checkbox/radio/file/hidden keep their native
+   rendering, which this chrome would otherwise distort. */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="url"],
+input[type="search"],
+select,
+textarea {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: inherit;
+}
+
 /* Disabled state (SYS-116: every interactive component documents a
    disabled state, even where no current screen triggers one yet). */
 a[aria-disabled="true"], button:disabled, input:disabled, select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-/* Hover / active states (SYS-116: default/hover/active are documented
-   states for every interactive component, not just focus/disabled). */
-button:not(:disabled):hover, a:not([aria-disabled="true"]):hover {
-  opacity: 0.85;
-}
-button:not(:disabled):active, a:not([aria-disabled="true"]):active {
-  opacity: 0.7;
 }
 
 /* Visible focus indicator (SYS-114): every interactive element gets the
@@ -246,7 +392,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
    contextual-help component and any future form pass are expected to
    reuse rather than re-invent. Not yet wired into every existing form
    (see docs/delivery/usability-audit-2026-07.md); this is the documented
-   target shape. */
+   target shape. Placed after the generic input/select chrome above so its
+   equal-specificity border/outline-color declarations win. */
 input[aria-invalid="true"], select[aria-invalid="true"] {
   border: 1px solid var(--color-danger-fg);
   outline-color: var(--color-danger-fg);
@@ -255,6 +402,57 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   color: var(--color-danger-fg);
   font-size: var(--font-size-sm);
   margin: var(--space-1) 0;
+}
+
+/* --------------------------------------------------------------------
+   Form layout (DEC-037, TASK-057, SYS-116/SYS-117): a stacked
+   label-above-field convention so a label never ends one line while its
+   input starts the next (the login/admin-accounts finding). `.field`
+   wraps one existing `<label>…<input/></label>` (plus its paired
+   `.hint`/`.field-error`/help-icon siblings) — implicit label/control
+   association is preserved, no new `for`/`id` plumbing needed. `.form-grid`
+   groups a form's fields with consistent spacing; `.form-panel` is the
+   bounded, lightly bordered card (centered, narrow) used for short
+   standalone forms like login. Dense capture grids (`.cell-form`,
+   `.stack-table`, marker buttons) are explicitly OUT of this convention —
+   see the point-of-competition section below, which only lets them
+   inherit the input/button chrome above, never this layout.
+   -------------------------------------------------------------------- */
+.field {
+  margin: 0 0 var(--space-4);
+}
+.field label {
+  display: block;
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-1);
+}
+.field input,
+.field select,
+.field textarea {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+}
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  max-width: 28rem;
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.form-row > .field {
+  flex: 1 1 12rem;
+}
+.form-panel {
+  max-width: 26rem;
+  margin: var(--space-6) auto;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 /* Contextual-help icon + popup (TASK-031, SYS-115, UC-037; component
@@ -280,6 +478,17 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   font-weight: var(--font-weight-bold);
   line-height: 1;
   cursor: help;
+}
+/* Explicit hover override (DEC-037, TASK-057): `.help-trigger` is a bare
+   `<button>`, so it also matches the generic secondary-button hover rule
+   above (`button:hover { color: var(--color-accent-hover); … }`); at equal
+   selector weight that rule would win on `color` and leave this trigger's
+   white glyph unreadable against the (still-teal) circle. Re-asserting
+   both properties here — one more class+pseudo level of specificity —
+   keeps its own accent-on-accent-fg pairing, just one shade darker. */
+.help-trigger:hover {
+  background: var(--color-accent-hover);
+  color: var(--color-accent-fg);
 }
 .help-popup {
   position: absolute;
@@ -370,6 +579,21 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
     font-weight: var(--font-weight-bold);
     flex: 0 0 auto;
   }
+}
+
+/* Dense-grid compact chrome (DEC-037, TASK-057, SYS-147): the field/track/
+   vertical capture grids and the check-in/seeding stack-tables inherit the
+   new input/button border-radius/background/border above (their controls
+   no longer look like unstyled stock chrome) but keep their EXISTING
+   compact padding rather than the generic form's roomier
+   `var(--space-2) var(--space-4)` — geometry (row height/width, the
+   ≥44px touch floor below) is unchanged, only the visual chrome is. Equal
+   specificity to the generic input/button rules above (class+type), so
+   placement after them is what makes this win. */
+.stack-table button,
+.stack-table input,
+.stack-table select {
+  padding: 0 var(--space-2);
 }
 
 /* Touch targets (SYS-147, UC-039 #2): primary capture controls (mark/time

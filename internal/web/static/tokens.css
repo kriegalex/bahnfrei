@@ -30,13 +30,15 @@
   --color-border: rgba(148, 128, 105, 0.32); /* warm-tinted hairline, was rgba(136,136,136,.27) */
 
   /* --- Color: accent (links, focus ring, primary actions) — teal,
-     DEC-036's #0f766e band. No separate hover/interactive-variant token:
-     every hover/active state in base.css is an opacity change applied to
-     the existing accent (button/link rules), not a color swap, so a
-     second accent value would be an unused token — see DEC-036 register
-     note and TASK-056 report for the "why not". --- */
+     DEC-036's #0f766e band. --color-accent-hover (DEC-037, TASK-057) is
+     the one step darker teal (Tailwind's teal-800 band) every button/link
+     hover state swaps to — a real color shift, replacing the opacity-fade
+     hover TASK-032 originally shipped for buttons: white text on it is
+     7.58:1, and it is 7.04:1 on --color-bg (link/brand hover), both well
+     past WCAG AA. --- */
   --color-accent: #0f766e;
   --color-accent-fg: #fff;
+  --color-accent-hover: #115e59;
 
   /* --- Color: semantic status (success/warning/info/danger) — the
      offline-capture indicator (SYS-087), the unofficial-results label
@@ -51,6 +53,15 @@
   --color-info-bg: #e5efff;
   --color-info-fg: #003a7a;
   --color-danger-fg: #a30000;
+
+  /* --- Color: surface (DEC-037, TASK-057) — a near-white band, barely
+     lighter than --color-bg (1.06:1 between the two — a defined plane, not
+     a stark white card), that form panels/cards and table backgrounds sit
+     on so controls read against a surface instead of floating on the
+     cream page canvas. Body text is 17.21:1 on it, the accent 5.39:1,
+     danger text 8.08:1 — every foreground this shell pairs with it clears
+     WCAG AA with room to spare. --- */
+  --color-surface: #fffdf9;
 
   /* --- Typography --- */
   --font-family-base: system-ui, sans-serif;
