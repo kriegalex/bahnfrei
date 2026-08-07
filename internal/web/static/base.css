@@ -13,12 +13,65 @@
 
 * { box-sizing: border-box; }
 
+/* Self-hosted display face (DEC-036, TASK-056, STR-045/SYS-116): Barlow
+   Semi Condensed, vendored latin-subset woff2 (see tokens.css's
+   --font-family-display doc comment for the licence/embed/tnum details).
+   Two static weights cover every place the face is used — regular text
+   and the browser's default bold for headings/`<strong>` — so no weight
+   is synthesized. font-display: swap avoids a flash of invisible text on
+   a slow venue connection while the face itself is still a same-origin,
+   no-CDN asset (ADR-002/ADR-003). */
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("barlow-semi-condensed-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("barlow-semi-condensed-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   margin: 0;
   font-family: var(--font-family-base);
   color: var(--color-fg);
   background: var(--color-bg);
   line-height: var(--line-height-base);
+}
+
+/* Headings (DEC-036, TASK-056): the condensed display face, body copy
+   stays the system stack. Browser UA styling already renders headings
+   bold, which matches the vendored 700-weight face above — no weight
+   override needed here. */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-display);
+}
+
+/* Result grids (DEC-036, TASK-056): the standings/results tables (rank,
+   bib, marks, points, total — standings.templ, public.templ) render in
+   the display face with tabular numerals so digit columns align; applied
+   via a class rather than a bare `table` selector so plain data tables
+   (roster, start lists, audit log) keep the system stack. */
+.results-table {
+  font-family: var(--font-family-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Header wordmark (DEC-036, TASK-056): "Bahnfrei" in the display face —
+   a typographic treatment, not a designed logo (out of scope for this
+   round per the register). */
+.brand {
+  font-family: var(--font-family-display);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.01em;
+  color: var(--color-accent);
+  text-decoration: none;
 }
 
 .skip-link {

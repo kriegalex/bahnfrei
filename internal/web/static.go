@@ -30,16 +30,21 @@ import (
 // public-filter.js is the public find-your-athlete filter island
 // (TASK-048, SYS-153/UC-042), compiled from islands/src/public-filter.ts —
 // loaded on both the public results and start-list pages.
-// favicon.ico is a neutral, brand-free placeholder icon (F11/TASK-050 — the
-// prior absence 404'd on every page load); OQ-061 (organizer branding) is
-// still open, so this placeholder is expected to be replaced once that
-// question is ratified.
+// favicon.ico is the ratified Bahnfrei brand mark (DEC-036, TASK-056: a
+// teal track-lane roundrect, replacing the F11/TASK-050 neutral
+// placeholder now that OQ-061's brand question is decided).
 // capture-markers.js is the letter-marker quick-action wiring (SYS-147,
 // UC-039 #3, TASK-045): a small, hand-authored, family-agnostic script
 // (not a TS island) loaded by the field-horizontal and vertical-jump
 // capture pages.
+// barlow-semi-condensed-{regular,bold}.woff2 and -LICENSE are the
+// self-hosted display face (DEC-036, TASK-056; SIL OFL 1.1, licence text
+// alongside per the htmx-LICENSE precedent) — latin-subset, vendored
+// once at build/dev time (ADR-002/ADR-003: no runtime fetch), served
+// under /static/ like every other asset here and consumed via
+// tokens.css's --font-family-display.
 //
-//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/capture-markers.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js static/favicon.ico
+//go:embed static/htmx.min.js static/htmx-LICENSE static/tokens.css static/base.css static/capture.js static/capture-markers.js static/public-live.js static/public-filter.js static/capture-offline.js static/office-banner.js static/service-worker.js static/help.js static/favicon.ico static/barlow-semi-condensed-regular.woff2 static/barlow-semi-condensed-bold.woff2 static/barlow-semi-condensed-LICENSE
 var staticAssets embed.FS
 
 // staticHandler serves the embedded static assets under /static/.
@@ -51,9 +56,9 @@ func staticHandler() http.Handler {
 	return http.StripPrefix("/static/", http.FileServerFS(sub))
 }
 
-// handleFavicon serves the embedded placeholder favicon at the conventional
-// root path (F11/TASK-050): browsers request GET /favicon.ico regardless of
-// the <link rel="icon"> in layout.templ, so /static/favicon.ico alone still
+// handleFavicon serves the embedded favicon at the conventional root path
+// (F11/TASK-050): browsers request GET /favicon.ico regardless of the
+// <link rel="icon"> in layout.templ, so /static/favicon.ico alone still
 // left that bare-path request 404ing.
 func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	body, err := staticAssets.ReadFile("static/favicon.ico")

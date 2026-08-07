@@ -1421,7 +1421,7 @@ func publicResultsFragment(p PageData, v publicResultsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 114, "</a></h2><div class=\"table-scroll\" tabindex=\"0\"><table><thead><tr><th scope=\"col\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 114, "</a></h2><div class=\"table-scroll\" tabindex=\"0\"><table class=\"results-table\"><thead><tr><th scope=\"col\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

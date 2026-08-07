@@ -9,7 +9,10 @@ package web
 // switcher (SYS-110), and #main is a polite ARIA live region so future
 // HTMX-swapped live updates (SSE-driven, SYS-071) announce accessibly
 // without stealing focus (SYS-112/UC-026 #3 — the shell wires the
-// landmark; content that streams into it arrives with later tasks).
+// landmark; content that streams into it arrives with later tasks). The
+// home link renders "Bahnfrei" (a proper noun, not localized) with the
+// `.brand` wordmark treatment (DEC-036, TASK-056) — a typographic
+// treatment in the self-hosted display face, not a designed logo.
 templ layout(p PageData) {
 	<!DOCTYPE html>
 	<html lang={ string(p.Locale) }>
@@ -34,7 +37,7 @@ templ layout(p PageData) {
 			<a class="skip-link" href="#main">{ p.T("nav.home") }</a>
 			<header>
 				<nav aria-label={ p.T("nav.aria_label") }>
-					<a href="/">{ p.T("app.title") }</a>
+					<a href="/" class="brand">{ p.T("app.title") }</a>
 					if p.CanOrganize {
 						<a href="/meets">{ p.T("nav.meets") }</a>
 					}
