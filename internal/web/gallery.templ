@@ -34,6 +34,20 @@ templ galleryPage(p PageData) {
 			<a href="#main" id="gallery-link-default">{ p.T("gallery.link.example") }</a>
 		</p>
 
+		<h2>{ p.T("gallery.section.action_lists") }</h2>
+		// Structured action panel/list (DEC-038, TASK-058): the meet hub, the
+		// results-capture index and the public meet pages all compose this
+		// same nav/action-panel/action-list/action-list-secondary shape.
+		<nav class="action-panel" aria-label={ p.T("gallery.section.action_lists") } id="gallery-action-panel">
+			<h3>{ p.T("gallery.section.action_lists") }</h3>
+			<ul class="action-list">
+				<li>
+					<a href="#main" id="gallery-action-link-primary">{ p.T("gallery.link.example") }</a>
+					<a href="#main" id="gallery-action-link-secondary" class="action-list-secondary">{ p.T("gallery.link.example") }</a>
+				</li>
+			</ul>
+		</nav>
+
 		<h2>{ p.T("gallery.section.inputs") }</h2>
 		<form id="gallery-form">
 			<label>
@@ -72,16 +86,21 @@ templ galleryPage(p PageData) {
 				</select>
 			</label>
 
+			// The category checkbox grid (DEC-038, TASK-058: meets.templ's
+			// discipline-add form) reuses this same fieldset+checkbox-grid
+			// shape — documented live here rather than duplicated.
 			<fieldset>
 				<legend>{ p.T("gallery.fieldset.legend") }</legend>
-				<label>
-					<input type="checkbox" id="gallery-fieldset-a" name="gallery-fieldset-a" value="true"/>
-					A
-				</label>
-				<label>
-					<input type="checkbox" id="gallery-fieldset-b" name="gallery-fieldset-b" value="true"/>
-					B
-				</label>
+				<div class="checkbox-grid">
+					<label>
+						<input type="checkbox" id="gallery-fieldset-a" name="gallery-fieldset-a" value="true"/>
+						A
+					</label>
+					<label>
+						<input type="checkbox" id="gallery-fieldset-b" name="gallery-fieldset-b" value="true"/>
+						B
+					</label>
+				</div>
 			</fieldset>
 
 			// aria-label rather than a wrapped label: the row demos the bare
@@ -127,6 +146,14 @@ templ galleryPage(p PageData) {
 		<div id="gallery-status-offline" class="offline-status" data-state="offline" role="status">{ p.T("capture.offline.online") }</div>
 		<div id="gallery-status-syncing" class="offline-status" data-state="syncing" role="status">{ p.T("capture.offline.online") }</div>
 		<p id="gallery-unofficial-label" class="unofficial-label" role="note">{ p.T("public.results.unofficial_badge") }</p>
+		// Status chip (DEC-038, TASK-058): the generalized meet-status
+		// grammar — draft (neutral, unqualified), live (info), published/
+		// closed (success), archived (muted). Always carries its text label
+		// (SYS-148: never color-alone) — data-tone only selects the color.
+		<span id="gallery-chip-neutral" class="status-chip">{ p.T("meet.status.draft") }</span>
+		<span id="gallery-chip-info" class="status-chip" data-tone="info">{ p.T("meet.status.live") }</span>
+		<span id="gallery-chip-success" class="status-chip" data-tone="success">{ p.T("meet.status.published") }</span>
+		<span id="gallery-chip-muted" class="status-chip" data-tone="muted">{ p.T("meet.status.archived") }</span>
 
 		<h2>{ p.T("gallery.section.alerts") }</h2>
 		<p class="error" role="alert" id="gallery-alert-error">{ p.T("gallery.error.example") }</p>
