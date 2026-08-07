@@ -42,10 +42,10 @@ templ setupPage(p PageData) {
 templ meetsListPage(p PageData, rows []meetRowView) {
 	@layout(p) {
 		<h1>{ p.T("meets.title") }</h1>
-		<p>
-			<a href="/meets/new">{ p.T("meets.new_link") }</a> ·
-			<a href="/meets/from-template">{ p.T("meet.template.title") }</a>
-		</p>
+		<div class="button-row">
+			<a href="/meets/new" class="button-primary">{ p.T("meets.new_link") }</a>
+			<a href="/meets/from-template" class="button-secondary">{ p.T("meet.template.title") }</a>
+		</div>
 		if len(rows) == 0 {
 			<p>{ p.T("meets.empty") }</p>
 		} else {
@@ -66,7 +66,7 @@ templ meetsListPage(p PageData, rows []meetRowView) {
 							<td>{ m.Venue }</td>
 							<td>{ m.Dates }</td>
 							<td>{ m.Tier }</td>
-							<td>{ m.Status }</td>
+							<td><span class="status-chip" data-tone={ m.StatusTone }>{ m.Status }</span></td>
 						</tr>
 					}
 				</tbody>
@@ -245,70 +245,82 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 		<h1>{ d.Name }</h1>
 		<p>
 			{ d.Venue } · { d.Dates } · { d.Tier } ·
-			<strong>{ d.Status }</strong>
+			<span class="status-chip" data-tone={ d.StatusTone }>{ d.Status }</span>
 		</p>
-		// TASK-046 (SYS-151/UC-041 #3, F5): the hub's action list is grouped
-		// by task area (preparation, competition day, publication) instead
-		// of one flat `·`-separated paragraph — NN/g menu/IA guidance, ISO
-		// 9241-110 task suitability. TASK-043's capability filtering carries
-		// over unchanged: every p.CanOrganize gate below matches the one it
-		// replaces, so office sessions still never see an organizer-only
-		// action and no underlying route gate is touched. Check-in stays
-		// where it already lived — the programme table's per-event links,
-		// below — since a meet can have many events and no single "check-in"
-		// link would be unambiguous here. Capture and reconciliation are new
-		// (OQ-113): the hub previously had no forward link into either.
-		<h2>{ p.T("meet.hub.preparation") }</h2>
-		<p>
-			if p.CanOrganize {
-				<a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a> ·
-			}
-			<a href={ templ.URL("/meets/" + d.ID + "/entries") }>{ p.T("entries.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/entries/import") }>{ p.T("import.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a>
-			if p.CanOrganize {
-				·
-				<a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a> ·
-				<a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a> ·
-				<a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a> ·
-				<a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a>
-			}
-		</p>
-		<h2>{ p.T("meet.hub.competition_day") }</h2>
-		<p>
-			<a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/capture") }>{ p.T("capture.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/reconciliation") }>{ p.T("reconciliation.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/timing") }>{ p.T("timing.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a> ·
-			<a href={ templ.URL("/meets/" + d.ID + "/privacy") }>{ p.T("privacy.title") }</a>
-		</p>
-		<h2>{ p.T("meet.hub.publication") }</h2>
-		<p>
-			<a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a> ·
-			<a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a> ·
-			<a href={ templ.URL("/m/" + d.ID + "/startlists") }>{ p.T("public.nav.startlists") }</a> ·
-			<a href={ templ.URL("/m/" + d.ID + "/results") }>{ p.T("public.nav.results") }</a>
-		</p>
+		if (d.Draft && p.CanOrganize) || (!d.Archived && p.CanOrganize) {
+			// The hub's two page-level actions (SYS-116 action hierarchy):
+			// publishing is the consequential primary action (gates online
+			// entries opening, TASK-016/UC-003 #1); archiving is reversible
+			// (OQ-074/TASK-034 — no data destruction, unlike erasure/purge)
+			// and stays a secondary path, never styled as danger.
+			<div class="button-row">
+				if d.Draft && p.CanOrganize {
+					<form action={ templ.URL("/meets/" + d.ID + "/publish") } method="post" class="inline-form">
+						<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
+						<input type="hidden" name="version" value={ intToStr(d.Version) }/>
+						<button type="submit" class="button-primary">{ p.T("meet.publish") }</button>
+					</form>
+				}
+				if !d.Archived && p.CanOrganize {
+					// OQ-074 (TASK-034): archive is destructive-enough (no
+					// unarchive action exists) to warrant a confirm step, but
+					// reversible-in-severity compared to erasure/purge, so a
+					// plain GET confirm sub-page (confirm.go/confirm.templ)
+					// suffices — no typed confirmation.
+					<a href={ templ.URL("/meets/" + d.ID + "/archive/confirm") } class="button-secondary">{ p.T("meet.archive") }</a>
+				}
+			</div>
+		}
+		// TASK-046 (SYS-151/UC-041 #3, F5), restructured (DEC-038, TASK-058):
+		// the hub's action list is grouped by task area (preparation,
+		// competition day, publication) as a bounded action-panel card per
+		// area instead of a flat `·`-separated paragraph — NN/g menu/IA
+		// guidance, ISO 9241-110 task suitability. TASK-043's capability
+		// filtering carries over unchanged: every p.CanOrganize gate below
+		// matches the one it replaces, so office sessions still never see an
+		// organizer-only action and no underlying route gate is touched.
+		// Check-in stays where it already lived — the programme table's
+		// per-event links, below — since a meet can have many events and no
+		// single "check-in" link would be unambiguous here.
+		<nav class="action-panel" aria-label={ p.T("meet.hub.preparation") }>
+			<h2>{ p.T("meet.hub.preparation") }</h2>
+			<ul class="action-list">
+				if p.CanOrganize {
+					<li><a href={ templ.URL("/meets/" + d.ID + "/edit") }>{ p.T("meet.edit_link") }</a></li>
+				}
+				<li><a href={ templ.URL("/meets/" + d.ID + "/entries") }>{ p.T("entries.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/entries/import") }>{ p.T("import.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/entries/eligibility") }>{ p.T("eligibility.title") }</a></li>
+				if p.CanOrganize {
+					<li><a href={ templ.URL("/meets/" + d.ID + "/entries/exceptions") }>{ p.T("entries.exceptions.title") }</a></li>
+					<li><a href={ templ.URL("/meets/" + d.ID + "/bibs") }>{ p.T("bibs.title") }</a></li>
+					<li><a href={ templ.URL("/meets/" + d.ID + "/fees") }>{ p.T("fees.title") }</a></li>
+					<li><a href={ templ.URL("/meets/" + d.ID + "/sanctioning") }>{ p.T("meet.sanctioning_link") }</a></li>
+				}
+			</ul>
+		</nav>
+		<nav class="action-panel" aria-label={ p.T("meet.hub.competition_day") }>
+			<h2>{ p.T("meet.hub.competition_day") }</h2>
+			<ul class="action-list">
+				<li><a href={ templ.URL("/meets/" + d.ID + "/roster") }>{ p.T("roster.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/capture") }>{ p.T("capture.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/reconciliation") }>{ p.T("reconciliation.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/officials") }>{ p.T("officials.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/timing") }>{ p.T("timing.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/standings") }>{ p.T("standings.title") }</a></li>
+				<li><a href={ templ.URL("/meets/" + d.ID + "/privacy") }>{ p.T("privacy.title") }</a></li>
+			</ul>
+		</nav>
+		<nav class="action-panel" aria-label={ p.T("meet.hub.publication") }>
+			<h2>{ p.T("meet.hub.publication") }</h2>
+			<ul class="action-list">
+				<li><a href={ templ.URL("/m/" + d.ID) }>{ p.T("public.nav.overview") }</a></li>
+				<li><a href={ templ.URL("/m/" + d.ID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a></li>
+				<li><a href={ templ.URL("/m/" + d.ID + "/startlists") }>{ p.T("public.nav.startlists") }</a></li>
+				<li><a href={ templ.URL("/m/" + d.ID + "/results") }>{ p.T("public.nav.results") }</a></li>
+			</ul>
+		</nav>
 		<p><small>{ d.ResultsPositioningLabel }</small></p>
-		if d.Draft && p.CanOrganize {
-			<form action={ templ.URL("/meets/" + d.ID + "/publish") } method="post" class="inline-form">
-				<input type="hidden" name="csrf_token" value={ p.CSRFToken }/>
-				<input type="hidden" name="version" value={ intToStr(d.Version) }/>
-				<button type="submit">{ p.T("meet.publish") }</button>
-			</form>
-		}
-		if !d.Archived && p.CanOrganize {
-			// OQ-074 (TASK-034): archive is destructive-enough (no unarchive
-			// action exists) to warrant a confirm step, but reversible-in-
-			// severity compared to erasure/purge, so a plain GET confirm
-			// sub-page (confirm.go/confirm.templ) suffices — no typed
-			// confirmation.
-			<p>
-				<a href={ templ.URL("/meets/" + d.ID + "/archive/confirm") } class="button">{ p.T("meet.archive") }</a>
-			</p>
-		}
 		<h2>{ p.T("meet.field.sessions") }</h2>
 		if len(d.Sessions) == 0 {
 			<p>{ p.T("meet.sessions.none") }</p>
@@ -368,14 +380,21 @@ templ meetDetailPage(p PageData, d meetDetailView) {
 						}
 					</select>
 				</label>
-				<label>
-					{ p.T("programme.categories") }
-					<select name="categories" multiple size="6">
+				<fieldset>
+					<legend>{ p.T("programme.categories") }</legend>
+					// DEC-038/TASK-058: a checkbox grid replaces the former
+					// <select multiple> listbox. Every checkbox shares the
+					// same name="categories" the listbox submitted under, so
+					// r.Form["categories"] (meets.go handleEventCreate) reads
+					// either markup identically — including the zero-selected
+					// case, which AddEvent still rejects with "at least one
+					// category is required" (SYS-002).
+					<div class="checkbox-grid">
 						for _, cat := range d.Categories {
-							<option value={ cat }>{ cat }</option>
+							<label><input type="checkbox" name="categories" value={ cat }/> { cat }</label>
 						}
-					</select>
-				</label>
+					</div>
+				</fieldset>
 				<fieldset>
 					<legend>{ p.T("programme.rounds") }</legend>
 					<label><input type="checkbox" name="round_qualification" value="1"/> { p.T("round.qualification") }</label>

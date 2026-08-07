@@ -5,18 +5,19 @@ package web
 
 // publicNav cross-links the meet's public surfaces (SYS-070: overview,
 // timetable, start lists, results at their stable /m/{id}/... URLs).
+// DEC-038/TASK-058: a structured action-panel card replaces the former
+// middot-separated prose-link paragraph, matching the same treatment the
+// meet hub and capture index got.
 templ publicNav(p PageData, meetID string) {
-	<p>
-		<a href={ templ.URL("/m/" + meetID) }>{ p.T("public.nav.overview") }</a>
-		{ " · " }
-		<a href={ templ.URL("/m/" + meetID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a>
-		{ " · " }
-		<a href={ templ.URL("/m/" + meetID + "/startlists") }>{ p.T("public.nav.startlists") }</a>
-		{ " · " }
-		<a href={ templ.URL("/m/" + meetID + "/results") }>{ p.T("public.nav.results") }</a>
-		{ " · " }
-		<a href={ templ.URL("/meets/" + meetID + "/entries") }>{ p.T("public.nav.entries") }</a>
-	</p>
+	<nav class="action-panel" aria-label={ p.T("public.nav.aria_label") }>
+		<ul class="action-list">
+			<li><a href={ templ.URL("/m/" + meetID) }>{ p.T("public.nav.overview") }</a></li>
+			<li><a href={ templ.URL("/m/" + meetID + "/timetable") }>{ p.T("meet.public_timetable_link") }</a></li>
+			<li><a href={ templ.URL("/m/" + meetID + "/startlists") }>{ p.T("public.nav.startlists") }</a></li>
+			<li><a href={ templ.URL("/m/" + meetID + "/results") }>{ p.T("public.nav.results") }</a></li>
+			<li><a href={ templ.URL("/meets/" + meetID + "/entries") }>{ p.T("public.nav.entries") }</a></li>
+		</ul>
+	</nav>
 }
 
 // publicMeetPage is the unauthenticated meet overview (SYS-070, UC-017
@@ -25,7 +26,7 @@ templ publicNav(p PageData, meetID string) {
 templ publicMeetPage(p PageData, v publicMeetView) {
 	@layout(p) {
 		<h1>{ v.MeetName }</h1>
-		<p>{ v.Venue } · { v.Dates } · <strong>{ v.Status }</strong></p>
+		<p>{ v.Venue } · { v.Dates } · <span class="status-chip" data-tone={ v.StatusTone }>{ v.Status }</span></p>
 		@publicNav(p, v.MeetID)
 	}
 }

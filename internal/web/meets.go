@@ -25,6 +25,27 @@ const (
 // empty rows are ignored on submit.
 const maxSessionRows = 8
 
+// statusTone maps a meet's lifecycle status (domain.MeetStatus) to the
+// status-chip color register (DEC-038, TASK-058): draft is the neutral
+// "not started yet" chip, live is the in-progress highlight, published
+// and closed are the settled/official green, archived dims the neutral
+// chip further — the market's grey→live→green convention. The chip's
+// rendered text is always the real localized meet.status.* string
+// (SYS-148: never color-alone), so an unrecognized status still reads
+// correctly even if it falls back to the neutral tone here.
+func statusTone(status domain.MeetStatus) string {
+	switch status {
+	case domain.MeetLive:
+		return "info"
+	case domain.MeetPublished, domain.MeetClosed:
+		return "success"
+	case domain.MeetArchived:
+		return "muted"
+	default: // domain.MeetDraft and any future/unknown status
+		return "neutral"
+	}
+}
+
 // --- first-run setup (UC-001 #1, SYS-131) ---
 
 // handleSetupForm offers the first-run admin-account creation when no
@@ -98,12 +119,13 @@ func (s *Server) handleMeetsList(w http.ResponseWriter, r *http.Request) {
 	rows := make([]meetRowView, 0, len(meets))
 	for _, m := range meets {
 		rows = append(rows, meetRowView{
-			ID:     m.ID,
-			Name:   m.Name,
-			Venue:  m.Venue,
-			Dates:  formatDateRange(p, m.StartDate, m.EndDate),
-			Tier:   string(m.Tier),
-			Status: p.T("meet.status." + string(m.Status)),
+			ID:         m.ID,
+			Name:       m.Name,
+			Venue:      m.Venue,
+			Dates:      formatDateRange(p, m.StartDate, m.EndDate),
+			Tier:       string(m.Tier),
+			Status:     p.T("meet.status." + string(m.Status)),
+			StatusTone: statusTone(m.Status),
 		})
 	}
 	_ = meetsListPage(p, rows).Render(r.Context(), w)
@@ -514,6 +536,9 @@ func statusFor(err error) int {
 
 type meetRowView struct {
 	ID, Name, Venue, Dates, Tier, Status string
+	// StatusTone selects the .status-chip color register for Status
+	// (DEC-038, TASK-058) — see statusTone.
+	StatusTone string
 }
 
 type sessionRowView struct {
@@ -591,7 +616,10 @@ type meetDetailView struct {
 	Dates           string
 	Tier            string
 	Status          string
-	Archived        bool
+	// StatusTone selects the .status-chip color register for Status
+	// (DEC-038, TASK-058) — see statusTone.
+	StatusTone string
+	Archived   bool
 	// Draft gates the publish action (TASK-016, UC-003 #1 prerequisite):
 	// only a draft meet can be published.
 	Draft       bool
@@ -674,6 +702,7 @@ func (s *Server) meetDetailView(p PageData, d app.MeetDetail, versions []app.Tim
 		Dates:                   formatDateRange(p, d.StartDate, d.EndDate),
 		Tier:                    string(d.Tier),
 		Status:                  p.T("meet.status." + string(d.Status)),
+		StatusTone:              statusTone(d.Status),
 		Archived:                d.Status == domain.MeetArchived,
 		Draft:                   d.Status == domain.MeetDraft,
 		SchemeID:                d.CategorySchemeID,

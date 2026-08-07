@@ -5,27 +5,34 @@ package web
 
 // captureIndexPage lists a meet's capturable units for the field official
 // (UC-011/UC-010: track and horizontal field events in the PoC slice).
+// DEC-038/TASK-058: the wayfinding row (back to meet, reconciliation) stays
+// a lightweight unboxed nav — navigation, not an action — while the unit
+// list becomes a bounded action-panel card, each entry its capture link
+// paired with the PDF-download secondary action, replacing the former
+// "60 m (Lauf) · PDF herunterladen" middot bullet line.
 templ captureIndexPage(p PageData, v captureIndexView) {
 	@layout(p) {
 		<h1>{ v.MeetName } — { p.T("capture.title") }</h1>
-		<p>
+		<nav class="action-list-nav" aria-label={ p.T("capture.title") }>
 			<a href={ templ.URL("/meets/" + v.MeetID) }>{ p.T("roster.back_to_meet") }</a>
-			{ " · " }
 			<a href={ templ.URL("/meets/" + v.MeetID + "/reconciliation") }>{ p.T("reconciliation.title") }</a>
-		</p>
+		</nav>
 		if len(v.Units) == 0 {
 			<p>{ p.T("capture.units_empty") }</p>
 		} else {
-			<ul>
-				for _, u := range v.Units {
-					<li>
-						<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a>
-						{ " (" + p.T("family."+u.Family) + ")" }
-						{ " · " }
-						<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID + "/sheet.pdf") }>{ p.T("pdf.download") }</a>
-					</li>
-				}
-			</ul>
+			<div class="action-panel">
+				<ul class="action-list">
+					for _, u := range v.Units {
+						<li>
+							<span>
+								<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID) }>{ u.Discipline }</a>
+								{ " (" + p.T("family."+u.Family) + ")" }
+							</span>
+							<a href={ templ.URL("/meets/" + v.MeetID + "/capture/" + u.UnitID + "/sheet.pdf") } class="action-list-secondary">{ p.T("pdf.download") }</a>
+						</li>
+					}
+				</ul>
+			</div>
 		}
 	}
 }

@@ -29,6 +29,9 @@ type publicMeetView struct {
 	Venue    string
 	Dates    string
 	Status   string
+	// StatusTone selects the .status-chip color register for Status
+	// (DEC-038, TASK-058) — see statusTone (meets.go).
+	StatusTone string
 }
 
 // handlePublicMeet serves the meet overview (UC-017 #2/#3): name, venue,
@@ -43,11 +46,12 @@ func (s *Server) handlePublicMeet(w http.ResponseWriter, r *http.Request) {
 	p := basePageData(r, s.cats)
 	p.Title = d.Name
 	view := publicMeetView{
-		MeetID:   d.ID,
-		MeetName: d.Name,
-		Venue:    d.Venue,
-		Dates:    formatDateRange(p, d.StartDate, d.EndDate),
-		Status:   p.T("meet.status." + string(d.Status)),
+		MeetID:     d.ID,
+		MeetName:   d.Name,
+		Venue:      d.Venue,
+		Dates:      formatDateRange(p, d.StartDate, d.EndDate),
+		Status:     p.T("meet.status." + string(d.Status)),
+		StatusTone: statusTone(d.Status),
 	}
 	_ = publicMeetPage(p, view).Render(r.Context(), w)
 }

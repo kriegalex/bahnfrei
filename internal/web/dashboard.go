@@ -57,12 +57,13 @@ func (s *Server) buildAssignmentsDashboard(ctx context.Context, p PageData, acto
 		}
 		for _, m := range meets {
 			v.OfficeMeets = append(v.OfficeMeets, meetRowView{
-				ID:     m.ID,
-				Name:   m.Name,
-				Venue:  m.Venue,
-				Dates:  formatDateRange(p, m.StartDate, m.EndDate),
-				Tier:   string(m.Tier),
-				Status: p.T("meet.status." + string(m.Status)),
+				ID:         m.ID,
+				Name:       m.Name,
+				Venue:      m.Venue,
+				Dates:      formatDateRange(p, m.StartDate, m.EndDate),
+				Tier:       string(m.Tier),
+				Status:     p.T("meet.status." + string(m.Status)),
+				StatusTone: statusTone(m.Status),
 			})
 		}
 	case app.RoleFieldOfficial:
