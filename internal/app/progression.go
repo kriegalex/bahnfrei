@@ -46,6 +46,23 @@ type AdvancementOutcome struct {
 // silently award qualification on incomplete data.
 var ErrRoundNotComplete = errors.New("round has units with no settled results yet")
 
+// ErrRoundNotSeeded means AdvanceRound was called before GenerateHeats ever
+// ran for this round (no unit assignments exist yet) — there is nothing to
+// progress (TASK-055/SYS-117: distinct from ErrRoundNotComplete, which means
+// heats exist but haven't all finished).
+var ErrRoundNotSeeded = errors.New("round has no seeded entries yet")
+
+// ErrInvalidQualificationCode means ManualAdvance received a code outside
+// the legal manual-advancement alphabet (D2.4/D5.2: Q/q/qR/qJ/qD) — the
+// seeding page's mini-form only offers the legal codes, so this only
+// happens from a malformed direct request.
+var ErrInvalidQualificationCode = errors.New("not a legal advancement code (D2.4/D5.2)")
+
+// ErrEntryNotInRound means ManualAdvance's entryID has no assignment in
+// roundID — the round changed (regeneration, scratch) since the seeding
+// page that offered this entry was rendered.
+var ErrEntryNotInRound = errors.New("entry is not seeded in this round")
+
 // AdvanceRound computes SYS-029/030 progression for one completed round and
 // writes the resulting Q/q qualification codes onto its unit assignments.
 // Entries a previous call (or a manual override) already resolved are left
@@ -69,7 +86,7 @@ func (s *ResultsService) AdvanceRound(ctx context.Context, actor Session, meetID
 		return AdvancementOutcome{}, err
 	}
 	if len(assignments) == 0 {
-		return AdvancementOutcome{}, fmt.Errorf("advance round: round has no seeded entries yet")
+		return AdvancementOutcome{}, fmt.Errorf("advance round: %w", ErrRoundNotSeeded)
 	}
 
 	alreadyResolved := map[string]domain.QualificationStatus{}
@@ -164,7 +181,7 @@ func (s *ResultsService) ManualAdvance(ctx context.Context, actor Session, meetI
 	switch code {
 	case domain.StatusQ, domain.StatusQt, domain.StatusQR, domain.StatusQJ, domain.StatusQD:
 	default:
-		return fmt.Errorf("manual advance: %q is not a legal advancement code (D2.4/D5.2)", code)
+		return fmt.Errorf("manual advance: %q: %w", code, ErrInvalidQualificationCode)
 	}
 	assignments, err := store.ListRoundAssignments(ctx, s.db, roundID)
 	if err != nil {
@@ -178,7 +195,7 @@ func (s *ResultsService) ManualAdvance(ctx context.Context, actor Session, meetI
 		}
 	}
 	if target == nil {
-		return fmt.Errorf("manual advance: entry %s is not seeded in round %s: %w", entryID, roundID, store.ErrNotFound)
+		return fmt.Errorf("manual advance: entry %s is not seeded in round %s: %w: %w", entryID, roundID, ErrEntryNotInRound, store.ErrNotFound)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)

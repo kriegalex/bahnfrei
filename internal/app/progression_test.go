@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -233,15 +234,29 @@ func TestAdvanceRoundFieldSYS030UC009_4(t *testing.T) {
 }
 
 // TestAdvanceRoundRejectsIncompleteRound is a denial/edge-path test:
-// advancing before a heat has any settled results is rejected rather than
-// silently awarding qualification on nothing.
+// advancing before a heat has any settled results is rejected (as
+// ErrRoundNotComplete, TASK-055) rather than silently awarding
+// qualification on nothing.
 func TestAdvanceRoundRejectsIncompleteRound(t *testing.T) {
 	f := newSeedingFixture(t, "100m")
 	f.confirmedEntry(t, "Solo", "", "12.00")
 	f.seededHeats(t, 4, 0)
 	if _, err := f.results.AdvanceRound(context.Background(), office, f.meetID, f.eventID, f.roundID,
-		AdvancementRequest{TopN: 1, FastestK: 1}); err == nil {
-		t.Error("expected an error advancing a round with no settled results")
+		AdvancementRequest{TopN: 1, FastestK: 1}); !errors.Is(err, ErrRoundNotComplete) {
+		t.Errorf("AdvanceRound with no settled results = %v, want ErrRoundNotComplete", err)
+	}
+}
+
+// TestAdvanceRoundRejectsUnseededRound is a denial/edge-path test
+// (TASK-055): advancing a round for which GenerateHeats never ran is
+// rejected as ErrRoundNotSeeded, distinct from ErrRoundNotComplete (heats
+// exist but a heat has no settled results yet).
+func TestAdvanceRoundRejectsUnseededRound(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	f.confirmedEntry(t, "Solo", "", "12.00")
+	if _, err := f.results.AdvanceRound(context.Background(), office, f.meetID, f.eventID, f.roundID,
+		AdvancementRequest{TopN: 1, FastestK: 1}); !errors.Is(err, ErrRoundNotSeeded) {
+		t.Errorf("AdvanceRound on an unseeded round = %v, want ErrRoundNotSeeded", err)
 	}
 }
 
@@ -250,8 +265,20 @@ func TestManualAdvanceRejectsIllegalCode(t *testing.T) {
 	f := newSeedingFixture(t, "100m")
 	e := f.confirmedEntry(t, "Solo", "", "12.00")
 	f.seededHeats(t, 4, 0)
-	if err := f.results.ManualAdvance(context.Background(), office, f.meetID, f.eventID, f.roundID, e.ID, "notacode"); err == nil {
-		t.Error("expected an error for an illegal manual-advancement code")
+	if err := f.results.ManualAdvance(context.Background(), office, f.meetID, f.eventID, f.roundID, e.ID, "notacode"); !errors.Is(err, ErrInvalidQualificationCode) {
+		t.Errorf("ManualAdvance with an illegal code = %v, want ErrInvalidQualificationCode", err)
+	}
+}
+
+// TestManualAdvanceRejectsEntryNotInRound is a denial/edge-path test
+// (TASK-055): an entry id that was never seeded in the round is rejected as
+// ErrEntryNotInRound rather than silently doing nothing.
+func TestManualAdvanceRejectsEntryNotInRound(t *testing.T) {
+	f := newSeedingFixture(t, "100m")
+	f.confirmedEntry(t, "Solo", "", "12.00")
+	f.seededHeats(t, 4, 0)
+	if err := f.results.ManualAdvance(context.Background(), office, f.meetID, f.eventID, f.roundID, "does-not-exist", domain.StatusQ); !errors.Is(err, ErrEntryNotInRound) {
+		t.Errorf("ManualAdvance for an unknown entry = %v, want ErrEntryNotInRound", err)
 	}
 }
 
