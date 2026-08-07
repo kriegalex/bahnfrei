@@ -97,8 +97,12 @@ two bypass shapes:
    value).
 
 **Documented allowlist** (UC-038 #1's "known limits" clause): `tokens.css` itself (where literals
-are *defined*) and the two vendored htmx assets (`static/htmx.min.js`, `static/htmx-LICENSE`) —
-third-party, not project-authored style. This is a mechanical, pragmatic check, not a CSS parser:
+are *defined*), the two vendored htmx assets (`static/htmx.min.js`, `static/htmx-LICENSE`) —
+third-party, not project-authored style — and `internal/web/tokens_contrast_test.go` (TASK-056,
+DEC-036): a WCAG contrast-ratio checker whose CSS color-syntax *parsing* code (string-prefix
+matching, error messages) contains the literal substrings `rgb(`/`rgba(` without ever declaring a
+color value itself — every literal it checks is read from `tokens.css`. This is a mechanical,
+pragmatic check, not a CSS parser:
 it cannot catch every possible bypass shape (e.g. a bare unitless number introduced as a new
 `font-size` in some future file). New bypass shapes found later get added to the script or its
 allowlist; the release usability-audit checklist (`docs/requirements/usability-audit-checklist.md`)

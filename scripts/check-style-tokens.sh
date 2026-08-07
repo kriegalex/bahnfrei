@@ -31,11 +31,18 @@ TOKENS_FILE="internal/web/static/tokens.css"
 # Allowlist: paths exempt from the raw-literal scan, with rationale.
 #   - the token file itself: it is the one place literals are DEFINED.
 #   - vendored third-party assets (htmx): not project-authored style.
+#   - internal/web/tokens_contrast_test.go (TASK-056, DEC-036): a WCAG
+#     contrast-ratio CHECKER, not authored style — its rgb()/rgba() and
+#     #hex handling are CSS color-syntax PARSING code (string prefixes,
+#     error messages), matching this scan's own "rgba?\(" bypass pattern
+#     without declaring a single color value. It reads every literal it
+#     checks from tokens.css itself, never hardcodes one.
 is_allowlisted() {
     case "$1" in
         "$TOKENS_FILE") return 0 ;;
         internal/web/static/htmx.min.js) return 0 ;;
         internal/web/static/htmx-LICENSE) return 0 ;;
+        internal/web/tokens_contrast_test.go) return 0 ;;
         *) return 1 ;;
     esac
 }
