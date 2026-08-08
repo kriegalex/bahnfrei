@@ -54,6 +54,9 @@ concluding failure. `SKIP_E2E=1` only if the suite is environmentally broken —
   docs/ops; spec vocabulary stays in docs/requirements|architecture|delivery.
 - Tests that scrape rendered copy must use the localized (DE) strings; grep existing tests
   for literals your copy changes might break.
+- Any change that renders (templates, CSS, islands, user-facing copy): read
+  `.claude/ui-ux-brief.md` FIRST and follow its plan→critique→build→screenshot-verify
+  process; the banned-pattern checklist there is gone through item by item, not skimmed.
 
 ## Report back
 

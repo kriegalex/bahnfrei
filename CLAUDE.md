@@ -135,4 +135,6 @@ timing providers (FinishLynx), and tolerance to venue connectivity loss.
 ## Style
 
 Rigorous and concise. No marketing fluff. Clean, reviewable Markdown. Conventional
-Commits.
+Commits. Any change that renders (templates, CSS, islands, user-facing copy) follows the
+standing UI/UX brief in `.claude/ui-ux-brief.md` — banned-pattern checklist and
+screenshot-verify loop included.
