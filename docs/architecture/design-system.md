@@ -201,3 +201,54 @@ TASK-031's help-icon component should be born token-conformant, not retrofitted:
 Per-release process (not mechanically checkable) lives in
 `docs/requirements/usability-audit-checklist.md` (NN/g heuristics + SYS-117 form conventions,
 UC-038 #3–#4); its first run is recorded in `docs/delivery/usability-audit-2026-07.md`.
+
+## 7. Design principles (DEC-040, TASK-060)
+
+Binding conventions for all styling work, distilled from the cited evidence base in
+`docs/research/ui-ux-professional-practices.md` (the research doc carries the sources and
+numbers; this section carries the commitments). Design audits (TASK-061 and successors)
+measure every surface against these; deviations are findings, not taste.
+
+- **Spacing.** All gaps come from the `--space-*` scale (§1), applied with the proximity
+  rule: the gap inside a group (label to its own field, cell to its own row) is visibly
+  smaller than the gap between groups. Err generous first and prune — never densify a
+  whole page; only bounded regions (capture grids) are dense by design. Grouping must be
+  re-verified at each breakpoint — a responsive reflow that equalizes gaps destroys it.
+- **Type hierarchy.** At most ~3 font sizes per view; hierarchy beyond that comes from
+  weight (400/700 only — nothing lighter than 400) and color (2–3 text colors), not from
+  new sizes. De-emphasized text on a teal/colored surface is opacity-reduced or
+  hue-matched, never flat grey.
+- **Numerals.** Every numeric column (times, marks, points, ranks, bibs, wind) is
+  right-aligned with `font-variant-numeric: tabular-nums` (Barlow's `tnum` feature is
+  verified, §1); column headers align to the bottom, cells to the top. `.results-table`
+  already complies; new tables comply from birth.
+- **Color proportion.** Cream (`--color-bg`) is the dominant ~60%, `--color-surface` and
+  neutrals the ~30%, teal a ~10% accent reserved for actions, links, focus, and key data.
+  Large teal areas are out of register; the semantic status tokens (§1) stay reserved for
+  actual state, never decoration.
+- **Separation.** To distinguish adjacent elements, prefer in order: spacing, then a
+  background shift (`--color-bg` vs `--color-surface`), then a soft vertically-offset
+  shadow, and a border only when the first three fail. No card-in-card nesting.
+- **Tables.** Row hover is always on (scanning aid, even on non-interactive rows); header
+  and body row heights always match; long tables get sticky headers; the mobile default
+  is the accessible scroll-region wrapper — `display`-overridden reflow only where §2
+  already documents it (row-card, sticky first column), with ARIA table roles restored.
+- **Feedback timing.** Interactions resolving under ~1s get no loading affordance (a
+  flashing spinner is noise); a single module loading gets a spinner; a full first page
+  load gets a structural skeleton; only waits past ~10s get a progress indicator.
+  Transitions run 150–200ms with `cubic-bezier(0.4, 0, 0.2, 1)` and honor
+  `prefers-reduced-motion`.
+- **Focus.** The `--focus-ring-*` tokens meet WCAG 2.2 SC 2.4.7 + 1.4.11 (AA, binding)
+  and target the SC 2.4.13 AAA bar as the quality floor: ≥2px indicator, ≥3:1 contrast
+  change. Removing an outline without replacement is a defect.
+- **Empty states.** Every list/table renders a designed empty state (what this will show,
+  and the action that fills it) — never a bare headerless blank.
+- **Status displays.** Key numbers gain salience by removing decoration around them, not
+  by adding icons or color; decorative icons next to stat numbers are out.
+- **Forms.** Labels above fields (§2's `.field` convention); optional fields marked
+  "(optional)" — required fields never asterisked; hints are one short sentence without a
+  full stop or links (§2 Hint row); advanced/edge-case fields use staged disclosure; no
+  multi-step progress indicator without evidence it is needed.
+- **Touch.** `--touch-target-min` (44px) remains the floor for point-of-competition
+  controls (SYS-147); whether packed icon-only capture controls should target 48px
+  (Material's floor) is an open audit question for TASK-061, not settled here.
