@@ -1,6 +1,6 @@
 # Privacy review — TASK-023 (nFADP/GDPR gate)
 
-**Review date:** 2026-07-13 · **Reviewer:** Opus-tier privacy review agent (CLAUDE.md guardrail 7)
+**Review date:** 2026-07-13 · **Reviewer:** project privacy review (TASK-023)
 **Scope:** TASK-023 branch diff vs `main` (merged as `41cfbd9`) — SYS-100–103, UC-023/UC-024
 **Verdict:** **APPROVE-WITH-NOTES** — merged; findings #1/#2 tracked as **TASK-029**.
 

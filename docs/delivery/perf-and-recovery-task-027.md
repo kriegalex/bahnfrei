@@ -48,8 +48,8 @@ controlled/idle machine. Consequences:
 ## OOM incident (2026-07-13) — why confinement is mandatory
 
 The first, unconfined 2,000-viewer SYS-122 run reached **~27 GB RSS** and was
-OOM-killed by the host kernel — twice, each time taking the whole terminal
-session (and every running agent) with it. The blow-up is a real server-side
+OOM-killed by the host kernel — twice, each time taking the whole host session
+with it. The blow-up is a real server-side
 measurement, not harness overhead: ~64 MiB of in-flight heap per concurrent
 viewer (see the scaling table below), dominated by
 `ResultsService.Standings`' per-request athletes×disciplines matrix and view

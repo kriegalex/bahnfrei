@@ -39,6 +39,9 @@ equivalents given where they appear in Swiss federation practice. Sources: `D#` 
 |------|------------|
 | **Call room** (DE: *Callroom*) | Check-in area where athletes are verified before their event; no-shows become DNS (D11.1). |
 | **Check-in** | Confirmation that an entered athlete will actually start (UC-007). |
+| **Checkout** (event-unit checkout) | Field-capture lock model: at most one device/account at a time holds capture rights for an event unit; the competition office can override/reassign it, audited (SYS-086, UC-034). |
+| **Reconciliation** | The review queue that surfaces field captures from a superseded/stale device, or captures affected by an office-side start-list change made while the device was offline, for operator review — never silently discarded and never silently applied (SYS-086, UC-034 #4–5). |
+| **Walk-by sync** | Automatic, no-operator-action submission of offline-captured attempts once a device regains connectivity (e.g., an official walking back into hotspot range); flaky reconnects replay idempotently without duplicates (UC-034). |
 | **Seeding** | Rule-governed distribution of athletes into heats/lanes/orders (TR20; D2.2–D2.3). |
 | **Lane groups** | TR20.4 draw: ranks 1–4 → lanes 4–7; 5–6 → 3, 8; 7–8 → 1, 2 (D2.3). |
 | **Progression** | Advancement to the next round: `Q` by place, `q` by time/performance, `qR/qJ/qD` by referee/jury/draw (D2.4). |
@@ -75,11 +78,13 @@ equivalents given where they appear in Swiss federation practice. Sources: `D#` 
 
 | Term | Definition |
 |------|------------|
+| **omx** (*Open Meet eXchange*, `omx/v1`) | This project's own published, versioned JSON Schema exchange format, covering lossless full-meet export/import; flat CSV exports derive from the same definitions. Naming aligns with the W3C Open Athletics CG vocabulary where a term exists; divergences are recorded in a mapping table (ADR-005). |
 | **Seltec TAF3** | *Track and Field 3* — Windows meet-management software by Seltec (correct spelling; seed wrote "setlec"), free to Swiss/German organizers via federation contracts (C1). |
 | **LA.portal / LA.net** | Seltec's results-publication and federation/entries platforms (C1). |
 | **Alabus** | Third-party SaaS Swiss Athletics uses for licences and competition entries; source of entry imports (C2, OQ-011). |
 | **FinishLynx file family** | De-facto timing interchange: `lynx.ppl` (people), `lynx.sch` (schedule), `lynx.evt` (events/lanes) in; `.lif` (results) out (D7.2, C5). |
 | **EDM** | Electronic distance measurement for field events (D7.1). |
+| **ULID** (*Universally Unique Lexicographically Sortable Identifier*) | Identifier scheme used for entities and publication records; sortable and collision-free, unlike a random UUID (ADR-004, ADR-005). |
 | **W3C Open Athletics CG** | Community group (ex-"OpenTrack CG", unrelated to the vendor OpenTrack) drafting an open competition data model; design reference, not a mandate (C3, A-012). |
 | **Global Calendar** | World Athletics' registry a meet must join for World Ranking status; separate from national sanctioning (C2, D10.1). |
 | **World Rankings** | WA points-based athlete ranking (result score + placing score) fed by ratified results, ideally within 24h (D6.3, D10.2). |
@@ -100,6 +105,7 @@ equivalents given where they appear in Swiss federation practice. Sources: `D#` 
 | **nFADP** (DE: *revDSG*) | Swiss Federal Act on Data Protection (revised, 2023) — applies alongside GDPR (SYS-100…105). |
 | **GDPR** | EU General Data Protection Regulation. |
 | **WCAG 2.2 AA** | Web accessibility conformance target for public surfaces (SYS-112). |
+| **ASVS** (*OWASP Application Security Verification Standard*) | Security-control checklist the system SHALL meet at Level 2 for all authenticated surfaces (SYS-092). |
 | **StRS / SyRS** | Stakeholder / System Requirements Specification (ISO/IEC/IEEE 29148). |
 | **STR-### / SYS-### / UC-### / ADR-### / TASK-###** | Stable IDs: stakeholder requirement, system requirement, use-case, architecture decision record, work item. Never renumbered — deprecated only. |
 | **MVP / Later** | First-release scope vs. in-scope post-MVP (StRS §4). |

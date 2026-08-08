@@ -3,7 +3,7 @@
 
 # OWASP ASVS Level 2 review — TASK-026 (SYS-092)
 
-**Review date:** 2026-07-14 · **Reviewer:** Opus-tier security worker (CLAUDE.md guardrail 7)
+**Review date:** 2026-07-14 · **Reviewer:** project security review (TASK-026)
 **Scope:** the whole authenticated web surface (`internal/web`, `internal/app`, `internal/store`)
 plus the deployment model (venue hub, field phones, timing PC agent, public results, offline).
 **Standard:** OWASP **ASVS v4.0.3, Level 2**. SYS-092 does not pin a version; v4.0.3 is the stable,

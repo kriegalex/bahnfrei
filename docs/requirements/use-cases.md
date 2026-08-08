@@ -3,7 +3,9 @@
 **Document status:** DRAFT — Phase A baseline
 **Purpose:** the agent-facing layer. Each UC is a vertical slice: independently buildable,
 independently verifiable, traced **up** to `SYS-###`/`STR-###` and, in Phase B, **down** to
-automated tests. Acceptance criteria are Given/When/Then and MUST be automatable.
+automated tests. Acceptance criteria are Given/When/Then and are automatable by default;
+inspection- or demonstration-verified criteria are permitted where the traceability matrix
+records that verification method (D/I — e.g. UC-026 #2, UC-038 #3).
 
 > Conventions: *operator* = authenticated user with the named role (SYS-090). Marks use
 > athletics notation (`10.85` s, `6.42` m, `1.83` m). Priorities: **MVP** / **Later**.
