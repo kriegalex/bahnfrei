@@ -80,6 +80,11 @@ Log in, then create a meet under **Wettkämpfe / Compétitions**: name, venue, c
 sessions per day, and tier. Add events with round structure and entry deadlines. The system is now
 **ready for meet setup** — the target this page's automated check verifies (see below).
 
+One thing to know about date and time fields: they use the browser's built-in picker, so their
+*display* format follows the browser's own language setting, not the page language — a browser set
+to English (US) shows month-first dates even in the German interface. The value that gets saved is
+unaffected. If the format looks foreign, set your browser to your own language.
+
 Everything from here on (entries, seeding, competition-day capture, timing integration, public
 results) is covered by the **operator runbook** (`docs/ops/operator-runbook.md`), not this page.
 
