@@ -46,6 +46,9 @@ step "licence headers (ADR-001 §3)"
 step "design tokens (SYS-116)"
 ./scripts/check-style-tokens.sh
 
+step "traceability (DEC-044, SYS-140)"
+./scripts/check-trace.sh
+
 step "golangci-lint ($GOLANGCI_LINT_VERSION)"
 lint_bin=$(command -v golangci-lint || true)
 if [ -z "$lint_bin" ]; then
