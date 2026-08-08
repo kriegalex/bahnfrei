@@ -94,7 +94,11 @@ The Fable-class agent orchestrates; it does not personally write most code.
   develop one at a time and re-run the full gate. After scripted conflict resolution, grep for
   all three conflict-marker types before staging.
 - **Worktrees are cut from a possibly stale base:** every worker first runs
-  `git merge-base develop HEAD` and merges develop if behind.
+  `git merge-base origin/develop HEAD` and merges if behind. Do NOT trust a worker's
+  own freshness claim — one asserted "base = develop tip, confirmed" while its pasted
+  merge-base said otherwise; verify merge-base yourself before cherry-picking, and
+  treat any docs rewrite from a stale base as suspect of silent fact loss (diff the
+  semantics, not just the conflicts).
 - **Perf/load tests** only inside
   `systemd-run --user --scope -p MemoryMax=12G -p MemorySwapMax=0` with `GOMEMLIMIT` —
   an uncapped load test has OOM-killed the host. Measure ascending scales and extrapolate.
