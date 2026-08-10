@@ -91,6 +91,6 @@ jobs:
       # Binaries themselves stay unsigned (DEC-019) — checksums.txt is their
       # integrity story, and the bundle above signs that file.
       - name: Publish GitHub release with artifacts
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/${{ steps.version.outputs.version }}/*
